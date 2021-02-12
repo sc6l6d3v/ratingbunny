@@ -1,3 +1,5 @@
+import Dependencies._
+
 val Http4sVersion = "0.21.3"
 val CirceVersion = "0.13.0"
 val Specs2Version = "4.9.3"
@@ -14,22 +16,23 @@ lazy val root = (project in file("."))
     version := "0.1-SNAPSHOT",
     scalaVersion := "2.13.3",
     libraryDependencies ++= Seq(
-      "org.http4s"       %% "http4s-blaze-server" % Http4sVersion,
-      "org.http4s"       %% "http4s-blaze-client" % Http4sVersion,
-      "org.http4s"       %% "http4s-circe"        % Http4sVersion,
-      "org.http4s"       %% "http4s-dsl"          % Http4sVersion,
-      "org.http4s"       %% "http4s-async-http-client" % Http4sVersion,
-      "io.circe"         %% "circe-generic"       % CirceVersion,
-      "io.circe"         %% "circe-parser"        % CirceVersion,
-      "io.circe"         %% "circe-optics"        % CirceVersion,
-      "org.specs2"       %% "specs2-core"         % Specs2Version % "test",
-      "ch.qos.logback"   %  "logback-classic"     % LogbackVersion,
-      "com.github.cb372" %% "cats-retry"          % catsRetryVersion,
-      "co.fs2"           %% "fs2-core"            % fs2Version,
-      "co.fs2"           %% "fs2-io"              % fs2Version,
-      "co.fs2"           %% "fs2-reactive-streams" % fs2Version,
-      "org.jsoup"        %  "jsoup"               % jsoupVersion,
-      "com.typesafe.scala-logging" %% "scala-logging" % loggingVersion
+      http4s.server,
+      http4s.client,
+      http4s.circe,
+      http4s.dsl,
+      http4s.asyncClient,
+      circe.generic,
+      circe.parser,
+      circe.optics,
+      scalaTest,
+      logback.classic,
+      logback.logging,
+      cats.retry,
+      fs2.core,
+      fs2.io,
+      fs2.streams,
+      jsoup.base,
+      ammonite.main
     ),
     addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.10.3"),
     addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1"),
