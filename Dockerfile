@@ -37,7 +37,7 @@ WORKDIR /root
 ENV PROJECT_HOME /usr/src
 
 COPY ["build.sbt", "/tmp/build/"]
-COPY ["project/plugins.sbt", "project/build.properties", "/tmp/build/project/"]
+COPY ["project/Dependencies.scala", "project/plugins.sbt", "project/build.properties", "/tmp/build/project/"]
 RUN cd /tmp/build && \
  sbt update && \
  sbt compile && \
