@@ -4,6 +4,7 @@ import cats.effect._
 import cats.implicits._
 import com.iscs.releaseScraper.domains.ReleaseDatesScraperService
 import com.iscs.releaseScraper.model.ScrapeResult.Scrape._
+import com.iscs.releaseScraper.model.ScrapeResult.ScrapeList
 import com.typesafe.scalalogging.Logger
 import fs2.Stream
 import org.http4s._
@@ -44,7 +45,8 @@ object Routes {
           _ <- Concurrent[F].delay(L.info(s""""request" date=$year/$month rating=$rating"""))
           ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
           scrape <- Concurrent[F].delay(R.scrapeLink(year, month, ratingVal))
-          resp <- Ok(scrape)
+          respList <- scrape.compile.toList
+          resp <- Ok(respList)
         } yield resp
     }
     CORS(service, methodConfig)
