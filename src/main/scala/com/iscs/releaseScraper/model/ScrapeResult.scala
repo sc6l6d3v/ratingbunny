@@ -7,7 +7,7 @@ import org.http4s.circe._
 import org.http4s.{EntityDecoder, EntityEncoder}
 
 object ScrapeResult {
-  final case class Scrape(title: String, link: String, rating: String)
+  final case class Scrape(id: String, title: String, link: String, rating: String)
 
   final case class ScrapeList(l: List[Scrape])
 

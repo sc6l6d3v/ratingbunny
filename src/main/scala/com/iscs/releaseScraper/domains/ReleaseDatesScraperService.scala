@@ -47,7 +47,8 @@ class ReleaseDatesScraperService[F[_]: Concurrent](urlBase: String)(implicit F: 
       case default => default.toDouble
     }
     if(rating > minRating && !title.contains("Season")) {
-      Some(Scrape(links(1).text, links(2).attr("href"), links(2).text))
+      val id = links(2).attr("href").split("/").last
+      Some(Scrape(id, links(1).text, links(2).attr("href"), links(2).text))
     } else
       None
   }
