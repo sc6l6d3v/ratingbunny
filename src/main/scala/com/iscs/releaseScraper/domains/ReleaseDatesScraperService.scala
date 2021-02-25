@@ -9,7 +9,7 @@ import org.log4s.getLogger
 
 import scala.jdk.CollectionConverters._
 
-class ReleaseDatesScraperService[F[_]: Concurrent](urlBase: String)(implicit F: ConcurrentEffect[F]) {
+class ReleaseDatesScraperService[F[_]: Concurrent]()(implicit F: ConcurrentEffect[F]) {
   private val L = getLogger
   private val yearRegex = "[0-9][0-9][0-9][0-9]".r
   private val monthRegex = "[0-9][0-9]".r
@@ -27,14 +27,26 @@ class ReleaseDatesScraperService[F[_]: Concurrent](urlBase: String)(implicit F: 
     "11" -> "november",
     "12" -> "december",
   )
+  private val defaultMap = "https://www.dvdsreleasedates.com/releases/YYYY/MM/new-dvd-releases-MONTH-YYYY"
+  private val linkMap = Map("rel" -> "https://www.dvdsreleasedates.com/releases/YYYY/MM/new-dvd-releases-MONTH-YYYY",
+    "new" -> "https://www.dvdsreleasedates.com/new-movies-YYYY/",
+    "top" -> "https://www.dvdsreleasedates.com/top-movies-YYYY/"
+  )
 
-  private def getDocument(year: String, month: String): Document = {
+  private def getDocument(urlType: String, year: String, month: String): Document = {
     val goodYear = if (yearRegex.matches(year)) year else "2020"
     val goodMonth = if (monthRegex.matches(month)) month else "01"
-    val finalURL = urlBase
+    val finalURL = linkMap.get(urlType).getOrElse(defaultMap)
       .replaceAll("YYYY", goodYear)
       .replace("MM", goodMonth)
       .replace("MONTH", monthMap(goodMonth))
+    Jsoup.connect(finalURL).get()
+  }
+
+  private def getDocument(urlType: String, year: String): Document = {
+    val goodYear = if (yearRegex.matches(year)) year else "2020"
+    val finalURL = linkMap.get(urlType).getOrElse(defaultMap)
+      .replaceAll("YYYY", goodYear)
     Jsoup.connect(finalURL).get()
   }
 
@@ -53,11 +65,19 @@ class ReleaseDatesScraperService[F[_]: Concurrent](urlBase: String)(implicit F: 
       None
   }
 
-  def scrapeLink(year: String, month: String, minRating: Double): Stream[F, Scrape] = for {
-    indexDoc <- Stream.eval(Concurrent[F].delay(getDocument(year, month)))
+  def findReleases(urlType: String, year: String, month: String, minRating: Double): Stream[F, Scrape] = for {
+    indexDoc <- Stream.eval(Concurrent[F].delay(getDocument(urlType, year, month)))
     elt <- Stream.emits(indexDoc.select(fieldDoc).asScala.toList)
     scrape <- Stream.eval(Concurrent[F].delay(processElement(elt, minRating)))
         .filter(_.isDefined)
         .map(_.get)
+  } yield scrape
+
+  def findMovies(urlType: String, year: String, minRating: Double): Stream[F, Scrape] = for {
+    indexDoc <- Stream.eval(Concurrent[F].delay(getDocument(urlType, year)))
+    elt <- Stream.emits(indexDoc.select(fieldDoc).asScala.toList)
+    scrape <- Stream.eval(Concurrent[F].delay(processElement(elt, minRating)))
+      .filter(_.isDefined)
+      .map(_.get)
   } yield scrape
 }

@@ -12,10 +12,10 @@ import org.http4s.server.middleware.{Logger => hpLogger}
 object Server {
   private val L = Logger[this.type]
 
-  def stream[F[_]: ConcurrentEffect](urlBase: String, port: Int, listener: String)(implicit T: Timer[F], Con: ContextShift[F]): Stream[F, Nothing] = {
+  def stream[F[_]: ConcurrentEffect](port: Int, listener: String)
+                                    (implicit T: Timer[F], Con: ContextShift[F]): Stream[F, Nothing] = {
     val srvStream = for {
-      scrapeSvc <- Stream.eval(Concurrent[F].delay(new ReleaseDatesScraperService[F](urlBase)))
-      _ <- Stream.eval(Concurrent[F].delay(L.info(s""""created service for $urlBase""")))
+      scrapeSvc <- Stream.eval(Concurrent[F].delay(new ReleaseDatesScraperService[F]()))
       httpApp <- Stream.eval(Concurrent[F].delay(scrapeRoutes[F](scrapeSvc).orNotFound))
       _ <- Stream.eval(Concurrent[F].delay(L.info(s""""added routes for reldate""")))
       finalHttpApp <- Stream.eval(Concurrent[F].delay(hpLogger.httpApp(logHeaders = true, logBody = true)(httpApp)))
