@@ -14,14 +14,14 @@ import scala.util.Try
 
 object Routes {
   private val L = Logger[this.type]
-
+  private val protos = List("http", "https")
+  private val reactDeploys = sys.env.getOrElse("ORIGINS", "localhost")
+    .split(",")
+    .toList
+    .map(host =>
+      protos.map(proto => s"$proto://$host")
+    ).flatten
   private val reactOrigin = "http://localhost:3000"
-  private val reactDeploys = List("http://localhost",
-    "https://localhost",
-    "http://berne.iscs-i.com",
-    "https://berne.iscs-i.com",
-    "https://192.168.4.46",
-    "http://192.168.4.46")
   private val methods = Set("GET")
   private def checkOrigin(origin: String): Boolean =
     allowedOrigins.contains(origin)

@@ -7,13 +7,10 @@ import com.typesafe.scalalogging.Logger
 object Main extends IOApp {
   private val L = Logger[this.type]
 
-  private val port = 8080
-  private val listener = "0.0.0.0"
-
   def run(args: List[String]): IO[ExitCode] = for {
     _ <- IO.delay(System.currentTimeMillis)
     serverStream = for {
-      str <- Server.stream[IO](port, listener)
+      str <- Server.stream[IO]
     } yield str
 
     s <- serverStream

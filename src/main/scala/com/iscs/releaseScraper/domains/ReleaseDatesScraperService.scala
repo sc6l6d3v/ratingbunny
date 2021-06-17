@@ -9,7 +9,7 @@ import org.log4s.getLogger
 
 import scala.jdk.CollectionConverters._
 
-class ReleaseDatesScraperService[F[_]: Concurrent]()(implicit F: ConcurrentEffect[F]) {
+class ReleaseDatesScraperService[F[_]: Concurrent](defaultHost: String)(implicit F: ConcurrentEffect[F]) {
   private val L = getLogger
   private val yearRegex = "[0-9][0-9][0-9][0-9]".r
   private val monthRegex = "[0-9][0-9]".r
@@ -27,10 +27,10 @@ class ReleaseDatesScraperService[F[_]: Concurrent]()(implicit F: ConcurrentEffec
     "11" -> "november",
     "12" -> "december",
   )
-  private val defaultMap = "https://www.dvdsreleasedates.com/releases/YYYY/MM/new-dvd-releases-MONTH-YYYY"
-  private val linkMap = Map("rel" -> "https://www.dvdsreleasedates.com/releases/YYYY/MM/new-dvd-releases-MONTH-YYYY",
-    "new" -> "https://www.dvdsreleasedates.com/new-movies-YYYY/",
-    "top" -> "https://www.dvdsreleasedates.com/top-movies-YYYY/"
+  private val defaultMap = s"https://$defaultHost/releases/YYYY/MM/new-dvd-releases-MONTH-YYYY"
+  private val linkMap = Map("rel" -> s"https://$defaultHost/releases/YYYY/MM/new-dvd-releases-MONTH-YYYY",
+    "new" -> s"https://$defaultHost/new-movies-YYYY/",
+    "top" -> s"https://$defaultHost/top-movies-YYYY/"
   )
 
   private def getDocument(urlType: String, year: String, month: String): Document = {
