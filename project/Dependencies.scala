@@ -12,6 +12,7 @@ object Dependencies {
     val jsoupVersion = "1.13.1"
     val scalatestVersion = "3.2.2"
     val ammoniteVersion = "2.3.8-4-88785969"
+    val mongoScalaVersion = "4.2.3"
   }
 
   object http4s {
@@ -51,5 +52,9 @@ object Dependencies {
 
   object jsoup {
     val base = "org.jsoup"        %  "jsoup"               % Versions.jsoupVersion
+  }
+
+  object mongodb {
+    val driver = "org.mongodb.scala" %% "mongo-scala-driver" % Versions.mongoScalaVersion
   }
 }

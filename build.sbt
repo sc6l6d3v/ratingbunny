@@ -24,6 +24,7 @@ lazy val root = (project in file("."))
       circe.generic,
       circe.parser,
       circe.optics,
+      mongodb.driver,
       scalaTest,
       logback.classic,
       logback.logging,

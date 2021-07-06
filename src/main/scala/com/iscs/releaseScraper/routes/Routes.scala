@@ -2,10 +2,12 @@ package com.iscs.releaseScraper.routes
 
 import cats.effect._
 import cats.implicits._
-import com.iscs.releaseScraper.domains.ReleaseDatesScraperService
+import com.iscs.releaseScraper.domains.{ImdbQuery, ReleaseDatesScraperService}
+import com.iscs.releaseScraper.model.Requests.ReqParams
 import com.iscs.releaseScraper.model.ScrapeResult.Scrape._
 import com.typesafe.scalalogging.Logger
 import org.http4s._
+import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.server.middleware.{CORS, CORSConfig}
 
@@ -17,10 +19,7 @@ object Routes {
   private val protos = List("http", "https")
   private val reactDeploys = sys.env.getOrElse("ORIGINS", "localhost")
     .split(",")
-    .toList
-    .map(host =>
-      protos.map(proto => s"$proto://$host")
-    ).flatten
+    .toList.flatMap(host => protos.map(proto => s"$proto://$host"))
   private val reactOrigin = "http://localhost:3000"
   private val methods = Set("GET")
   private def checkOrigin(origin: String): Boolean =
@@ -61,6 +60,30 @@ object Routes {
           scrape <- Concurrent[F].delay(R.findMovies("new", year, ratingVal))
           respList <- scrape.compile.toList
           resp <- Ok(respList)
+        } yield resp
+    }
+    CORS(service, methodConfig)
+  }
+
+  def imdbRoutes[F[_]: Sync: Concurrent](I: ImdbQuery[F]): HttpRoutes[F] = {
+    val dsl = new Http4sDsl[F]{}
+    import dsl._
+    val service = HttpRoutes.of[F] {
+      case req@GET -> Root / "title" / title / rating =>
+        for {
+          reqParams <- req.as[ReqParams]
+          _ <- Concurrent[F].delay(L.info(s""""request" title=$title rating=$rating ${reqParams.toString}"""))
+          ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
+          imdbTitles <- Concurrent[F].delay(I.getByTitle(title, ratingVal, reqParams))
+          resp <- Ok(imdbTitles)
+        } yield resp
+      case req@GET -> Root / "name" / name / rating =>
+        for {
+          reqParams <- req.as[ReqParams]
+          _ <- Concurrent[F].delay(L.info(s""""request" title=$name rating=$rating ${reqParams.toString}"""))
+          ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
+          imdbTitles <- Concurrent[F].delay(I.getByName(name, ratingVal, reqParams))
+          resp <- Ok(imdbTitles)
         } yield resp
     }
     CORS(service, methodConfig)
