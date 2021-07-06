@@ -1,4 +1,4 @@
-package com.iscs.releaseScraper.2020util
+package com.iscs.releaseScraper.util
 
 import cats.effect.implicits._
 import cats.effect.{ConcurrentEffect, IO}
