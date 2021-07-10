@@ -68,6 +68,10 @@ object ImdbQuery {
       val genresList = "genresList"
       val matchedTitles_averageRating = "matchedTitles.averageRating"
       val matchedTitles_genres = "matchedTitles.genres"
+      val matchedTitles_genresList = "matchedTitles.genresList"
+      val matchedTitles_isAdult = "matchedTitles.isAdult"
+      val matchedTitles_startYear = "matchedTitles.startYear"
+      val matchedTitles_titleType = "matchedTitles.titleType"
       val titleType = "titleType"
       val isAdult = "isAdult"
       private val titleFx = dbClient.fxMap(titleCollection)
@@ -84,24 +88,6 @@ object ImdbQuery {
           }))
         } yield json
       }
-
-/*      private def filterMatches[F[_]: ConcurrentEffect](rating: Double): Pipe[F, Json, Json] = jsonStr => {
-        for {
-          json <- jsonStr
-          matched <- Stream.eval(Concurrent[F].delay((json \\ matchedTitles).head))
-          _ <- Stream.eval(Concurrent[F].delay(L.info(s"got $matched")))
-          filteredList <- Stream.eval(Concurrent[F].delay{
-            val matchedList = matched.asArray.getOrElse(Vector.empty[Json])
-            matchedList.filter { js =>
-                root.averageRating.double.getOption(js).map { xx =>
-                  xx >= rating
-                }.getOrElse(false)
-            }
-          })
-          _ <- Stream.eval(Concurrent[F].delay(L.info(s"got $filteredList")))
-          newJson <- Stream.emits(filteredList)
-        } yield newJson
-      }*/
 
       def condenseSingleLists(bsonList: List[Bson]): F[Bson] =
         for {
@@ -121,17 +107,26 @@ object ImdbQuery {
         bson <- Concurrent[F].delay(and(textBson, regex))
       } yield textBson
 
-      def getParamList(params: ReqParams): List[Bson] =
+      def getParamList(params: ReqParams): F[List[Bson]] = Concurrent[F].delay(
         List(
           params.year.map(yr => mdbeq(startYear, yr)),
           params.genre.map(genre => elemMatchFilter(genresList, mdbeq(genresList, genre))),
           params.titleType.map(tt => mdbeq(titleType, tt)),
           params.isAdult.map(isadult => mdbeq(isAdult, isadult))
-        ).flatten
+        ).flatten)
 
-      def getBsonList(params: ReqParams): F[List[Bson]] = Concurrent[F].delay(getParamList(params))
+      def getAggregationParamList(params: ReqParams): F[List[Bson]] = Concurrent[F].delay(
+        List(
+          params.year.map(yr => nameFx.getCompareFilter("eq", s"$$$matchedTitles_startYear", yr)),
+          params.genre.map(genre => elemMatchFilter(genresList, nameFx.getCompareFilter("eq", s"$$$matchedTitles_genresList", genre))),
+          params.titleType.map(tt => nameFx.getCompareFilter("eq", s"$$$matchedTitles_titleType", tt)),
+          params.isAdult.map(isadult => nameFx.getCompareFilter("eq", s"$$$matchedTitles_isAdult", isadult))
+        ).flatten)
 
-      def getParamModelFilters(params: ReqParams): F[Bson] = condenseSingleLists(getParamList(params))
+      def getParamModelFilters(params: ReqParams): F[Bson] = for {
+        bsonList <- getParamList(params)
+        condensedBson <- condenseSingleLists(bsonList)
+      } yield condensedBson
 
       override def getByTitle(title: String, rating: Double, params: ReqParams): Stream[F, Json] = for {
         paramBson <- Stream.eval(getParamModelFilters(params))
@@ -197,7 +192,7 @@ object ImdbQuery {
        * @return
        */
       override def getByName(name: String, rating: Double, params: ReqParams): Stream[F, Json] = for {
-        paramsList <- Stream.eval(getBsonList(params))
+        paramsList <- Stream.eval(getParamList(params))
         ratingBson <- Stream.eval(Concurrent[F].delay(gte("averageRating", rating)))
         bsonCondensedList <- Stream.eval(condenseSingleLists(paramsList :+ ratingBson))
         matchTitleWithName <- Stream.eval(Concurrent[F].delay(
@@ -238,9 +233,10 @@ object ImdbQuery {
             birthYear -> true
           ))
         ))
+        aggParamsList <- Stream.eval(getAggregationParamList(params))
         condCondensedList <- Stream.eval(condenseSingleLists(
-          paramsList :+
-          nameFx.getGTEFilter(s"$$$matchedTitles_averageRating", rating))
+          aggParamsList :+
+          nameFx.getCompareFilter("gte", s"$$$matchedTitles_averageRating", rating)) // TODO
         )
         condFilter <- Stream.eval(Concurrent[F].delay(
           nameFx.getCondFilter("matchedTitles", "matchedTitles", condCondensedList)

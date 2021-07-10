@@ -8,7 +8,7 @@ import com.mongodb.client.result.UpdateResult
 import fs2._
 import fs2.concurrent.Queue
 import org.bson.conversions.Bson
-import org.mongodb.scala.bson.{BsonArray, BsonDocument, BsonNumber, BsonString}
+import org.mongodb.scala.bson.{BsonArray, BsonBoolean, BsonDocument, BsonNumber, BsonString}
 import org.mongodb.scala.model.Projections._
 import org.mongodb.scala.result.{DeleteResult, InsertManyResult, InsertOneResult}
 import org.mongodb.scala.{BulkWriteResult, MongoCollection, Observable, bson}
@@ -58,8 +58,17 @@ class MongoCollectionEffect[A](val underlying: MongoCollection[A])(implicit c: C
 
   def getProjections(projSet: List[Bson]): Bson = fields(projSet:_*)
 
-  def getGTEFilter(fieldName: String, numVal: Double): Bson =
-    bson.BsonDocument(List(("$gte", BsonArray(BsonString(s"$$$fieldName"), BsonNumber(numVal)))))
+  def getCompareFilter(compareOp: String, fieldName: String, compVal: Boolean): Bson =
+    bson.BsonDocument(List((s"$$$compareOp", BsonArray(BsonString(s"$$$fieldName"), BsonBoolean(compVal)))))
+
+  def getCompareFilter(compareOp: String, fieldName: String, compVal: String): Bson =
+    bson.BsonDocument(List((s"$$$compareOp", BsonArray(BsonString(s"$$$fieldName"), BsonString(compVal)))))
+
+  def getCompareFilter(compareOp: String, fieldName: String, compVal: Double): Bson =
+    bson.BsonDocument(List((s"$$$compareOp", BsonArray(BsonString(s"$$$fieldName"), BsonNumber(compVal)))))
+
+  def getCompareFilter(compareOp: String, fieldName: String, compVal: Int): Bson =
+    bson.BsonDocument(List((s"$$$compareOp", BsonArray(BsonString(s"$$$fieldName"), BsonNumber(compVal)))))
 
   def getCondFilter(fieldName: String, item: String, cond: Bson): Bson = {
     val inputAsCond = new BsonDocument()
