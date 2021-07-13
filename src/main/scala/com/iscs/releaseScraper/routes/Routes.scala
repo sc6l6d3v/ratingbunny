@@ -82,7 +82,19 @@ object Routes {
           reqParams <- req.as[ReqParams]
           _ <- Concurrent[F].delay(L.info(s""""request" title=$name rating=$rating ${reqParams.toString}"""))
           ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
-          imdbTitles <- Concurrent[F].delay(I.getByName(name, ratingVal, reqParams))
+          imdbNames <- Concurrent[F].delay(I.getByName(name, ratingVal, reqParams))
+          resp <- Ok(imdbNames)
+        } yield resp
+      case GET -> Root / "autoname" / name =>
+        for {
+          _ <- Concurrent[F].delay(L.info(s""""request" autoname=$name"""))
+          imdbNames <- Concurrent[F].delay(I.getAutosuggestName(name))
+          resp <- Ok(imdbNames)
+        } yield resp
+      case GET -> Root / "autotitle" / title =>
+        for {
+          _ <- Concurrent[F].delay(L.info(s""""request" autotitle=$title"""))
+          imdbTitles <- Concurrent[F].delay(I.getAutosuggestTitle(title))
           resp <- Ok(imdbTitles)
         } yield resp
     }

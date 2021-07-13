@@ -7,12 +7,12 @@ import com.iscs.releaseScraper.util.DbClient
 import com.typesafe.scalalogging.Logger
 import fs2.{Pipe, Stream}
 import io.circe._
-import io.circe.optics.JsonPath._
 import io.circe.generic.semiauto._
 import io.circe.parser._
 import org.bson.conversions.Bson
 import org.http4s.circe._
 import org.http4s.{EntityDecoder, EntityEncoder}
+import org.mongodb.scala.bson.{BsonDocument, BsonNumber, BsonString}
 import org.mongodb.scala.bson.collection.immutable.Document
 import org.mongodb.scala.model.Filters.{and, exists, gte, regex, text, elemMatch => elemMatchFilter, eq => mdbeq, ne => mdne}
 import org.mongodb.scala.model._
@@ -20,6 +20,8 @@ import org.mongodb.scala.model._
 trait ImdbQuery[F[_]] {
   def getByTitle(title: String, rating: Double, params: ReqParams): Stream[F,Json]
   def getByName(name: String, rating: Double, params: ReqParams): Stream[F,Json]
+  def getAutosuggestTitle(titlePrefix: String): Stream[F,Json]
+  def getAutosuggestName(titlePrefix: String): Stream[F,Json]
 }
 
 object ImdbQuery {
@@ -51,9 +53,12 @@ object ImdbQuery {
 
   def impl[F[_]: Concurrent: Sync: ConcurrentEffect](dbClient: DbClient[F]): ImdbQuery[F] =
     new ImdbQuery[F] {
+      val id = "_id"
       val averageRating = "averageRating"
       val primaryTitle = "primaryTitle"
       val primaryName = "primaryName"
+      val lastName = "lastName"
+      val firstName = "firstName"
       val primaryProfession = "primaryProfession"
       val primaryProfessionList = "primaryProfessionList"
       val knownForTitles = "knownForTitles"
@@ -134,7 +139,6 @@ object ImdbQuery {
         titleBson <- Stream.eval(getTitleModelFilters(title))
         dbList <- Stream.eval(titleFx.find(
           and(titleBson, ratingBson, paramBson),
-          /*Map(genres -> false)*/
         20, 0, Map(genres -> false))
           .through(docToJson)
           .compile.toList)
@@ -256,6 +260,34 @@ object ImdbQuery {
             finalProjectFilter
           )
         )
+          .through(docToJson)
+          .compile.toList)
+        json <- Stream.emits(dbList)
+      } yield json
+
+      override def getAutosuggestName(namePrefix: String): Stream[F, Json] = for {
+        dbList <- Stream.eval(nameFx.find(
+          regex(lastName, s"""^$namePrefix"""),
+          20, 0,
+          Map(
+            id -> false,
+            lastName -> true,
+            firstName -> true
+          ),
+          BsonDocument(List((primaryTitle, BsonNumber(1)))))
+          .through(docToJson)
+          .compile.toList)
+        json <- Stream.emits(dbList)
+      } yield json
+
+      override def getAutosuggestTitle(titlePrefix: String): Stream[F, Json] = for {
+        dbList <- Stream.eval(titleFx.find(
+          regex(primaryTitle, s"""^$titlePrefix"""),
+          20, 0,
+          Map(
+            id -> false,
+            primaryTitle -> true
+          ))
           .through(docToJson)
           .compile.toList)
         json <- Stream.emits(dbList)

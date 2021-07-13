@@ -102,8 +102,20 @@ class MongoCollectionEffect[A](val underlying: MongoCollection[A])(implicit c: C
 
   def find[F[_]: ConcurrentEffect](filter: Bson, limit: Int, offset: Int, projections: Map[String, Boolean]): Stream[F,A] =
     toStream(
-      underlying.find(filter).skip(offset).limit(limit)
-        .projection(fields(getProjectionFields(projections):_*)))
+      underlying.find(filter)
+        .projection(fields(getProjectionFields(projections):_*))
+        .skip(offset)
+        .limit(limit)
+    )
+
+  def find[F[_]: ConcurrentEffect](filter: Bson, limit: Int, offset: Int, projections: Map[String, Boolean], sortFields: Bson): Stream[F,A] =
+    toStream(
+      underlying.find(filter)
+        .projection(fields(getProjectionFields(projections):_*))
+        .skip(offset)
+        .limit(limit)
+        .sort(sortFields)
+    )
 
   def count[F[_]: ConcurrentEffect]: F[Option[Long]] = toAsync(underlying.countDocuments())
 
