@@ -4,8 +4,10 @@ import cats.effect._
 import cats.implicits._
 import com.iscs.releaseScraper.domains.{ImdbQuery, ReleaseDatesScraperService}
 import com.iscs.releaseScraper.model.Requests.ReqParams
+import com.iscs.releaseScraper.model.RouteMessage.RouteMessage
 import com.iscs.releaseScraper.model.ScrapeResult.Scrape._
 import com.typesafe.scalalogging.Logger
+import io.circe.syntax._
 import org.http4s._
 import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
@@ -32,6 +34,7 @@ object Routes {
     allowedMethods = Some(methods),
     allowedOrigins = checkOrigin
   )
+  private def RouteNotFound(badVal: String) = RouteMessage(badVal)
 
   def scrapeRoutes[F[_]: Sync: Concurrent](R: ReleaseDatesScraperService[F]): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F]{}
@@ -97,6 +100,8 @@ object Routes {
           imdbTitles <- Concurrent[F].delay(I.getAutosuggestTitle(title))
           resp <- Ok(imdbTitles)
         } yield resp
+      case default =>
+        Ok(RouteNotFound(default.pathInfo).asJson)
     }
     CORS(service, methodConfig)
   }

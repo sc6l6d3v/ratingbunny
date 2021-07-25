@@ -12,7 +12,7 @@ import io.circe.parser._
 import org.bson.conversions.Bson
 import org.http4s.circe._
 import org.http4s.{EntityDecoder, EntityEncoder}
-import org.mongodb.scala.bson.{BsonDocument, BsonNumber, BsonString}
+import org.mongodb.scala.bson.{BsonDocument, BsonNumber}
 import org.mongodb.scala.bson.collection.immutable.Document
 import org.mongodb.scala.model.Filters.{and, exists, gte, regex, text, elemMatch => elemMatchFilter, eq => mdbeq, ne => mdne}
 import org.mongodb.scala.model._
