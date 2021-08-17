@@ -22,11 +22,13 @@ object Routes {
   private val reactDeploys = sys.env.getOrElse("ORIGINS", "localhost")
     .split(",")
     .toList.flatMap(host => protos.map(proto => s"$proto://$host"))
-  private val reactOrigin = "http://localhost:3000"
-  private val methods = Set("GET")
+  private val reactOrigin = sys.env.getOrElse("ORIGINPORTS", "3000,8080")
+    .split(",")
+    .map(port => s"http://localhost:$port")
+  private val methods = Set("GET", "POST")
   private def checkOrigin(origin: String): Boolean =
     allowedOrigins.contains(origin)
-  private val allowedOrigins = Set(reactOrigin) ++ reactDeploys
+  private val allowedOrigins = reactOrigin ++ reactDeploys
   private val methodConfig = CORSConfig(
     anyOrigin = false,
     allowCredentials = true,
@@ -101,6 +103,7 @@ object Routes {
           resp <- Ok(imdbTitles)
         } yield resp
       case default =>
+        L.error(s"got bad request: ${default.pathInfo}")
         Ok(RouteNotFound(default.pathInfo).asJson)
     }
     CORS(service, methodConfig)
