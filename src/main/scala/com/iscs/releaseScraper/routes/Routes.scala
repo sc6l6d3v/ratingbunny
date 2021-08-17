@@ -22,13 +22,14 @@ object Routes {
   private val reactDeploys = sys.env.getOrElse("ORIGINS", "localhost")
     .split(",")
     .toList.flatMap(host => protos.map(proto => s"$proto://$host"))
-  private val reactOrigin = sys.env.getOrElse("ORIGINPORTS", "3000,8080")
-    .split(",")
-    .map(port => s"http://localhost:$port")
   private val methods = Set("GET", "POST")
-  private def checkOrigin(origin: String): Boolean =
-    allowedOrigins.contains(origin)
-  private val allowedOrigins = reactOrigin ++ reactDeploys
+  private def checkOrigin(origin: String): Boolean = {
+    val hostPart = origin.split(":").toList.init.mkString(":")
+    L.debug(s"checking $hostPart of $origin against ${allowedOrigins.mkString(",")}")
+    allowedOrigins.contains(hostPart)
+  }
+
+  private val allowedOrigins = reactDeploys
   private val methodConfig = CORSConfig(
     anyOrigin = false,
     allowCredentials = true,
