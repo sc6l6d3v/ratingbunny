@@ -9,9 +9,9 @@ import org.http4s.circe._
 object Requests {
   final case class ReqParams(year: Option[Int], genre: Option[String], titleType: Option[String], isAdult: Option[Boolean]) {
     override def toString: String = List(
-      year.map(yr => "year=$yr"),
-      genre.map(genre => "genre=$genre"),
-      titleType.map(titleType => "titleType=$titleType"),
+      year.map(yr => s"year=$yr"),
+      genre.map(genre => s"genre=$genre"),
+      titleType.map(titleType => s"titleType=$titleType"),
       isAdult.map(isAdult => s"isAdult=>$isAdult")
     ).flatten
       .mkString(", ")

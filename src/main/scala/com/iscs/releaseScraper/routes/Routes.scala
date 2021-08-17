@@ -72,7 +72,7 @@ object Routes {
     val dsl = new Http4sDsl[F]{}
     import dsl._
     val service = HttpRoutes.of[F] {
-      case req@GET -> Root / "title" / title / rating =>
+      case req@POST -> Root / "title" / title / rating =>
         for {
           reqParams <- req.as[ReqParams]
           _ <- Concurrent[F].delay(L.info(s""""request" title=$title rating=$rating ${reqParams.toString}"""))
@@ -80,7 +80,7 @@ object Routes {
           imdbTitles <- Concurrent[F].delay(I.getByTitle(title, ratingVal, reqParams))
           resp <- Ok(imdbTitles)
         } yield resp
-      case req@GET -> Root / "name" / name / rating =>
+      case req@POST -> Root / "name" / name / rating =>
         for {
           reqParams <- req.as[ReqParams]
           _ <- Concurrent[F].delay(L.info(s""""request" title=$name rating=$rating ${reqParams.toString}"""))
