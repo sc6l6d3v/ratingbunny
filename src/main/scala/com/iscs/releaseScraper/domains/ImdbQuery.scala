@@ -115,7 +115,7 @@ object ImdbQuery {
       def getParamList(params: ReqParams): F[List[Bson]] = Concurrent[F].delay(
         List(
           params.year.map(yr => mdbeq(startYear, yr)),
-          params.genre.map(genre => elemMatchFilter(genresList, mdbeq(genresList, genre))),
+          params.genre.map(genre => mdbeq(genresList, genre)),
           params.titleType.map(tt => mdbeq(titleType, tt)),
           params.isAdult.map(isadult => mdbeq(isAdult, isadult))
         ).flatten)
