@@ -13,7 +13,7 @@ object Main extends IOApp {
     _ <- IO.delay(System.currentTimeMillis)
     resources = for {
       mongoClient <- Resource.fromAutoCloseable(Concurrent[IO].delay(
-        DbClient[IO](Mongo.fromUrl(), dbName, List("title_basics_ratings", "name_basics"))))
+        DbClient[IO](Mongo.fromUrl(), dbName, List("title_basics_ratings", "name_basics", "email_contact"))))
     } yield (IO.delay(mongoClient))
 
     ec <- resources.use { dbClient =>

@@ -4,7 +4,7 @@ import java.util.concurrent.Executors
 
 import cats.effect.{Concurrent, ConcurrentEffect, ContextShift, Timer}
 import cats.implicits._
-import com.iscs.releaseScraper.domains.{ImdbQuery, ReleaseDatesScraperService}
+import com.iscs.releaseScraper.domains.{EmailContact, ImdbQuery, ReleaseDatesScraperService}
 import com.iscs.releaseScraper.routes.Routes._
 import com.iscs.releaseScraper.util.DbClient
 import com.typesafe.scalalogging.Logger
@@ -33,10 +33,14 @@ object Server {
     val srvStream = for {
       mongo <- Stream.eval(mongoClient)
       imdbSvc <- Stream.eval(Concurrent[F].delay(ImdbQuery.impl[F](mongo)))
+      emailSvc <- Stream.eval(Concurrent[F].delay(EmailContact.impl[F](mongo)))
       scrapeSvc <- Stream.eval(Concurrent[F].delay(new ReleaseDatesScraperService[F](defaultHost)))
       httpApp <- Stream.eval(Concurrent[F].delay(
-        (scrapeRoutes[F](scrapeSvc) <+>
-          imdbRoutes[F](imdbSvc))
+        (
+          scrapeRoutes[F](scrapeSvc) <+>
+            emailContactRoutes[F](emailSvc) <+>
+            imdbRoutes[F](imdbSvc)
+          )
           .orNotFound))
       _ <- Stream.eval(Concurrent[F].delay(L.info(s""""added routes for reldate""")))
       finalHttpApp <- Stream.eval(Concurrent[F].delay(hpLogger.httpApp(logHeaders = true, logBody = true)(httpApp)))

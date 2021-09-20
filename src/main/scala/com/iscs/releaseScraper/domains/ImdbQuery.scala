@@ -33,6 +33,8 @@ trait ImdbQuery[F[_]] {
 object ImdbQuery {
   private val L = Logger[this.type]
 
+  val DOCLIMIT = 200
+
   def apply[F[_]](implicit ev: ImdbQuery[F]): ImdbQuery[F] = ev
 
   final case class TitleRec(averageRating: Option[Double], numVotes: Option[Int],
@@ -157,7 +159,7 @@ object ImdbQuery {
         titleBson <- Stream.eval(getTitleModelFilters(title))
         dbList <- Stream.eval(titleFx.find(
           and(titleBson, ratingBson, paramBson),
-        20, 0, Map(genres -> false))
+          DOCLIMIT, 0, Map(genres -> false))
           .through(docToJson)
           .compile.toList)
         json <- Stream.emits(dbList)

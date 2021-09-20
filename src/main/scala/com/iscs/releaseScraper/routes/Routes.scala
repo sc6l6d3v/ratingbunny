@@ -2,7 +2,8 @@ package com.iscs.releaseScraper.routes
 
 import cats.effect._
 import cats.implicits._
-import com.iscs.releaseScraper.domains.{ImdbQuery, ReleaseDatesScraperService}
+import com.iscs.releaseScraper.domains.EmailContact.Email
+import com.iscs.releaseScraper.domains.{EmailContact, ImdbQuery, ReleaseDatesScraperService}
 import com.iscs.releaseScraper.model.Requests.ReqParams
 import com.iscs.releaseScraper.model.RouteMessage.RouteMessage
 import com.iscs.releaseScraper.model.ScrapeResult.Scrape._
@@ -106,6 +107,23 @@ object Routes {
       case default =>
         L.error(s"got bad request: ${default.pathInfo}")
         Ok(RouteNotFound(default.pathInfo).asJson)
+    }
+    CORS(service, methodConfig)
+  }
+
+  def emailContactRoutes[F[_]: Sync: Concurrent](E: EmailContact[F]): HttpRoutes[F] = {
+    val dsl = new Http4sDsl[F]{}
+    import dsl._
+    val service = HttpRoutes.of[F] {
+      case req@POST -> Root / "addMsg" =>
+        for {
+          emailParams <- req.as[Email]
+          _ <- Concurrent[F].delay(L.info(s""""request" ${emailParams.toString}"""))
+          emailId <- Concurrent[F].delay(E.saveEmail(
+            emailParams.name, emailParams.email,
+            emailParams.subject, emailParams.msg))
+          resp <- Ok(emailId)
+        } yield resp
     }
     CORS(service, methodConfig)
   }

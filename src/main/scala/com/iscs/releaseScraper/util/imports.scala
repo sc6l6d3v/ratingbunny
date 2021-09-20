@@ -10,6 +10,7 @@ import fs2.concurrent.Queue
 import org.bson.conversions.Bson
 import org.mongodb.scala.bson.{BsonArray, BsonBoolean, BsonDocument, BsonNumber, BsonString}
 import org.mongodb.scala.model.Projections._
+import org.mongodb.scala.model.UpdateOptions
 import org.mongodb.scala.result.{DeleteResult, InsertManyResult, InsertOneResult}
 import org.mongodb.scala.{BulkWriteResult, MongoCollection, Observable, bson}
 
@@ -135,6 +136,9 @@ class MongoCollectionEffect[A](val underlying: MongoCollection[A])(implicit c: C
 
   def updateOne[F[_]: ConcurrentEffect](filter: Bson, update: Bson): F[Option[UpdateResult]] =
     toAsync(underlying.updateOne(filter, update))
+
+  def updateOne[F[_]: ConcurrentEffect](filter: Bson, update: Bson, options: UpdateOptions): F[Option[UpdateResult]] =
+    toAsync(underlying.updateOne(filter, update, options))
 
   def updateMany[F[_]: ConcurrentEffect](filter: Bson, update: Bson): F[Option[UpdateResult]] =
     toAsync(underlying.updateMany(filter, update))
