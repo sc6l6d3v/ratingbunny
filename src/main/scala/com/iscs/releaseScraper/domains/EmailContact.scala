@@ -96,7 +96,11 @@ object EmailContact {
             UpdateOptions().upsert(true))
           emailAsId <- Concurrent[F].delay {
             optUpdateResult match {
-              case Some(result) => if (result.getUpsertedId == null) email else result.getUpsertedId.toString
+              case Some(result) =>
+                if (result.getUpsertedId == null)
+                  email
+                else
+                  result.getUpsertedId.asString().getValue
               case _            => email
             }
           }

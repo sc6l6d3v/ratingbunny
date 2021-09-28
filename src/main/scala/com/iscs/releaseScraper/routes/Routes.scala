@@ -25,9 +25,8 @@ object Routes {
     .toList.flatMap(host => protos.map(proto => s"$proto://$host"))
   private val methods = Set("GET", "POST")
   private def checkOrigin(origin: String): Boolean = {
-    val hostPart = origin.split(":").toList.init.mkString(":")
-    L.debug(s"checking $hostPart of $origin against ${allowedOrigins.mkString(",")}")
-    allowedOrigins.contains(hostPart)
+    L.debug(s"checking $origin against ${allowedOrigins.mkString(",")}")
+    allowedOrigins.contains(origin)
   }
 
   private val allowedOrigins = reactDeploys
