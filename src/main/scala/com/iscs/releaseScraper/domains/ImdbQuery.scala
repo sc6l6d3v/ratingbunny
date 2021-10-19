@@ -12,7 +12,7 @@ import io.circe.parser._
 import org.bson.conversions.Bson
 import org.http4s.circe._
 import org.http4s.{EntityDecoder, EntityEncoder}
-import org.mongodb.scala.bson.{BsonDocument, BsonNumber, conversions}
+import org.mongodb.scala.bson.{BsonDocument, BsonNumber, BsonString, conversions}
 import org.mongodb.scala.bson.collection.immutable.Document
 import org.mongodb.scala.model.Filters.{and, exists, gte, in, lte, regex, text, eq => mdbeq, ne => mdne}
 import org.mongodb.scala.model._
@@ -34,6 +34,7 @@ object ImdbQuery {
   private val L = Logger[this.type]
 
   val DOCLIMIT = 200
+  val AUTOSUGGESTLIMIT = 20
 
   def apply[F[_]](implicit ev: ImdbQuery[F]): ImdbQuery[F] = ev
 
@@ -275,33 +276,190 @@ object ImdbQuery {
         json <- Stream.emits(dbList)
       } yield json
 
+      /**
+       * {
+       *   $match: {
+       *            'lastName': {$regex: /^Cra/},
+       *            'firstName': 'Daniel'
+       *           }
+       *  }, {
+       *   $project: {
+       *            firstName: 1,
+       *            lastName: 1
+       *             }
+       *  }, {
+       *   $group: {
+       *            _id: "$lastName",
+       *            firstName: { $first: "$firstName" }
+       *           }
+       *  }, {
+       *   $sort: {
+       *            firstName: 1,
+       *            _id: 1
+       *          }
+       *  }, {
+       *   $project: {
+       *            _id: 0,
+       *            firstName: 1,
+       *            lastName: 1
+       *             }
+       *  }, {
+       *   $limit: 20
+       *  }
+       * @param namePrefix first' '[lastname]
+       * @return list
+       */
       override def getAutosuggestName(namePrefix: String): Stream[F, Json] = for {
-        dbList <- Stream.eval(nameFx.find(
-          regex(lastName, s"""^$namePrefix"""),
-          20, 0,
-          Map(
+        names <- Stream.eval(Concurrent[F].delay(
+          if (namePrefix contains " ")
+            namePrefix.split(" ").toList
+          else
+            List(namePrefix)
+        ))
+
+        lastFirst <- Stream.eval(Concurrent[F].delay(
+          if (names.size == 1)
+            regex(lastName, s"""^${names.head}""")
+          else
+            and(
+              regex(lastName, s"""^${names.last}"""),
+              mdbeq(firstName, names.head)
+            )
+        ))
+
+        nameMatchFilter <- Stream.eval(Concurrent[F].delay(
+          Aggregates.filter(lastFirst)
+        ))
+
+        projectionsList <- Stream.eval(Concurrent[F].delay(
+          nameFx.getProjectionFields(Map(
+            firstName -> true,
+            lastName -> true
+          ))
+        ))
+
+        projectionFilter <- Stream.eval(Concurrent[F].delay(
+          Aggregates.project(nameFx.getProjections(projectionsList))
+        ))
+
+        groupFilter <- Stream.eval(Concurrent[F].delay(
+          Aggregates.group("$lastName",
+            Accumulators.first(firstName, s"$$$firstName"))
+        ))
+
+        sortFilter <- Stream.eval(Concurrent[F].delay(
+          Aggregates.sort(Document(
+            id -> BsonNumber(1),
+            firstName -> BsonNumber(1)))
+        ))
+
+        lastProjectionsList <- Stream.eval(Concurrent[F].delay(
+          nameFx.getProjectionFields(Map(
             id -> false,
-            lastName -> true,
-            firstName -> true
-          ),
-          BsonDocument(List((primaryTitle, BsonNumber(1)))))
+            firstName -> true,
+          )) ++ List(BsonDocument((lastName, BsonString("$_id"))))
+        ))
+
+        lastProjectFilter <- Stream.eval(Concurrent[F].delay(
+          Aggregates.project(nameFx.getProjections(lastProjectionsList))
+        ))
+
+        limitFilter <- Stream.eval(Concurrent[F].delay(
+          Aggregates.limit(AUTOSUGGESTLIMIT)
+        ))
+
+        dbList <- Stream.eval(nameFx.aggregate(
+          Seq(
+            nameMatchFilter,
+            projectionFilter,
+            groupFilter,
+            sortFilter,
+            lastProjectFilter,
+            limitFilter
+          )
+        )
           .through(docToJson)
           .compile.toList)
         json <- Stream.emits(dbList)
       } yield json
 
+      /**
+       * {
+       *   $match: {
+       *              $and: [
+       *                      {$text: {$search: 'Gone with the W'}},
+       *                      {'primaryTitle': {$regex: /^Gone with the W/}}
+       *              ]
+       *           }
+       *  }, {
+       *   $project: {
+       *               _id: 0,
+       *               'primaryTitle' : 1
+       *             }
+       *  }, {
+       *    $group: {
+       *               _id: '$primaryTitle',
+       *               titles: { $first: "$primaryTitle" }
+       *            }
+       *  }, {
+       *     $sort: {
+       *               titles: 1
+       *            }
+       *  }, {
+       *     $limit: 20
+       *  }
+       * @param titlePrefix substring with whitespace
+       * @return sorted, distinct titles
+       */
       override def getAutosuggestTitle(titlePrefix: String): Stream[F, Json] = for {
-        dbList <- Stream.eval(titleFx.find(
-          regex(primaryTitle, s"""^$titlePrefix"""),
-          20, 0,
-          Map(
+        titleTextRegex <- Stream.eval(Concurrent[F].delay(
+          and(
+            text(titlePrefix),
+            regex(primaryTitle, s"""^$titlePrefix""")
+          )
+        ))
+
+        titleMatchFilter <- Stream.eval(Concurrent[F].delay(
+          Aggregates.filter(titleTextRegex)
+        ))
+
+        projectionsList <- Stream.eval(Concurrent[F].delay(
+          titleFx.getProjectionFields(Map(
             id -> false,
             primaryTitle -> true
           ))
+        ))
+
+        projectionFilter <- Stream.eval(Concurrent[F].delay(
+          Aggregates.project(titleFx.getProjections(projectionsList))
+        ))
+
+        groupFilter <- Stream.eval(Concurrent[F].delay(
+          Aggregates.group("$primaryTitle",
+            Accumulators.first(primaryTitle, s"$$$primaryTitle"))
+        ))
+
+        sortFilter <- Stream.eval(Concurrent[F].delay(
+          Aggregates.sort(Document(primaryTitle -> BsonNumber(1)))
+        ))
+
+        limitFilter <- Stream.eval(Concurrent[F].delay(
+          Aggregates.limit(AUTOSUGGESTLIMIT)
+        ))
+
+        dbList <- Stream.eval(titleFx.aggregate(
+          Seq(
+            titleMatchFilter,
+            projectionFilter,
+            groupFilter,
+            sortFilter,
+            limitFilter,
+            projectionFilter
+          )
+        )
           .through(docToJson)
           .compile.toList)
         json <- Stream.emits(dbList)
       } yield json
     }
-
 }
