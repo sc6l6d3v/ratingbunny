@@ -114,9 +114,10 @@ object ImdbQuery {
         } yield bson
 
       def getTitleModelFilters(title: String): F[Bson] = for {
-        parts <- Concurrent[F].delay(title.split(" ").toList)
         textBson <- Concurrent[F].delay(text(title))
-      } yield textBson
+        regexBson <- Concurrent[F].delay(regex(primaryTitle, title))
+        combined <- condenseSingleLists(List(textBson, regexBson))
+      } yield combined
 
       implicit def convertBooleanToInt(b: Boolean): asInt = new asInt(b)
 
@@ -154,6 +155,32 @@ object ImdbQuery {
         condensedBson <- condenseSingleLists(bsonList)
       } yield condensedBson
 
+      /**
+       * {
+       * "$and":[
+       *           {
+       *             "$text":{ "$search":"Gone with the W" }
+       *           },
+       *          {
+       *             "averageRating":{ "$gte":7.0 }
+       *          },
+       *          {
+       *             "$and":[
+       *                     { "startYear":{ "$gte":1924 } },
+       *                     { "startYear":{ "$lte":2021 } },
+       *                     { "genresList":"Crime" },
+       *                     { "titleType":"movie" },
+       *                     { "isAdult": 0 }
+       *                    ]
+       *          }
+       *      ]
+       * }
+       *
+       * @param title
+       * @param rating
+       * @param params
+       * @return
+       */
       override def getByTitle(title: String, rating: Double, params: ReqParams): Stream[F, Json] = for {
         paramBson <- Stream.eval(getParamModelFilters(params, TitleQuery))
         ratingBson <- Stream.eval(Concurrent[F].delay(gte(averageRating, rating)))
