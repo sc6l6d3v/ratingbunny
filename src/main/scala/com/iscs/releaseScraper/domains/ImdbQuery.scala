@@ -26,7 +26,7 @@ case object NameQuery extends QueryObj
 
 trait ImdbQuery[F[_]] {
   def getByTitle(title: Option[String], rating: Double, params: ReqParams): Stream[F,Json]
-  def getByName(optName: Option[String], rating: Double, params: ReqParams): Stream[F,Json]
+  def getByName(name: String, rating: Double, params: ReqParams): Stream[F,Json]
   def getAutosuggestTitle(titlePrefix: String): Stream[F,Json]
   def getAutosuggestName(titlePrefix: String): Stream[F,Json]
 }
@@ -239,21 +239,19 @@ object ImdbQuery {
        *    }
        * }
        *
-       * @param optName of actor
+       * @param name of actor
        * @param rating IMDB
        * @param params body
        * @return
        */
-      override def getByName(optName: Option[String], rating: Double, params: ReqParams): Stream[F, Json] = for {
-        matchTitleWithName <- Stream.eval(Concurrent[F].delay(optName match {
-          case Some(name) =>
+      override def getByName(name: String, rating: Double, params: ReqParams): Stream[F, Json] = for {
+        matchTitleWithName <- Stream.eval(Concurrent[F].delay(
             and (
               exists (knownForTitles, exists = true),
               mdne (knownForTitles, ""),
               mdbeq (primaryName, name)
             )
-          case _          => Document()
-        }))
+        ))
         titleMatchFilter <- Stream.eval(Concurrent[F].delay(
           Aggregates.filter(matchTitleWithName)
         ))

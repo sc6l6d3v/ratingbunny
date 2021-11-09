@@ -87,11 +87,10 @@ object Routes {
           imdbTitles <- Concurrent[F].delay(I.getByTitle(title, ratingVal, reqParams))
           resp <- Ok(imdbTitles)
         } yield resp
-      case req@POST -> Root / "name" / rating =>
+      case req@POST -> Root / "name" / name / rating =>
         for {
           reqParams <- req.as[ReqParams]
-          name <- Concurrent[F].delay(reqParams.query)
-          _ <- Concurrent[F].delay(showReqParam("name", name, rating, reqParams))
+          _ <- Concurrent[F].delay(showReqParam("name", Some(name), rating, reqParams))
           ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
           imdbNames <- Concurrent[F].delay(I.getByName(name, ratingVal, reqParams))
           resp <- Ok(imdbNames)
