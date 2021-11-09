@@ -71,22 +71,27 @@ object Routes {
     CORS(service, methodConfig)
   }
 
+  private def showReqParam(queryType: String, query: Option[String], rating: String, params: ReqParams): Unit =
+    L.info(s""""request" $queryType=${query.getOrElse("UNSET")} rating=$rating ${params.toString}""")
+
   def imdbRoutes[F[_]: Sync: Concurrent](I: ImdbQuery[F]): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F]{}
     import dsl._
     val service = HttpRoutes.of[F] {
-      case req@POST -> Root / "title" / title / rating =>
+      case req@POST -> Root / "title" / rating =>
         for {
           reqParams <- req.as[ReqParams]
-          _ <- Concurrent[F].delay(L.info(s""""request" title=$title rating=$rating ${reqParams.toString}"""))
-          ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
+          title <- Concurrent[F].delay(reqParams.query)
+          _ <- Concurrent[F].delay(showReqParam("title", title, rating, reqParams))
+            ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
           imdbTitles <- Concurrent[F].delay(I.getByTitle(title, ratingVal, reqParams))
           resp <- Ok(imdbTitles)
         } yield resp
-      case req@POST -> Root / "name" / name / rating =>
+      case req@POST -> Root / "name" / rating =>
         for {
           reqParams <- req.as[ReqParams]
-          _ <- Concurrent[F].delay(L.info(s""""request" title=$name rating=$rating ${reqParams.toString}"""))
+          name <- Concurrent[F].delay(reqParams.query)
+          _ <- Concurrent[F].delay(showReqParam("name", name, rating, reqParams))
           ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
           imdbNames <- Concurrent[F].delay(I.getByName(name, ratingVal, reqParams))
           resp <- Ok(imdbNames)

@@ -12,6 +12,7 @@ import io.circe.parser._
 import org.bson.conversions.Bson
 import org.http4s.circe._
 import org.http4s.{EntityDecoder, EntityEncoder}
+import org.mongodb.scala.bson
 import org.mongodb.scala.bson.{BsonDocument, BsonNumber, BsonString, conversions}
 import org.mongodb.scala.bson.collection.immutable.Document
 import org.mongodb.scala.model.Filters.{and, exists, gte, in, lte, regex, text, eq => mdbeq, ne => mdne}
@@ -24,8 +25,8 @@ case object TitleQuery extends QueryObj
 case object NameQuery extends QueryObj
 
 trait ImdbQuery[F[_]] {
-  def getByTitle(title: String, rating: Double, params: ReqParams): Stream[F,Json]
-  def getByName(name: String, rating: Double, params: ReqParams): Stream[F,Json]
+  def getByTitle(title: Option[String], rating: Double, params: ReqParams): Stream[F,Json]
+  def getByName(optName: Option[String], rating: Double, params: ReqParams): Stream[F,Json]
   def getAutosuggestTitle(titlePrefix: String): Stream[F,Json]
   def getAutosuggestName(titlePrefix: String): Stream[F,Json]
 }
@@ -176,15 +177,20 @@ object ImdbQuery {
        *      ]
        * }
        *
-       * @param title
-       * @param rating
-       * @param params
+       * @param optTitle  optional query param
+       * @param rating    required numeric
+       * @param params    other params
        * @return
        */
-      override def getByTitle(title: String, rating: Double, params: ReqParams): Stream[F, Json] = for {
+      override def getByTitle(optTitle: Option[String], rating: Double, params: ReqParams): Stream[F, Json] = for {
         paramBson <- Stream.eval(getParamModelFilters(params, TitleQuery))
         ratingBson <- Stream.eval(Concurrent[F].delay(gte(averageRating, rating)))
-        titleBson <- Stream.eval(getTitleModelFilters(title))
+        titleBson <- Stream.eval(optTitle match {
+          case Some(title) => getTitleModelFilters(title)
+          case _           =>
+            val emptyDoc: F[Bson] = Concurrent[F].delay(Document())
+            emptyDoc
+        })
         dbList <- Stream.eval(titleFx.find(
           and(titleBson, ratingBson, paramBson),
           DOCLIMIT, 0, Map(genres -> false))
@@ -233,19 +239,21 @@ object ImdbQuery {
        *    }
        * }
        *
-       * @param name of actor
+       * @param optName of actor
        * @param rating IMDB
        * @param params body
        * @return
        */
-      override def getByName(name: String, rating: Double, params: ReqParams): Stream[F, Json] = for {
-        matchTitleWithName <- Stream.eval(Concurrent[F].delay(
-          and(
-            exists(knownForTitles, exists = true),
-            mdne(knownForTitles, ""),
-            mdbeq(primaryName, name)
-          )
-        ))
+      override def getByName(optName: Option[String], rating: Double, params: ReqParams): Stream[F, Json] = for {
+        matchTitleWithName <- Stream.eval(Concurrent[F].delay(optName match {
+          case Some(name) =>
+            and (
+              exists (knownForTitles, exists = true),
+              mdne (knownForTitles, ""),
+              mdbeq (primaryName, name)
+            )
+          case _          => Document()
+        }))
         titleMatchFilter <- Stream.eval(Concurrent[F].delay(
           Aggregates.filter(matchTitleWithName)
         ))
