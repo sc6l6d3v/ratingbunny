@@ -10,12 +10,12 @@ import io.circe._
 import io.circe.generic.semiauto._
 import io.circe.parser._
 import org.bson.conversions.Bson
+import org.bson.types.Decimal128
 import org.http4s.circe._
 import org.http4s.{EntityDecoder, EntityEncoder}
-import org.mongodb.scala.bson
 import org.mongodb.scala.bson.{BsonDocument, BsonNumber, BsonString, conversions}
 import org.mongodb.scala.bson.collection.immutable.Document
-import org.mongodb.scala.model.Filters.{and, exists, gte, in, lte, regex, text, eq => mdbeq, ne => mdne}
+import org.mongodb.scala.model.Filters.{and, exists, gte, in, lte, or, regex, text, eq => mdbeq, ne => mdne}
 import org.mongodb.scala.model._
 
 import scala.language.implicitConversions
@@ -184,16 +184,22 @@ object ImdbQuery {
        */
       override def getByTitle(optTitle: Option[String], rating: Double, params: ReqParams): Stream[F, Json] = for {
         paramBson <- Stream.eval(getParamModelFilters(params, TitleQuery))
-        ratingBson <- Stream.eval(Concurrent[F].delay(gte(averageRating, rating)))
+        ratingBson <- Stream.eval(Concurrent[F].delay(
+          or(
+            mdbeq(matchedTitles_averageRating, Decimal128.NaN),
+            gte(averageRating, rating)
+          )
+        ))
         titleBson <- Stream.eval(optTitle match {
           case Some(title) => getTitleModelFilters(title)
           case _           =>
             val emptyDoc: F[Bson] = Concurrent[F].delay(Document())
             emptyDoc
         })
+        sortBson <- Stream.eval(Concurrent[F].delay(Document(startYear -> -1)))
         dbList <- Stream.eval(titleFx.find(
           and(titleBson, ratingBson, paramBson),
-          DOCLIMIT, 0, Map(genres -> false))
+          DOCLIMIT, offset = 0, Map(genres -> false), sortFields = sortBson)
           .through(docToJson)
           .compile.toList)
         json <- Stream.emits(dbList)
@@ -264,7 +270,12 @@ object ImdbQuery {
         ))
 
         paramsList <- Stream.eval(getParamList(params, NameQuery))
-        ratingBson <- Stream.eval(Concurrent[F].delay(gte(matchedTitles_averageRating, rating)))
+        ratingBson <- Stream.eval(Concurrent[F].delay(
+          or(
+            mdbeq(matchedTitles_averageRating, Decimal128.NaN),
+            gte(matchedTitles_averageRating, rating))
+        )
+        )
         bsonCondensedList <- Stream.eval(condenseSingleLists(paramsList :+ ratingBson))
         matchLookupsFilter <- Stream.eval(Concurrent[F].delay(
           Aggregates.filter(and(bsonCondensedList))
