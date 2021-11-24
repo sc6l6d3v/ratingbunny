@@ -86,9 +86,13 @@ object ImdbQuery {
       val genresList = "genresList"
       val matchedTitles_genresList = "matchedTitles.genresList"
       val isAdult = "isAdult"
+      val votes = "votes"
       val matchedTitles_isAdult = "matchedTitles.isAdult"
+      val matchedTitles_votes = "matchedTitles.votes"
       val startYear = "startYear"
+      val endYear = "endYear"
       val matchedTitles_startYear = "matchedTitles.startYear"
+      val matchedTitles_endYear = "matchedTitles.endYear"
       val titleType = "titleType"
       val matchedTitles_titleType = "matchedTitles.titleType"
       private val titleFx = dbClient.fxMap(titleCollection)
@@ -106,19 +110,8 @@ object ImdbQuery {
         } yield json
       }
 
-      def condenseSingleLists(bsonList: List[Bson]): F[Bson] =
-        for {
-          bson <- Concurrent[F].delay{
-            if (bsonList.size == 1) bsonList.head
-            else and(bsonList: _*)
-          }
-        } yield bson
-
-      def getTitleModelFilters(title: String): F[Bson] = for {
-        textBson <- Concurrent[F].delay(text(title))
-        regexBson <- Concurrent[F].delay(regex(primaryTitle, title))
-        combined <- condenseSingleLists(List(textBson, regexBson))
-      } yield combined
+      def getTitleModelFilters(title: String): F[Option[Bson]] =
+        Concurrent[F].delay(Some(Document(text(title).toBsonDocument) ++ Document(regex(primaryTitle, title).toBsonDocument)))
 
       implicit def convertBooleanToInt(b: Boolean): asInt = new asInt(b)
 
@@ -128,53 +121,51 @@ object ImdbQuery {
           case NameQuery  => nameString
         }
 
-      private def inOrEq[T](inputList: List[T], fieldName: String): conversions.Bson = inputList match {
+      private def inOrEq[T](fieldName: String, inputList: List[T]): conversions.Bson = inputList match {
         case manyElements:List[T] if manyElements.size > 1    => in(fieldName, manyElements:_*)
         case singleElement:List[T] if singleElement.size == 1 => mdbeq(fieldName, singleElement.head)
       }
 
-      def getParamList(params: ReqParams, qType: QueryObj): F[List[Bson]] = {
-        Concurrent[F].delay(
+      def getParamList(params: ReqParams, qType: QueryObj): F[Bson] = for {
+        bList <- Concurrent[F].delay(
           List(
             params.year.map(yr => gte(mapQtype(qType, startYear, matchedTitles_startYear), yr.head)),
-            params.year.map(yr => lte(mapQtype(qType, startYear, matchedTitles_startYear), yr.last)),
-            params.genre.map{ genre =>
-              val finalString = mapQtype(qType, genresList, matchedTitles_genresList)
-              inOrEq(genre, finalString)
+            params.year.map{yr =>
+              or(
+                and(regex(endYear, """\d"""),
+                  lte(mapQtype(qType, endYear, matchedTitles_endYear), yr.last.toString)),
+                regex(endYear, """\\N"""))
             },
-            params.titleType.map { tt =>
-              val finalString = mapQtype(qType, titleType, matchedTitles_titleType)
-              inOrEq(tt, finalString)
-            },
-            params.isAdult.map(isadult =>
-              mdbeq(mapQtype(qType, isAdult, matchedTitles_isAdult), isadult.toInt))
+            params.genre.map(genre => inOrEq(mapQtype(qType, genresList, matchedTitles_genresList), genre)),
+            params.titleType.map(tt => inOrEq(mapQtype(qType, titleType, matchedTitles_titleType), tt)),
+            params.isAdult.map(isAdlt => mdbeq(mapQtype(qType, isAdult, matchedTitles_isAdult), isAdlt.toInt)),
+            params.votes.map(v => gte(mapQtype(qType, votes, matchedTitles_votes), v))
           ).flatten)
-      }
+        bCombined <- Concurrent[F].delay(combineBson(bList))
+      } yield bCombined
 
-      def getParamModelFilters(params: ReqParams, qType: QueryObj): F[Bson] = for {
-        bsonList <- getParamList(params, qType)
-        condensedBson <- condenseSingleLists(bsonList)
-      } yield condensedBson
+      def getParamModelFilters(params: ReqParams, qType: QueryObj): F[Bson] = getParamList(params, qType)
+
+      def combineBson(bson: List[Bson]): Bson =
+        bson.reduceLeft((a, b) => Document(a.toBsonDocument) ++ Document(b.toBsonDocument))
 
       /**
        * {
-       * "$and":[
-       *           {
-       *             "$text":{ "$search":"Gone with the W" }
-       *           },
-       *          {
-       *             "averageRating":{ "$gte":7.0 }
-       *          },
-       *          {
-       *             "$and":[
-       *                     { "startYear":{ "$gte":1924 } },
-       *                     { "startYear":{ "$lte":2021 } },
-       *                     { "genresList":"Crime" },
-       *                     { "titleType":"movie" },
-       *                     { "isAdult": 0 }
-       *                    ]
-       *          }
-       *      ]
+       *    $text:{ $search: "Gone with the W" }
+       *    primaryTitle: { $regex: /Gone with the W/ }
+       *    startYear: { "$gte":1924 },
+       *    $or: [
+       *          { $and: [ { endYear: { $regex: /\d/ } },  { endYear: { $lte: '2021' } } ] },
+       *          { endYear: { $regex: /\\N/ },
+       *         ],
+       *    genresList: "Crime",
+       *    titleType: "movie",
+       *    isAdult: 0
+       *    $or: [
+       *          { $and: [ { averageRating: { $exists: true },  { averageRating: NumberDecimal(NaN) } ] },
+       *          { averageRating: { $exists: false },
+       *          { averageRating: { $gte: 7.0 }
+       *         ],
        * }
        *
        * @param optTitle  optional query param
@@ -186,19 +177,24 @@ object ImdbQuery {
         paramBson <- Stream.eval(getParamModelFilters(params, TitleQuery))
         ratingBson <- Stream.eval(Concurrent[F].delay(
           or(
-            mdbeq(matchedTitles_averageRating, Decimal128.NaN),
+            and(
+              exists(averageRating),
+              mdbeq(averageRating, Decimal128.NaN)
+            ),
+            exists(averageRating, exists = false),
             gte(averageRating, rating)
           )
         ))
-        titleBson <- Stream.eval(optTitle match {
+        optTitleBson <- Stream.eval(optTitle match {
           case Some(title) => getTitleModelFilters(title)
-          case _           =>
-            val emptyDoc: F[Bson] = Concurrent[F].delay(Document())
-            emptyDoc
+          case _           => Concurrent[F].delay(Option.empty[Bson])
         })
         sortBson <- Stream.eval(Concurrent[F].delay(Document(startYear -> -1)))
         dbList <- Stream.eval(titleFx.find(
-          and(titleBson, ratingBson, paramBson),
+          optTitleBson match {
+            case Some(titleBson) => combineBson(List(titleBson, ratingBson, paramBson))
+            case None            => combineBson(List(ratingBson, paramBson))
+          },
           DOCLIMIT, offset = 0, Map(genres -> false), sortFields = sortBson)
           .through(docToJson)
           .compile.toList)
@@ -252,11 +248,9 @@ object ImdbQuery {
        */
       override def getByName(name: String, rating: Double, params: ReqParams): Stream[F, Json] = for {
         matchTitleWithName <- Stream.eval(Concurrent[F].delay(
-            and (
-              exists (knownForTitles, exists = true),
-              mdne (knownForTitles, ""),
-              mdbeq (primaryName, name)
-            )
+              combineBson(List(exists(knownForTitles, exists = true),
+                mdne(knownForTitles, ""),
+                mdbeq(primaryName, name)))
         ))
         titleMatchFilter <- Stream.eval(Concurrent[F].delay(
           Aggregates.filter(matchTitleWithName)
@@ -276,9 +270,9 @@ object ImdbQuery {
             gte(matchedTitles_averageRating, rating))
         )
         )
-        bsonCondensedList <- Stream.eval(condenseSingleLists(paramsList :+ ratingBson))
+        bsonCondensedList <- Stream.eval(Concurrent[F].delay((Document(paramsList.toBsonDocument) ++ Document(ratingBson.toBsonDocument))))
         matchLookupsFilter <- Stream.eval(Concurrent[F].delay(
-          Aggregates.filter(and(bsonCondensedList))
+          Aggregates.filter(bsonCondensedList)
         ))
 
         projectionsList <- Stream.eval(Concurrent[F].delay(
@@ -323,33 +317,34 @@ object ImdbQuery {
       /**
        * {
        *   $match: {
-       *            'lastName': {$regex: /^Cra/},
-       *            'firstName': 'Daniel'
+       *            lastName: { $regex: /^Cra^/ },
+       *            firstName: 'Daniel'
        *           }
-       *  }, {
+       *   }, {
        *   $project: {
-       *            firstName: 1,
-       *            lastName: 1
+       *               firstName: 1,
+       *               lastName: 1
        *             }
-       *  }, {
+       *   }, {
        *   $group: {
-       *            _id: "$lastName",
-       *            firstName: { $first: "$firstName" }
+       *              _id: "$lastName",
+       *              firstName: { $first: "$firstName" }
        *           }
-       *  }, {
+       *   }, {
        *   $sort: {
-       *            firstName: 1,
-       *            _id: 1
+       *             firstName: 1,
+       *             _id: 1
        *          }
-       *  }, {
+       *   }, {
        *   $project: {
-       *            _id: 0,
-       *            firstName: 1,
-       *            lastName: 1
+       *               _id: 0,
+       *               firstName: 1,
+       *               lastName: 1
        *             }
-       *  }, {
+       *   }, {
        *   $limit: 20
-       *  }
+       *   }
+       * }
        * @param namePrefix first' '[lastname]
        * @return list
        */
@@ -365,10 +360,10 @@ object ImdbQuery {
           if (names.size == 1)
             regex(lastName, s"""^${names.head}""")
           else
-            and(
+            combineBson(List(
               regex(lastName, s"""^${names.last}"""),
               mdbeq(firstName, names.head)
-            )
+            ))
         ))
 
         nameMatchFilter <- Stream.eval(Concurrent[F].delay(
@@ -457,10 +452,10 @@ object ImdbQuery {
        */
       override def getAutosuggestTitle(titlePrefix: String): Stream[F, Json] = for {
         titleTextRegex <- Stream.eval(Concurrent[F].delay(
-          and(
+          combineBson(List(
             text(titlePrefix),
             regex(primaryTitle, s"""^$titlePrefix""")
-          )
+          ))
         ))
 
         titleMatchFilter <- Stream.eval(Concurrent[F].delay(
