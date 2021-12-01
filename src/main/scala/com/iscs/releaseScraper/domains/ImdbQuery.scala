@@ -130,12 +130,7 @@ object ImdbQuery {
         bList <- Concurrent[F].delay(
           List(
             params.year.map(yr => gte(mapQtype(qType, startYear, matchedTitles_startYear), yr.head)),
-            params.year.map{yr =>
-              or(
-                and(regex(endYear, """\d"""),
-                  lte(mapQtype(qType, endYear, matchedTitles_endYear), yr.last.toString)),
-                regex(endYear, """\\N"""))
-            },
+            params.year.map(yr => lte(mapQtype(qType, startYear, matchedTitles_startYear), yr.last)),
             params.genre.map(genre => inOrEq(mapQtype(qType, genresList, matchedTitles_genresList), genre)),
             params.titleType.map(tt => inOrEq(mapQtype(qType, titleType, matchedTitles_titleType), tt)),
             params.isAdult.map(isAdlt => mdbeq(mapQtype(qType, isAdult, matchedTitles_isAdult), isAdlt.toInt)),
@@ -154,13 +149,11 @@ object ImdbQuery {
        *    $text:{ $search: "Gone with the W" }
        *    primaryTitle: { $regex: /Gone with the W/ }
        *    startYear: { "$gte":1924 },
-       *    $or: [
-       *          { $and: [ { endYear: { $regex: /\d/ } },  { endYear: { $lte: '2021' } } ] },
-       *          { endYear: { $regex: /\\N/ },
-       *         ],
+       *    startYear: { "$lte":1944 },
        *    genresList: "Crime",
        *    titleType: "movie",
-       *    isAdult: 0
+       *    isAdult: 0,
+       *    votes: { "$gte":5000 },
        *    $or: [
        *          { $and: [ { averageRating: { $exists: true },  { averageRating: NumberDecimal(NaN) } ] },
        *          { averageRating: { $exists: false },
