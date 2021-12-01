@@ -83,7 +83,7 @@ object Routes {
           reqParams <- req.as[ReqParams]
           title <- Concurrent[F].delay(reqParams.query)
           _ <- Concurrent[F].delay(showReqParam("title", title, rating, reqParams))
-            ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
+          ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
           imdbTitles <- Concurrent[F].delay(I.getByTitle(title, ratingVal, reqParams))
           resp <- Ok(imdbTitles)
         } yield resp
