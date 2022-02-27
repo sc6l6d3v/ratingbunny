@@ -24,13 +24,13 @@ RUN \
   echo "export PATH=~/scala-$SCALA_VERSION/bin:$PATH" >> /root/.bashrc
 
 # Install sbt
-RUN \
-  curl -L -o sbt-$SBT_VERSION.deb https://dl.bintray.com/sbt/debian/sbt-$SBT_VERSION.deb && \
-  dpkg -i sbt-$SBT_VERSION.deb && \
-  rm sbt-$SBT_VERSION.deb && \
-  apt-get update && \
-  apt-get install sbt && \
-  sbt sbtVersion
+#RUN \
+#  curl -L -o sbt-$SBT_VERSION.deb https://dl.bintray.com/sbt/debian/sbt-$SBT_VERSION.deb && \
+#  dpkg -i sbt-$SBT_VERSION.deb && \
+#  rm sbt-$SBT_VERSION.deb && \
+#  apt-get update && \
+#  apt-get install sbt && \
+#   sbt sbtVersion
 
 # Define working directory
 WORKDIR /root
@@ -38,10 +38,10 @@ ENV PROJECT_HOME /usr/src
 
 COPY ["build.sbt", "/tmp/build/"]
 COPY ["project/Dependencies.scala", "project/plugins.sbt", "project/build.properties", "/tmp/build/project/"]
-RUN cd /tmp/build && \
- sbt update && \
- sbt compile && \
- sbt assembly
+# RUN cd /tmp/build && \
+#  sbt update && \
+#  sbt compile && \
+#  sbt assembly
 
 RUN mkdir -p $PROJECT_HOME/data
 

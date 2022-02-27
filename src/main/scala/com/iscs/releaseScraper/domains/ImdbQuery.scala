@@ -126,11 +126,16 @@ object ImdbQuery {
         case singleElement:List[T] if singleElement.size == 1 => mdbeq(fieldName, singleElement.head)
       }
 
+      private def between(fieldname: String, valueRange: List[Int]): conversions.Bson = {
+        val upper = Document("$gte" -> valueRange.head)
+        val lower = Document("$lte" -> valueRange.last)
+        Document(fieldname -> (upper ++ lower))
+      }
+
       def getParamList(params: ReqParams, qType: QueryObj): F[Bson] = for {
         bList <- Concurrent[F].delay(
           List(
-            params.year.map(yr => gte(mapQtype(qType, startYear, matchedTitles_startYear), yr.head)),
-            params.year.map(yr => lte(mapQtype(qType, startYear, matchedTitles_startYear), yr.last)),
+            params.year.map(yr => between(mapQtype(qType, startYear, matchedTitles_startYear), yr)),
             params.genre.map(genre => inOrEq(mapQtype(qType, genresList, matchedTitles_genresList), genre)),
             params.titleType.map(tt => inOrEq(mapQtype(qType, titleType, matchedTitles_titleType), tt)),
             params.isAdult.map(isAdlt => mdbeq(mapQtype(qType, isAdult, matchedTitles_isAdult), isAdlt.toInt)),
