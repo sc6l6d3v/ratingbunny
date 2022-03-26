@@ -79,8 +79,9 @@ object ImdbQuery {
       val primaryProfessionList = "primaryProfessionList"*/
       val knownForTitles = "knownForTitles"
       val knownForTitlesList = "knownForTitlesList"
+      val category = "category"
       val nconst = "nconst"
-      val ttconst = "ttconst"
+      val tconst = "tconst"
       val roleList = List("actor", "actress")
       val primaryName = "primaryName"
       val primaryTitle = "primaryTitle"
@@ -325,12 +326,12 @@ object ImdbQuery {
        * {
        *       $match: {
        *                primaryName: 'June Lockhart',
-       *                nconst: { $in: [ 'actor', 'actress' ] }
+       *                category: { $in: [ 'actor', 'actress' ] }
        *              }
        *  }, {
        *       $lookup: {
        *                 from: 'title_basics_ratings',
-       *                 localField: 'ttconst',
+       *                 localField: 'tconst',
        *                 foreignField: '_id',
        *                 as: 'matchedTitles'
        *                }
@@ -368,7 +369,7 @@ object ImdbQuery {
         matchNameAndRole <- Stream.eval(Concurrent[F].delay(
           combineBson(List(
             mdbeq(primaryName, name),
-            in(nconst, roleList:_*)
+            in(category, roleList:_*)
           )
         )))
         nameMatchFilter <- Stream.eval(Concurrent[F].delay(
@@ -377,7 +378,7 @@ object ImdbQuery {
 
         lookupFilter <- Stream.eval(Concurrent[F].delay(
           Aggregates.lookup(titleCollection,
-            ttconst,
+            tconst,
             "_id",
             matchedTitles)
         ))
