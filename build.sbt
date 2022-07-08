@@ -12,7 +12,7 @@ val jsoupVersion = "1.13.1"
 lazy val root = (project in file("."))
   .settings(
     organization := "com.iscs",
-    name := "releasescraper",
+    name := "ratingslave",
     version := "0.1-SNAPSHOT",
     scalaVersion := "2.13.3",
     libraryDependencies ++= Seq(
