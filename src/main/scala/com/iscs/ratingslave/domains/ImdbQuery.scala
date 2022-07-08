@@ -1,9 +1,9 @@
-package com.iscs.releaseScraper.domains
+package com.iscs.ratingslave.domains
 
 import cats.effect.{Concurrent, ConcurrentEffect, Sync}
 import cats.implicits._
-import com.iscs.releaseScraper.model.Requests.ReqParams
-import com.iscs.releaseScraper.util.{DbClient, asInt}
+import com.iscs.ratingslave.model.Requests.ReqParams
+import com.iscs.ratingslave.util.{DbClient, asInt}
 import com.typesafe.scalalogging.Logger
 import fs2.{Pipe, Stream}
 import io.circe._
@@ -70,22 +70,17 @@ object ImdbQuery {
       val titlePrincipalsCollection = "title_principals_withname"
 
       val id = "_id"
-      val matchedTitles_id = "matchedTitles.id"
       val birthYear = "birthYear"
       val deathYear = "deathYear1"
       val firstName = "firstName"
       val lastName = "lastName"
-/*      val primaryProfession = "primaryProfession"
-      val primaryProfessionList = "primaryProfessionList"*/
       val knownForTitles = "knownForTitles"
       val knownForTitlesList = "knownForTitlesList"
       val category = "category"
-      val nconst = "nconst"
       val tconst = "tconst"
       val roleList = List("actor", "actress")
       val primaryName = "primaryName"
       val primaryTitle = "primaryTitle"
-      val matchedTitles_primaryTitle = "matchedTitles.primaryTitle"
       val matchedTitles = "matchedTitles"
 
       val averageRating = "averageRating"
@@ -99,9 +94,7 @@ object ImdbQuery {
       val matchedTitles_isAdult = "matchedTitles.isAdult"
       val matchedTitles_numvotes = "matchedTitles.numVotes"
       val startYear = "startYear"
-      val endYear = "endYear"
       val matchedTitles_startYear = "matchedTitles.startYear"
-      val matchedTitles_endYear = "matchedTitles.endYear"
       val titleType = "titleType"
       val matchedTitles_titleType = "matchedTitles.titleType"
       private val titleFx = dbClient.fxMap(titleCollection)
@@ -278,7 +271,7 @@ object ImdbQuery {
             gte(matchedTitles_averageRating, rating))
         )
         )
-        bsonCondensedList <- Stream.eval(Concurrent[F].delay((Document(paramsList.toBsonDocument) ++ Document(ratingBson.toBsonDocument))))
+        bsonCondensedList <- Stream.eval(Concurrent[F].delay(Document(paramsList.toBsonDocument) ++ Document(ratingBson.toBsonDocument)))
         matchLookupsFilter <- Stream.eval(Concurrent[F].delay(
           Aggregates.filter(bsonCondensedList)
         ))

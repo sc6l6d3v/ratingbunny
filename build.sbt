@@ -1,14 +1,5 @@
 import Dependencies._
 
-val Http4sVersion = "0.21.3"
-val CirceVersion = "0.13.0"
-val Specs2Version = "4.9.3"
-val LogbackVersion = "1.2.3"
-val catsRetryVersion = "1.1.0"
-val fs2Version = "2.2.2"
-val loggingVersion = "3.9.2"
-val jsoupVersion = "1.13.1"
-
 lazy val root = (project in file("."))
   .settings(
     organization := "com.iscs",

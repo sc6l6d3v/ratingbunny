@@ -1,7 +1,7 @@
-package com.iscs.releaseScraper.domains
+package com.iscs.ratingslave.domains
 
 import cats.effect.{Concurrent, ConcurrentEffect}
-import com.iscs.releaseScraper.model.ScrapeResult.Scrape
+import com.iscs.ratingslave.model.ScrapeResult.Scrape
 import fs2.Stream
 import org.jsoup.Jsoup
 import org.jsoup.nodes.{Document, Element}
@@ -9,7 +9,7 @@ import org.log4s.getLogger
 
 import scala.jdk.CollectionConverters._
 
-class ReleaseDatesScraperService[F[_]: Concurrent](defaultHost: String)(implicit F: ConcurrentEffect[F]) {
+class ReleaseDatesScraper[F[_]: Concurrent](defaultHost: String)(implicit F: ConcurrentEffect[F]) {
   private val L = getLogger
   private val yearRegex = "[0-9][0-9][0-9][0-9]".r
   private val monthRegex = "[0-9][0-9]".r
@@ -36,7 +36,7 @@ class ReleaseDatesScraperService[F[_]: Concurrent](defaultHost: String)(implicit
   private def getDocument(urlType: String, year: String, month: String): Document = {
     val goodYear = if (yearRegex.matches(year)) year else "2020"
     val goodMonth = if (monthRegex.matches(month)) month else "01"
-    val finalURL = linkMap.get(urlType).getOrElse(defaultMap)
+    val finalURL = linkMap.getOrElse(urlType, defaultMap)
       .replaceAll("YYYY", goodYear)
       .replace("MM", goodMonth)
       .replace("MONTH", monthMap(goodMonth))
@@ -45,7 +45,7 @@ class ReleaseDatesScraperService[F[_]: Concurrent](defaultHost: String)(implicit
 
   private def getDocument(urlType: String, year: String): Document = {
     val goodYear = if (yearRegex.matches(year)) year else "2020"
-    val finalURL = linkMap.get(urlType).getOrElse(defaultMap)
+    val finalURL = linkMap.getOrElse(urlType, defaultMap)
       .replaceAll("YYYY", goodYear)
     Jsoup.connect(finalURL).get()
   }
@@ -65,19 +65,21 @@ class ReleaseDatesScraperService[F[_]: Concurrent](defaultHost: String)(implicit
       None
   }
 
+  private def getScrape(elt: Element, rating: Double): Stream[F, Scrape] = for {
+    scrape <- Stream.eval(Concurrent[F].delay(processElement(elt, rating)))
+        .filter(_.isDefined)
+        .map(_.get)
+  } yield scrape
+
   def findReleases(urlType: String, year: String, month: String, minRating: Double): Stream[F, Scrape] = for {
     indexDoc <- Stream.eval(Concurrent[F].delay(getDocument(urlType, year, month)))
     elt <- Stream.emits(indexDoc.select(fieldDoc).asScala.toList)
-    scrape <- Stream.eval(Concurrent[F].delay(processElement(elt, minRating)))
-        .filter(_.isDefined)
-        .map(_.get)
+    scrape <- getScrape(elt, minRating)
   } yield scrape
 
   def findMovies(urlType: String, year: String, minRating: Double): Stream[F, Scrape] = for {
     indexDoc <- Stream.eval(Concurrent[F].delay(getDocument(urlType, year)))
     elt <- Stream.emits(indexDoc.select(fieldDoc).asScala.toList)
-    scrape <- Stream.eval(Concurrent[F].delay(processElement(elt, minRating)))
-      .filter(_.isDefined)
-      .map(_.get)
+    scrape <- getScrape(elt, minRating)
   } yield scrape
 }

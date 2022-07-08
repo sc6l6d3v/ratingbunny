@@ -1,10 +1,10 @@
-package com.iscs.releaseScraper.domains
+package com.iscs.ratingslave.domains
 
 import org.jsoup.Jsoup
 import org.scalatest.wordspec.AnyWordSpec
 import scala.jdk.CollectionConverters._
 
-class ReleaseDatesScraperServiceSpec extends AnyWordSpec {
+class ReleaseDatesScraperSpec extends AnyWordSpec {
   private val fieldDoc = "table.fieldtable-inner td.dvdcell"
   private val name = "new-dvd-releases-december-2020.html"
   private val htmlPath = os.resource() / name

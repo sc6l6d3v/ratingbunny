@@ -1,24 +1,24 @@
-package com.iscs.releaseScraper.config
+package com.iscs.ratingslave.config
 
-import com.mongodb.ReadPreference
-import org.mongodb.scala.{ConnectionString, MongoClientSettings, MongoCredential}
+import com.mongodb.{MongoClientSettings, ReadPreference}
+import org.mongodb.scala.{ConnectionString, MongoCredential}
 
 case class MongodbConfig(url: String, isReadOnly: Boolean = false) {
   val connection = new ConnectionString(url)
 
   val credentials: MongoCredential = connection.getCredential
 
-  val useSSL = connection.getSslEnabled != null
+  val useSSL: Boolean = connection.getSslEnabled != null
 
-  val isReplicaSet = connection.getRequiredReplicaSetName != null
+  val isReplicaSet: Boolean = connection.getRequiredReplicaSetName != null
 
-  val baseSettings = MongoClientSettings.builder()
+  val baseSettings: MongoClientSettings.Builder = MongoClientSettings.builder()
     .applyToConnectionPoolSettings(b => b.minSize(128).maxSize(256))
     .applyConnectionString(connection)
     .readPreference(ReadPreference.secondaryPreferred)
     .credential(credentials)
 
-  val settings = if (useSSL)
+  val settings: MongoClientSettings = if (useSSL)
     baseSettings
       .applyToSslSettings(b => b.enabled(useSSL))
       .build()

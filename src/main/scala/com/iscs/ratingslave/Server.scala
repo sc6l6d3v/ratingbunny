@@ -1,12 +1,12 @@
-package com.iscs.releaseScraper
+package com.iscs.ratingslave
 
 import java.util.concurrent.Executors
 
 import cats.effect.{Concurrent, ConcurrentEffect, ContextShift, Timer}
 import cats.implicits._
-import com.iscs.releaseScraper.domains.{EmailContact, ImdbQuery, ReleaseDatesScraperService}
-import com.iscs.releaseScraper.routes.Routes._
-import com.iscs.releaseScraper.util.DbClient
+import com.iscs.ratingslave.domains.{EmailContact, ImdbQuery, ReleaseDatesScraper}
+import com.iscs.ratingslave.routes.Routes._
+import com.iscs.ratingslave.util.DbClient
 import com.typesafe.scalalogging.Logger
 import fs2.Stream
 import org.http4s.implicits._
@@ -28,13 +28,12 @@ object Server {
     ex <- Stream.eval(Concurrent[F].delay(ExecutionContext.fromExecutorService(es)))
   } yield ex
 
-  def stream[F[_]: ConcurrentEffect](mongoClient: F[DbClient[F]])
+  def stream[F[_]: ConcurrentEffect](mongo: DbClient[F])
                                     (implicit T: Timer[F], Con: ContextShift[F]): Stream[F, Nothing] = {
     val srvStream = for {
-      mongo <- Stream.eval(mongoClient)
       imdbSvc <- Stream.eval(Concurrent[F].delay(ImdbQuery.impl[F](mongo)))
       emailSvc <- Stream.eval(Concurrent[F].delay(EmailContact.impl[F](mongo)))
-      scrapeSvc <- Stream.eval(Concurrent[F].delay(new ReleaseDatesScraperService[F](defaultHost)))
+      scrapeSvc <- Stream.eval(Concurrent[F].delay(new ReleaseDatesScraper[F](defaultHost)))
       httpApp <- Stream.eval(Concurrent[F].delay(
         (
           scrapeRoutes[F](scrapeSvc) <+>
@@ -42,7 +41,7 @@ object Server {
             imdbRoutes[F](imdbSvc)
           )
           .orNotFound))
-      _ <- Stream.eval(Concurrent[F].delay(L.info(s""""added routes for reldate""")))
+      _ <- Stream.eval(Concurrent[F].delay(L.info(s""""added all routes""")))
       finalHttpApp <- Stream.eval(Concurrent[F].delay(hpLogger.httpApp(logHeaders = true, logBody = true)(httpApp)))
       _ <- Stream.eval(Concurrent[F].delay(L.info(s""""on $bindHost/$port""")))
 
