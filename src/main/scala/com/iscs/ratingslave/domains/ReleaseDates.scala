@@ -9,7 +9,7 @@ import org.log4s.getLogger
 
 import scala.jdk.CollectionConverters._
 
-class ReleaseDatesScraperService[F[_]: Concurrent](defaultHost: String)(implicit F: ConcurrentEffect[F]) {
+class ReleaseDates[F[_]: Concurrent](defaultHost: String)(implicit F: ConcurrentEffect[F]) {
   private val L = getLogger
   private val yearRegex = "[0-9][0-9][0-9][0-9]".r
   private val monthRegex = "[0-9][0-9]".r

@@ -4,7 +4,7 @@ import java.util.concurrent.Executors
 
 import cats.effect.{Concurrent, ConcurrentEffect, ContextShift, Timer}
 import cats.implicits._
-import com.iscs.ratingslave.domains.{EmailContact, ImdbQuery, ReleaseDatesScraperService}
+import com.iscs.ratingslave.domains.{EmailContact, ImdbQuery, ReleaseDates}
 import com.iscs.ratingslave.routes.Routes._
 import com.iscs.ratingslave.util.DbClient
 import com.typesafe.scalalogging.Logger
@@ -33,7 +33,7 @@ object Server {
     val srvStream = for {
       imdbSvc <- Stream.eval(Concurrent[F].delay(ImdbQuery.impl[F](mongo)))
       emailSvc <- Stream.eval(Concurrent[F].delay(EmailContact.impl[F](mongo)))
-      scrapeSvc <- Stream.eval(Concurrent[F].delay(new ReleaseDatesScraperService[F](defaultHost)))
+      scrapeSvc <- Stream.eval(Concurrent[F].delay(new ReleaseDates[F](defaultHost)))
       httpApp <- Stream.eval(Concurrent[F].delay(
         (
           scrapeRoutes[F](scrapeSvc) <+>

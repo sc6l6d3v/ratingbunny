@@ -3,7 +3,7 @@ package com.iscs.ratingslave.routes
 import cats.effect._
 import cats.implicits._
 import com.iscs.ratingslave.domains.EmailContact.Email
-import com.iscs.ratingslave.domains.{EmailContact, ImdbQuery, ReleaseDatesScraperService}
+import com.iscs.ratingslave.domains.{EmailContact, ImdbQuery, ReleaseDates}
 import com.iscs.ratingslave.model.Requests.ReqParams
 import com.iscs.ratingslave.model.RouteMessage.RouteMessage
 import com.iscs.ratingslave.model.ScrapeResult.Scrape._
@@ -39,7 +39,7 @@ object Routes {
   )
   private def RouteNotFound(badVal: String) = RouteMessage(badVal)
 
-  def scrapeRoutes[F[_]: Sync: Concurrent](R: ReleaseDatesScraperService[F]): HttpRoutes[F] = {
+  def scrapeRoutes[F[_]: Sync: Concurrent](R: ReleaseDates[F]): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F]{}
     import dsl._
     val service = HttpRoutes.of[F] {
