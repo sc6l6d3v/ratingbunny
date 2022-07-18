@@ -195,15 +195,9 @@ object ImdbQuery {
           case Some(titleBson) => combineBson(List(titleBson, ratingBson, paramBson))
           case None            => combineBson(List(ratingBson, paramBson))
         })
-        dbList <- Stream.eval{val titleDocs = titleFx.find(bsonFilter
-/*          optTitleBson match {
-            case Some(titleBson) => combineBson(List(titleBson, ratingBson, paramBson))
-            case None            => combineBson(List(ratingBson, paramBson))
-          }*/,
-          DOCLIMIT, offset = 0, Map(genres -> false), sortFields = sortBson)
-          titleDocs.through(docToJson)
-            .compile.toList
-        }
+        dbList <- Stream.eval(titleFx.find(bsonFilter, DOCLIMIT, offset = 0, Map(genres -> false), sortFields = sortBson)
+          .through(docToJson)
+          .compile.toList)
         json <- Stream.emits(dbList)
       } yield json
 
