@@ -43,7 +43,7 @@ object Routes {
     val dsl = new Http4sDsl[F]{}
     import dsl._
     val service = HttpRoutes.of[F] {
-      case _ @ GET -> Root / "reldate" / year / month / rating =>
+      case _ @ GET -> Root / "api" / "v1" / "reldate" / year / month / rating =>
         for {
           _ <- Concurrent[F].delay(L.info(s""""request" date=$year/$month rating=$rating"""))
           ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
@@ -51,7 +51,7 @@ object Routes {
           respList <- scrape.compile.toList
           resp <- Ok(respList)
         } yield resp
-      case _ @ GET -> Root / "top" / year / rating =>
+      case _ @ GET -> Root / "api" / "v1" / "top" / year / rating =>
         for {
           _ <- Concurrent[F].delay(L.info(s""""request" date=$year rating=$rating"""))
           ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
@@ -59,7 +59,7 @@ object Routes {
           respList <- scrape.compile.toList
           resp <- Ok(respList)
         } yield resp
-      case _ @ GET -> Root / "new" / year / rating =>
+      case _ @ GET -> Root / "api" / "v1" / "new" / year / rating =>
         for {
           _ <- Concurrent[F].delay(L.info(s""""request" date=$year rating=$rating"""))
           ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
@@ -78,7 +78,7 @@ object Routes {
     val dsl = new Http4sDsl[F]{}
     import dsl._
     val service = HttpRoutes.of[F] {
-      case req@POST -> Root / "title" / rating =>
+      case req@POST -> Root / "api" / "v1" / "title" / rating =>
         for {
           reqParams <- req.as[ReqParams]
           title <- Concurrent[F].delay(reqParams.query)
@@ -87,7 +87,7 @@ object Routes {
           imdbTitles <- Concurrent[F].delay(I.getByTitle(title, ratingVal, reqParams))
           resp <- Ok(imdbTitles)
         } yield resp
-      case req@POST -> Root / "name2" / name / rating =>
+      case req@POST -> Root / "api" / "v1" / "name2" / name / rating =>
         for {
           reqParams <- req.as[ReqParams]
           _ <- Concurrent[F].delay(showReqParam("name", Some(name), rating, reqParams))
@@ -95,7 +95,7 @@ object Routes {
           imdbNames <- Concurrent[F].delay(I.getByName(name, ratingVal, reqParams))
           resp <- Ok(imdbNames)
         } yield resp
-      case req@POST -> Root / "name" / name / rating =>
+      case req@POST -> Root / "api" / "v1" / "name" / name / rating =>
         for {
           reqParams <- req.as[ReqParams]
           _ <- Concurrent[F].delay(showReqParam("name", Some(name), rating, reqParams))
@@ -103,13 +103,13 @@ object Routes {
           imdbNames <- Concurrent[F].delay(I.getByEnhancedName(name, ratingVal, reqParams))
           resp <- Ok(imdbNames)
         } yield resp
-      case GET -> Root / "autoname" / name =>
+      case GET -> Root / "api" / "v1" / "autoname" / name =>
         for {
           _ <- Concurrent[F].delay(L.info(s""""request" autoname=$name"""))
           imdbNames <- Concurrent[F].delay(I.getAutosuggestName(name))
           resp <- Ok(imdbNames)
         } yield resp
-      case GET -> Root / "autotitle" / title =>
+      case GET -> Root / "api" / "v1" / "autotitle" / title =>
         for {
           _ <- Concurrent[F].delay(L.info(s""""request" autotitle=$title"""))
           imdbTitles <- Concurrent[F].delay(I.getAutosuggestTitle(title))
@@ -126,7 +126,7 @@ object Routes {
     val dsl = new Http4sDsl[F]{}
     import dsl._
     val service = HttpRoutes.of[F] {
-      case req@POST -> Root / "addMsg" =>
+      case req@POST -> Root / "api" / "v1" / "addMsg" =>
         for {
           emailParams <- req.as[Email]
           _ <- Concurrent[F].delay(L.info(s""""request" ${emailParams.toString}"""))
