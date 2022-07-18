@@ -10,7 +10,7 @@ import io.circe.syntax._
 import org.http4s.circe._
 import org.http4s.{EntityDecoder, EntityEncoder}
 import org.mongodb.scala.bson.{BsonDateTime, BsonString}
-import org.mongodb.scala.bson.collection.immutable.Document
+import org.mongodb.scala.bson.Document
 import org.mongodb.scala.bson.conversions.Bson
 import org.mongodb.scala.model.Filters.{eq => mdbeq}
 import org.mongodb.scala.model._

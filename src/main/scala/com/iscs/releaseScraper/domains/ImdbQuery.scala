@@ -13,7 +13,7 @@ import org.bson.conversions.Bson
 import org.bson.types.Decimal128
 import org.http4s.circe._
 import org.http4s.{EntityDecoder, EntityEncoder}
-import org.mongodb.scala.bson.collection.immutable.Document
+import org.mongodb.scala.bson.Document
 import org.mongodb.scala.bson.{BsonDocument, BsonNumber, BsonString, conversions}
 import org.mongodb.scala.model.Aggregates._
 import org.mongodb.scala.model.Filters.{and, exists, gte, in, or, regex, text, eq => mdbeq, ne => mdne}
@@ -198,14 +198,19 @@ object ImdbQuery {
           case _           => Concurrent[F].delay(Option.empty[Bson])
         })
         sortBson <- Stream.eval(Concurrent[F].delay(Document(startYear -> -1)))
-        dbList <- Stream.eval(titleFx.find(
-          optTitleBson match {
+        bsonFilter <- Stream.eval(Concurrent[F].delay(optTitleBson match {
+          case Some(titleBson) => combineBson(List(titleBson, ratingBson, paramBson))
+          case None            => combineBson(List(ratingBson, paramBson))
+        }))
+        dbList <- Stream.eval{val titleDocs = titleFx.find(bsonFilter
+/*          optTitleBson match {
             case Some(titleBson) => combineBson(List(titleBson, ratingBson, paramBson))
             case None            => combineBson(List(ratingBson, paramBson))
-          },
+          }*/,
           DOCLIMIT, offset = 0, Map(genres -> false), sortFields = sortBson)
-          .through(docToJson)
-          .compile.toList)
+          titleDocs.through(docToJson)
+            .compile.toList
+        }
         json <- Stream.emits(dbList)
       } yield json
 
