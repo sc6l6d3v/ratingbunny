@@ -28,10 +28,9 @@ object Server {
     ex <- Stream.eval(Concurrent[F].delay(ExecutionContext.fromExecutorService(es)))
   } yield ex
 
-  def stream[F[_]: ConcurrentEffect](mongoClient: F[DbClient[F]])
+  def stream[F[_]: ConcurrentEffect](mongo: DbClient[F])
                                     (implicit T: Timer[F], Con: ContextShift[F]): Stream[F, Nothing] = {
     val srvStream = for {
-      mongo <- Stream.eval(mongoClient)
       imdbSvc <- Stream.eval(Concurrent[F].delay(ImdbQuery.impl[F](mongo)))
       emailSvc <- Stream.eval(Concurrent[F].delay(EmailContact.impl[F](mongo)))
       scrapeSvc <- Stream.eval(Concurrent[F].delay(new ReleaseDatesScraperService[F](defaultHost)))

@@ -8,22 +8,13 @@ import com.typesafe.scalalogging.Logger
 object Main extends IOApp {
   private val L = Logger[this.type]
   private val dbName = sys.env.getOrElse("DBNAME", "db")
+  private val collNames = List("title_basics_ratings", "name_basics", "email_contact", "title_principals_withname")
 
   def run(args: List[String]): IO[ExitCode] = for {
-    _ <- IO.delay(System.currentTimeMillis)
-    resources = for {
-      mongoClient <- Resource.fromAutoCloseable(Concurrent[IO].delay(
-        DbClient[IO](Mongo.fromUrl(), dbName, List("title_basics_ratings", "name_basics", "email_contact", "title_principals_withname"))))
-    } yield (IO.delay(mongoClient))
-
+    resources <- IO.delay(Resource.fromAutoCloseable(Concurrent[IO].delay(DbClient[IO](Mongo.fromUrl(), dbName, collNames))))
     ec <- resources.use { dbClient =>
       for {
-        start <- IO.delay(System.currentTimeMillis)
-        serverStream = for {
-          str <- Server.stream[IO](dbClient)
-        } yield str
-
-        s <- serverStream
+        s <- Server.stream[IO](dbClient)
           .compile.drain.as(ExitCode.Success)
           .handleErrorWith(ex => IO {
             L.error("\"exception during stream startup\" exception={} ex={}", ex.toString, ex)
