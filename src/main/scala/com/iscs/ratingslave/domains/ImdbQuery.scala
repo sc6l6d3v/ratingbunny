@@ -70,22 +70,17 @@ object ImdbQuery {
       val titlePrincipalsCollection = "title_principals_withname"
 
       val id = "_id"
-      val matchedTitles_id = "matchedTitles.id"
       val birthYear = "birthYear"
       val deathYear = "deathYear1"
       val firstName = "firstName"
       val lastName = "lastName"
-/*      val primaryProfession = "primaryProfession"
-      val primaryProfessionList = "primaryProfessionList"*/
       val knownForTitles = "knownForTitles"
       val knownForTitlesList = "knownForTitlesList"
       val category = "category"
-      val nconst = "nconst"
       val tconst = "tconst"
       val roleList = List("actor", "actress")
       val primaryName = "primaryName"
       val primaryTitle = "primaryTitle"
-      val matchedTitles_primaryTitle = "matchedTitles.primaryTitle"
       val matchedTitles = "matchedTitles"
 
       val averageRating = "averageRating"
@@ -99,16 +94,14 @@ object ImdbQuery {
       val matchedTitles_isAdult = "matchedTitles.isAdult"
       val matchedTitles_numvotes = "matchedTitles.numVotes"
       val startYear = "startYear"
-      val endYear = "endYear"
       val matchedTitles_startYear = "matchedTitles.startYear"
-      val matchedTitles_endYear = "matchedTitles.endYear"
       val titleType = "titleType"
       val matchedTitles_titleType = "matchedTitles.titleType"
       private val titleFx = dbClient.fxMap(titleCollection)
       private val titlePrincipalsFx = dbClient.fxMap(titlePrincipalsCollection)
       private val nameFx = dbClient.fxMap(nameCollection)
 
-      private def docToJson[F[_]: ConcurrentEffect]: Pipe[F, Document, Json] = strDoc => {
+      private def docToJson: Pipe[F, Document, Json] = strDoc => {
         for {
           doc <- strDoc
           json <- Stream.eval(Concurrent[F].delay(parse(doc.toJson()) match {
@@ -283,7 +276,7 @@ object ImdbQuery {
             gte(matchedTitles_averageRating, rating))
         )
         )
-        bsonCondensedList <- Stream.eval(Concurrent[F].delay((Document(paramsList.toBsonDocument) ++ Document(ratingBson.toBsonDocument))))
+        bsonCondensedList <- Stream.eval(Concurrent[F].delay(Document(paramsList.toBsonDocument) ++ Document(ratingBson.toBsonDocument)))
         matchLookupsFilter <- Stream.eval(Concurrent[F].delay(
           Aggregates.filter(bsonCondensedList)
         ))
