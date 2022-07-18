@@ -24,7 +24,9 @@ object Requests {
       .mkString(", ")
   }
 
-  implicit val reqParamsDecoder: Decoder[ReqParams] = deriveDecoder[ReqParams]
-  implicit def reqParamsEntityDecoder[F[_]: Sync]: EntityDecoder[F, ReqParams] = jsonOf
+  implicit val reqParamsDecoder: Decoder[ReqParams] =
+    deriveDecoder[ReqParams]
+  implicit def reqParamsEntityDecoder[F[_]: Sync]: EntityDecoder[F, ReqParams] =
+    jsonOf
 
 }

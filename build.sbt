@@ -28,7 +28,7 @@ lazy val root = (project in file("."))
     ),
     addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.10.3"),
     addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1"),
-    Revolver.enableDebugging(5060, true)
+    Revolver.enableDebugging(5061, true)
   )
 
 scalacOptions ++= Seq(

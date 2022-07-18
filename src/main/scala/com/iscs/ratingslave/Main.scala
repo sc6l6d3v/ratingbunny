@@ -13,7 +13,7 @@ object Main extends IOApp {
     resources <- IO.delay(Resource.fromAutoCloseable(Concurrent[IO].delay(DbClient[IO](Mongo.fromUrl(), dbName, collNames))))
     ec <- resources.use { dbClient =>
       for {
-        s <- Server.stream[IO](dbClient)
+        s <- Server.stream[IO](IO.delay(dbClient))
           .compile.drain.as(ExitCode.Success)
           .handleErrorWith(ex => IO {
             L.error("\"exception during stream startup\" exception={} ex={}", ex.toString, ex)
