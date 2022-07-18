@@ -1,8 +1,8 @@
-package com.iscs.releaseScraper
+package com.iscs.ratingslave
 
 import cats.effect.{Concurrent, ExitCode, IO, IOApp, Resource}
 import cats.implicits._
-import com.iscs.releaseScraper.util.{DbClient, Mongo}
+import com.iscs.ratingslave.util.{DbClient, Mongo}
 import com.typesafe.scalalogging.Logger
 
 object Main extends IOApp {

@@ -1,12 +1,12 @@
-package com.iscs.releaseScraper.routes
+package com.iscs.ratingslave.routes
 
 import cats.effect._
 import cats.implicits._
-import com.iscs.releaseScraper.domains.EmailContact.Email
-import com.iscs.releaseScraper.domains.{EmailContact, ImdbQuery, ReleaseDatesScraperService}
-import com.iscs.releaseScraper.model.Requests.ReqParams
-import com.iscs.releaseScraper.model.RouteMessage.RouteMessage
-import com.iscs.releaseScraper.model.ScrapeResult.Scrape._
+import com.iscs.ratingslave.domains.EmailContact.Email
+import com.iscs.ratingslave.domains.{EmailContact, ImdbQuery, ReleaseDatesScraperService}
+import com.iscs.ratingslave.model.Requests.ReqParams
+import com.iscs.ratingslave.model.RouteMessage.RouteMessage
+import com.iscs.ratingslave.model.ScrapeResult.Scrape._
 import com.typesafe.scalalogging.Logger
 import io.circe.syntax._
 import org.http4s._

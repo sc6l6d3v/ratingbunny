@@ -1,7 +1,7 @@
-package com.iscs.releaseScraper.domains
+package com.iscs.ratingslave.domains
 
 import cats.effect.{Concurrent, ConcurrentEffect}
-import com.iscs.releaseScraper.model.ScrapeResult.Scrape
+import com.iscs.ratingslave.model.ScrapeResult.Scrape
 import fs2.Stream
 import org.jsoup.Jsoup
 import org.jsoup.nodes.{Document, Element}

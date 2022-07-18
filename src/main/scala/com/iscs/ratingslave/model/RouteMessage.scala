@@ -1,4 +1,4 @@
-package com.iscs.releaseScraper.model
+package com.iscs.ratingslave.model
 
 import cats.effect.Sync
 import io.circe._

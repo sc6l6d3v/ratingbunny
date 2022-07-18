@@ -1,4 +1,4 @@
-package com.iscs.releaseScraper.util
+package com.iscs.ratingslave.util
 
 import cats.effect.implicits._
 import cats.effect.{ConcurrentEffect, IO}
@@ -17,7 +17,7 @@ import org.mongodb.scala.{BulkWriteResult, MongoCollection, Observable, bson}
 import scala.reflect.ClassTag
 
 object imports {
-  final val Mongo = com.iscs.releaseScraper.util.Mongo
+  final val Mongo = com.iscs.ratingslave.util.Mongo
 
   def toAsync[F[_]: ConcurrentEffect, T](obs: Observable[T]): F[Option[T]] =
     ConcurrentEffect[F].async[Option[T]] { (cb: Either[Throwable, Option[T]] => Unit) =>

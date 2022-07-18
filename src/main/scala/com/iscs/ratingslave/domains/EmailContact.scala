@@ -1,8 +1,8 @@
-package com.iscs.releaseScraper.domains
+package com.iscs.ratingslave.domains
 
 import cats.effect.{Concurrent, ConcurrentEffect, Sync}
 import cats.implicits._
-import com.iscs.releaseScraper.util.DbClient
+import com.iscs.ratingslave.util.DbClient
 import com.typesafe.scalalogging.Logger
 import io.circe._
 import io.circe.generic.semiauto._

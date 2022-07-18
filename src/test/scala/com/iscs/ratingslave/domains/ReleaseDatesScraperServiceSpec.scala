@@ -1,4 +1,4 @@
-package com.iscs.releaseScraper.domains
+package com.iscs.ratingslave.domains
 
 import org.jsoup.Jsoup
 import org.scalatest.wordspec.AnyWordSpec

@@ -1,9 +1,9 @@
-package com.iscs.releaseScraper.domains
+package com.iscs.ratingslave.domains
 
 import cats.effect.{Concurrent, ConcurrentEffect, Sync}
 import cats.implicits._
-import com.iscs.releaseScraper.model.Requests.ReqParams
-import com.iscs.releaseScraper.util.{DbClient, asInt}
+import com.iscs.ratingslave.model.Requests.ReqParams
+import com.iscs.ratingslave.util.{DbClient, asInt}
 import com.typesafe.scalalogging.Logger
 import fs2.{Pipe, Stream}
 import io.circe._

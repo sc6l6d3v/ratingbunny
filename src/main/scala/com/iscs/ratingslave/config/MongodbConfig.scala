@@ -1,4 +1,4 @@
-package com.iscs.releaseScraper.config
+package com.iscs.ratingslave.config
 
 import com.mongodb.ReadPreference
 import org.mongodb.scala.{ConnectionString, MongoClientSettings, MongoCredential}

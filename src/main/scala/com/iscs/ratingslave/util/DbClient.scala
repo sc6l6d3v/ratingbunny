@@ -1,7 +1,7 @@
-package com.iscs.releaseScraper.util
+package com.iscs.ratingslave.util
 
 import cats.effect.{ConcurrentEffect, Effect, Sync}
-import com.iscs.releaseScraper.config.MongodbConfig
+import com.iscs.ratingslave.config.MongodbConfig
 import org.mongodb.scala.bson.Document
 import org.mongodb.scala.{MongoClient, MongoCollection, MongoDatabase}
 
