@@ -11,7 +11,7 @@ FROM openjdk:8
 # Env variables
 ENV SCALA_VERSION 2.13.1
 ENV SBT_VERSION   1.0.2
-ENV APP_NAME      releasescraper
+ENV APP_NAME      ratingslave
 ENV APP_VERSION   0.1-SNAPSHOT
 
 # ENV variables for App

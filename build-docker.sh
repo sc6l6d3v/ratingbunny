@@ -1,2 +1,2 @@
 #!/usr/bin/env bash
-docker build -t releasescraper:rest .
+docker build -t ratingslave:rest .
