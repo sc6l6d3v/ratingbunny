@@ -12,9 +12,8 @@ object Mongo {
     MongodbConfig(host, isReadOnly)
   }
 
-  def fromSettings[F[_]](settings: MongoClientSettings)(
-    implicit F: Sync[F]): Resource[F, MongoClient] = {
-    Resource.make(F.delay(MongoClient(settings)))(client =>
-      F.delay(client.close()))
+  def fromSettings[F[_]: Sync](settings: MongoClientSettings): Resource[F, MongoClient] = {
+    Resource.make(Sync[F].delay(MongoClient(settings)))(client =>
+      Sync[F].delay(client.close()))
   }
 }

@@ -10,10 +10,13 @@ object Main extends IOApp {
   private val collNames = List("title_basics_ratings", "name_basics", "email_contact", "title_principals_withname")
 
   def run(args: List[String]): IO[ExitCode] = for {
-    ec <- Resource.fromAutoCloseable(IO.delay(DbClient[IO](Mongo.fromUrl(), dbName, collNames)))
-      .use { dbClient =>
+    dbClient <- IO.delay(new DbClient[IO](dbName, collNames, Mongo.fromUrl()))
+    resources = dbClient.dbResource
+    ec <- resources
+      .use { mongoClient =>
         for {
-          s <- Server.stream[IO](dbClient)
+          db <- mongoClient.getDatabase(dbName)
+          s <- Server.stream[IO](db)
             .compile.drain.as(ExitCode.Success)
             .handleErrorWith(ex => IO {
               L.error("\"exception during stream startup\" exception={} ex={}", ex.toString, ex)

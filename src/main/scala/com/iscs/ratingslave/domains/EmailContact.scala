@@ -1,16 +1,22 @@
 package com.iscs.ratingslave.domains
 
-import cats.effect.{Concurrent, ConcurrentEffect, Sync}
+import cats.Applicative
+import cats.effect.{Concurrent, Sync}
 import cats.implicits._
 import com.iscs.ratingslave.util.DbClient
 import com.typesafe.scalalogging.Logger
-import io.circe._
+import mongo4cats.bson.Document
+import mongo4cats.collection.MongoCollection
+import zio.json.{DeriveJsonDecoder, DeriveJsonEncoder, JsonDecoder, JsonEncoder}
+import zio.json.interop.http4s._
+import zio.json.ast.Json
+/*import io.circe._
 import io.circe.generic.semiauto._
 import io.circe.syntax._
-import org.http4s.circe._
+import org.http4s.circe._ */
 import org.http4s.{EntityDecoder, EntityEncoder}
 import org.mongodb.scala.bson.{BsonDateTime, BsonString}
-import org.mongodb.scala.bson.Document
+//import org.mongodb.scala.bson.Document
 import org.mongodb.scala.bson.conversions.Bson
 import org.mongodb.scala.model.Filters.{eq => mdbeq}
 import org.mongodb.scala.model._
@@ -38,17 +44,17 @@ object EmailContact {
   }
 
   object Email {
-    implicit val emailDecoder: Decoder[Email] = deriveDecoder[Email]
-    implicit def emailEntityDecoder[F[_]: Sync]: EntityDecoder[F, Email] = jsonOf
-    implicit val emailEncoder: Encoder[Email] = deriveEncoder[Email]
-    implicit def emailEntityEncoder[F[_]: Sync]: EntityEncoder[F, Email] = jsonEncoderOf
+    implicit val emailDecoder: JsonDecoder[Email] = DeriveJsonDecoder.gen[Email]
+    implicit def emailEntityDecoder[F[_]: Applicative: Concurrent]: EntityDecoder[F, Email] = jsonOf
+    implicit val emailEncoder: JsonEncoder[Email] = DeriveJsonEncoder.gen[Email]
+    implicit def emailEntityEncoder[F[_]: Sync]: EntityEncoder[F, Email] = jsonEncoderOf[F, Email]
   }
 
-    def impl[F[_]: Concurrent: Sync: ConcurrentEffect](dbClient: DbClient[F]): EmailContact[F] =
+    def impl[F[_]: Sync](emailFx: MongoCollection[F, Document]): EmailContact[F] =
       new EmailContact[F] {
         private val emailCollection = "email_contact"
 
-        private val emailFx = dbClient.fxMap(emailCollection)
+    //    private val emailFx = dbClient.fxMap(emailCollection)
 
         private val namePattern = "[0-9a-zA-Z' ]+".r
         private val emailPattern = "^(.+)@(\\S+)$".r
@@ -62,8 +68,8 @@ object EmailContact {
         private val fieldMsg = "msg"
 
         private def checkVal(value: String, pattern: Regex): F[Boolean] = for {
-          truncValue <- Concurrent[F].delay(value.take(maxValLen))
-          isValid <- Concurrent[F].delay(pattern.matches(truncValue))
+          truncValue <- Sync[F].delay(value.take(maxValLen))
+          isValid <- Sync[F].delay(pattern.matches(truncValue))
         } yield isValid
 
         def validate(name: String, email: String): F[Boolean] = for {
@@ -72,7 +78,7 @@ object EmailContact {
         } yield isValidName && isValidEmail
 
         def withTimeStamp(name: String, email: String, subject: String, msg: String): F[Document] = for {
-          doc <- Concurrent[F].delay(Document(
+          doc <- Sync[F].delay(Document(
             fieldName -> BsonString(name),
             fieldSubject -> BsonString(subject),
             field_id -> BsonString(email),
@@ -81,38 +87,36 @@ object EmailContact {
         } yield doc
 
         def makeUpdateDoc(doc: Document): F[List[Bson]] = for {
-          ts <- Concurrent[F].delay(BsonDateTime( new java.util.Date().getTime))
-          tsdoc <- Concurrent[F].delay(setOnInsert(fieldCreationDate, ts))
-          curdateDoc <- Concurrent[F].delay(currentDate(fieldLastModified))
-          updateDoc <- Concurrent[F].delay(List(Document("$set" -> doc), curdateDoc, tsdoc))
+          ts <- Sync[F].delay(BsonDateTime( new java.util.Date().getTime))
+          tsdoc <- Sync[F].delay(setOnInsert(fieldCreationDate, ts))
+          curdateDoc <- Sync[F].delay(currentDate(fieldLastModified))
+          updateDoc <- Sync[F].delay(List(Document("$set" -> doc), curdateDoc, tsdoc))
         } yield updateDoc
 
         def updateMsg(name: String, email: String, subject: String, msg: String): F[Json] = for {
           emailWithTS <- withTimeStamp(name, email, subject, msg)
           updateDoc <- makeUpdateDoc(emailWithTS)
-          optUpdateResult <- emailFx.updateOne(
+          updateResult <- emailFx.updateOne(
             mdbeq(field_id, email),
             combine(updateDoc:_*),
             UpdateOptions().upsert(true))
-          emailAsId <- Concurrent[F].delay {
-            optUpdateResult match {
-              case Some(result) =>
-                if (result.getUpsertedId == null)
-                  email
-                else
-                  result.getUpsertedId.asString().getValue
-              case _            => email
+          emailAsId <- Sync[F].delay {
+            if (updateResult.getUpsertedId == null)
+              email
+            else
+              updateResult.getUpsertedId.asString().getValue
             }
-          }
-          emailJson <- Concurrent[F].delay(emailAsId.asJson)
+          emailJson <- Sync[F].delay(JsonEncoder.string.toJsonAST(emailAsId).getOrElse(Json.Null))
         } yield emailJson
 
         override def saveEmail(name: String, email: String, subject: String, msg: String): F[Json] = for {
-          truncSubject <- Concurrent[F].delay(subject.take(maxValLen))
-          truncMsg <- Concurrent[F].delay(msg.take(maxMsgLen))
+          truncSubject <- Sync[F].delay(subject.take(maxValLen))
+          truncMsg <- Sync[F].delay(msg.take(maxMsgLen))
           isValid <- validate(name, email)
-          emailJson <- if (isValid) updateMsg(name, email, truncSubject, truncMsg) else Concurrent[F].delay(Json.fromString(s"Invalid: $email"))
-          obj <- Concurrent[F].delay(Json.fromFields(List("email"-> emailJson)))
+          emailJson <- if (isValid) updateMsg(name, email, truncSubject, truncMsg)
+          else
+            Sync[F].delay(JsonEncoder.string.toJsonAST(s"Invalid: $email").getOrElse(Json.Null))
+          obj <- Sync[F].delay(Json.Obj(("email", emailJson)))
         } yield obj
       }
 }

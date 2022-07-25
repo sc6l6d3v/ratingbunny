@@ -1,10 +1,13 @@
 package com.iscs.ratingslave.model
 
-import cats.effect.Sync
-import io.circe.Decoder
-import io.circe.generic.semiauto._
+import cats.Applicative
+import zio.json.{DeriveJsonDecoder, JsonDecoder}
+import zio.json.interop.http4s._
+import cats.effect.{Concurrent, Sync}
+/*import io.circe.Decoder
+import io.circe.generic.semiauto._ */
 import org.http4s.EntityDecoder
-import org.http4s.circe._
+/* import org.http4s.circe._*/
 
 object Requests {
   final case class ReqParams(query: Option[String],
@@ -24,7 +27,8 @@ object Requests {
       .mkString(", ")
   }
 
-  implicit val reqParamsDecoder: Decoder[ReqParams] = deriveDecoder[ReqParams]
-  implicit def reqParamsEntityDecoder[F[_]: Sync]: EntityDecoder[F, ReqParams] = jsonOf
+  implicit val reqParamsDecoder: JsonDecoder[ReqParams] = DeriveJsonDecoder.gen[ReqParams]
+  // implicit val reqParamsDecoder: Decoder[ReqParams] = deriveDecoder[ReqParams]
+  implicit def reqParamsEntityDecoder[F[_]: Applicative: Concurrent]: EntityDecoder[F, ReqParams] = jsonOf
 
 }

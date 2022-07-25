@@ -4,7 +4,7 @@ lazy val root = (project in file("."))
   .settings(
     organization := "com.iscs",
     name := "ratingslave",
-    version := "0.1-SNAPSHOT",
+    version := "1.0",
     scalaVersion := "2.13.3",
     libraryDependencies ++= Seq(
       http4s.server,
@@ -12,9 +12,13 @@ lazy val root = (project in file("."))
       http4s.circe,
       http4s.dsl,
       http4s.asyncClient,
+      zio.json,
+      zio.interopHttp4s,
       circe.generic,
       circe.parser,
       circe.optics,
+      mongo4cats.core,
+      mongo4cats.circe,
       mongodb.driver,
       scalaTest,
       logback.classic,

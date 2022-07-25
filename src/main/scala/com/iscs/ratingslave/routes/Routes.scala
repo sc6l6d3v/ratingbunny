@@ -5,12 +5,11 @@ import cats.implicits._
 import com.iscs.ratingslave.domains.EmailContact.Email
 import com.iscs.ratingslave.domains.{EmailContact, ImdbQuery, ReleaseDates}
 import com.iscs.ratingslave.model.Requests.ReqParams
+import com.iscs.ratingslave.model.Requests.reqParamsEntityDecoder
 import com.iscs.ratingslave.model.RouteMessage.RouteMessage
 import com.iscs.ratingslave.model.ScrapeResult.Scrape._
 import com.typesafe.scalalogging.Logger
-import io.circe.syntax._
 import org.http4s._
-import org.http4s.circe._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.server.middleware.{CORS, CORSConfig}
 
@@ -39,31 +38,31 @@ object Routes {
   )
   private def RouteNotFound(badVal: String) = RouteMessage(badVal)
 
-  def scrapeRoutes[F[_]: Sync: Concurrent](R: ReleaseDates[F]): HttpRoutes[F] = {
+  def scrapeRoutes[F[_]: Sync](R: ReleaseDates[F]): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F]{}
     import dsl._
     val service = HttpRoutes.of[F] {
       case _ @ GET -> Root / "api" / "v1" / "reldate" / year / month / rating =>
         for {
-          _ <- Concurrent[F].delay(L.info(s""""request" date=$year/$month rating=$rating"""))
-          ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
-          scrape <- Concurrent[F].delay(R.findReleases("rel", year, month, ratingVal))
+          _ <- Sync[F].delay(L.info(s""""request" date=$year/$month rating=$rating"""))
+          ratingVal <- Sync[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
+          scrape <- Sync[F].delay(R.findReleases("rel", year, month, ratingVal))
           respList <- scrape.compile.toList
           resp <- Ok(respList)
         } yield resp
       case _ @ GET -> Root / "api" / "v1" / "top" / year / rating =>
         for {
-          _ <- Concurrent[F].delay(L.info(s""""request" date=$year rating=$rating"""))
-          ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
-          scrape <- Concurrent[F].delay(R.findMovies("top", year, ratingVal))
+          _ <- Sync[F].delay(L.info(s""""request" date=$year rating=$rating"""))
+          ratingVal <- Sync[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
+          scrape <- Sync[F].delay(R.findMovies("top", year, ratingVal))
           respList <- scrape.compile.toList
           resp <- Ok(respList)
         } yield resp
       case _ @ GET -> Root / "api" / "v1" / "new" / year / rating =>
         for {
-          _ <- Concurrent[F].delay(L.info(s""""request" date=$year rating=$rating"""))
-          ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
-          scrape <- Concurrent[F].delay(R.findMovies("new", year, ratingVal))
+          _ <- Sync[F].delay(L.info(s""""request" date=$year rating=$rating"""))
+          ratingVal <- Sync[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
+          scrape <- Sync[F].delay(R.findMovies("new", year, ratingVal))
           respList <- scrape.compile.toList
           resp <- Ok(respList)
         } yield resp
@@ -74,63 +73,60 @@ object Routes {
   private def showReqParam(queryType: String, query: Option[String], rating: String, params: ReqParams): Unit =
     L.info(s""""request" $queryType=${query.getOrElse("UNSET")} rating=$rating ${params.toString}""")
 
-  def imdbRoutes[F[_]: Sync: Concurrent](I: ImdbQuery[F]): HttpRoutes[F] = {
+  def imdbRoutes[F[_]: Sync](I: ImdbQuery[F]): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F]{}
     import dsl._
     val service = HttpRoutes.of[F] {
       case req@POST -> Root / "api" / "v1" / "title" / rating =>
         for {
           reqParams <- req.as[ReqParams]
-          title <- Concurrent[F].delay(reqParams.query)
-          _ <- Concurrent[F].delay(showReqParam("title", title, rating, reqParams))
-          ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
-          imdbTitles <- Concurrent[F].delay(I.getByTitle(title, ratingVal, reqParams))
+          title <- Sync[F].delay(reqParams.query)
+          _ <- Sync[F].delay(showReqParam("title", title, rating, reqParams))
+          ratingVal <- Sync[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
+          imdbTitles <- Sync[F].delay(I.getByTitle(title, ratingVal, reqParams))
           resp <- Ok(imdbTitles)
         } yield resp
       case req@POST -> Root / "api" / "v1" / "name2" / name / rating =>
         for {
           reqParams <- req.as[ReqParams]
-          _ <- Concurrent[F].delay(showReqParam("name", Some(name), rating, reqParams))
-          ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
-          imdbNames <- Concurrent[F].delay(I.getByName(name, ratingVal, reqParams))
+          _ = Sync[F].delay(showReqParam("name", Some(name), rating, reqParams))
+          imdbNames <- Sync[F].delay(I.getByName(name, Try(rating.toDouble).toOption.getOrElse(5.0D), reqParams))
           resp <- Ok(imdbNames)
         } yield resp
       case req@POST -> Root / "api" / "v1" / "name" / name / rating =>
         for {
           reqParams <- req.as[ReqParams]
-          _ <- Concurrent[F].delay(showReqParam("name", Some(name), rating, reqParams))
-          ratingVal <- Concurrent[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0D))
-          imdbNames <- Concurrent[F].delay(I.getByEnhancedName(name, ratingVal, reqParams))
-          resp <- Ok(imdbNames)
+          imdbNames2 <- Sync[F].delay(I.getByEnhancedName(name, Try(rating.toDouble).toOption.getOrElse(5.0D), reqParams))
+          resp <- Ok(imdbNames2)
         } yield resp
       case GET -> Root / "api" / "v1" / "autoname" / name =>
         for {
-          _ <- Concurrent[F].delay(L.info(s""""request" autoname=$name"""))
-          imdbNames <- Concurrent[F].delay(I.getAutosuggestName(name))
+          _ <- Sync[F].delay(L.info(s""""request" autoname=$name"""))
+          imdbNames <- Sync[F].delay(I.getAutosuggestName(name))
           resp <- Ok(imdbNames)
         } yield resp
       case GET -> Root / "api" / "v1" / "autotitle" / title =>
         for {
-          _ <- Concurrent[F].delay(L.info(s""""request" autotitle=$title"""))
-          imdbTitles <- Concurrent[F].delay(I.getAutosuggestTitle(title))
+          _ <- Sync[F].delay(L.info(s""""request" autotitle=$title"""))
+          imdbTitles <- Sync[F].delay(I.getAutosuggestTitle(title))
           resp <- Ok(imdbTitles)
         } yield resp
       case default =>
         L.error(s"got bad request: ${default.pathInfo}")
-        Ok(RouteNotFound(default.pathInfo).asJson)
+        Ok(RouteNotFound(default.pathInfo.toString))
     }
     CORS(service, methodConfig)
   }
 
-  def emailContactRoutes[F[_]: Sync: Concurrent](E: EmailContact[F]): HttpRoutes[F] = {
+  def emailContactRoutes[F[_]: Sync](E: EmailContact[F]): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F]{}
     import dsl._
     val service = HttpRoutes.of[F] {
       case req@POST -> Root / "api" / "v1" / "addMsg" =>
         for {
           emailParams <- req.as[Email]
-          _ <- Concurrent[F].delay(L.info(s""""request" ${emailParams.toString}"""))
-          emailId <- Concurrent[F].delay(E.saveEmail(
+          _ <- Sync[F].delay(L.info(s""""request" ${emailParams.toString}"""))
+          emailId <- Sync[F].delay(E.saveEmail(
             emailParams.name, emailParams.email,
             emailParams.subject, emailParams.msg))
           resp <- Ok(emailId)

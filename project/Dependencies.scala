@@ -2,13 +2,16 @@ import sbt._
 
 object Dependencies {
   object Versions {
-    val Http4sVersion = "0.21.23"
+    val Http4sVersion = "1.0.0-M21"
     val CirceVersion = "0.13.0"
     val Specs2Version = "4.9.3"
     val LogbackVersion = "1.2.3"
     val catsRetryVersion = "1.1.0"
-    val fs2Version = "2.2.2"
+    val log4catsVersion = "2.3.1"
+    val fs2Version = "3.2.8"
     val loggingVersion = "3.9.2"
+    val mongo4catsVersion = "0.4.7"
+    val zioJsonVersion = "0.1.5"
     val jsoupVersion = "1.13.1"
     val scalatestVersion = "3.2.2"
     val ammoniteVersion = "2.3.8-4-88785969"
@@ -24,9 +27,14 @@ object Dependencies {
   }
 
   object fs2 {
-    val core = "co.fs2"        %% "fs2-core"            % Versions.fs2Version
-    val io =    "co.fs2"       %% "fs2-io"              % Versions.fs2Version
+    val core = "co.fs2"        %% "fs2-core"             % Versions.fs2Version
+    val io =    "co.fs2"       %% "fs2-io"               % Versions.fs2Version
     val streams = "co.fs2"     %% "fs2-reactive-streams" % Versions.fs2Version
+  }
+
+  object zio {
+    val json =          "dev.zio"  %% "zio-json"                % Versions.zioJsonVersion
+    val interopHttp4s = "dev.zio"  %% "zio-json-interop-http4s" % Versions.zioJsonVersion
   }
 
   object circe {
@@ -42,12 +50,13 @@ object Dependencies {
   }
 
   object logback {
-    val classic = "ch.qos.logback"   %  "logback-classic"     % Versions.LogbackVersion
+    val classic = "ch.qos.logback"            % "logback-classic" % Versions.LogbackVersion
     val logging = "com.typesafe.scala-logging" %% "scala-logging" % Versions.loggingVersion
   }
 
   object cats {
-    val retry = "com.github.cb372" %% "cats-retry"          % Versions.catsRetryVersion
+    val retry = "com.github.cb372" %% "cats-retry"      % Versions.catsRetryVersion
+    val log4cats = "org.typelevel" %% s"log4cats-slf4j" % Versions.log4catsVersion
   }
 
   object jsoup {
@@ -56,5 +65,10 @@ object Dependencies {
 
   object mongodb {
     val driver = "org.mongodb.scala" %% "mongo-scala-driver" % Versions.mongoScalaVersion
+  }
+
+  object mongo4cats {
+    val core = "io.github.kirill5k" %% "mongo4cats-core" % Versions.mongo4catsVersion
+    val circe = "io.github.kirill5k" %% "mongo4cats-circe" % Versions.mongo4catsVersion
   }
 }
