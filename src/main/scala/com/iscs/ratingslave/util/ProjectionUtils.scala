@@ -1,13 +1,13 @@
 package com.iscs.ratingslave.util
 
-import org.mongodb.scala.bson.conversions.Bson
-import org.mongodb.scala.model.Projections._
+import mongo4cats.collection.operations.Projection
+import mongo4cats.collection.operations.Projection.{exclude, include}
 
 object ProjectionUtils {
-  def getProjectionFields(projSet: Map[String, Boolean]): List[Bson] =
+  def getProjectionFields(projSet: Map[String, Boolean]): List[Projection] =
     projSet.map{ case(field, action) =>
       if (action) include(field) else exclude(field)
     }.toList
 
-  def getProjections(projSet: List[Bson]): Bson = fields(projSet:_*)
+  def getProjections(projSet: List[Projection]): Projection = projSet.reduce { _ combinedWith _  }
 }

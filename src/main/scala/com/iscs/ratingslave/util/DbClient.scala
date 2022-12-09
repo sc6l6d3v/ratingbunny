@@ -9,9 +9,7 @@ import mongo4cats.client.MongoClient
 import mongo4cats.collection.MongoCollection
 import mongo4cats.database.MongoDatabase
 
-class DbClient[F[_]: Sync : Async](val dbName: String,
-                                   val collNames: List[String],
-                                   val config: MongodbConfig) {
+class DbClient[F[_]: Sync : Async](val config: MongodbConfig) {
 
   val dbResource: Resource[F, MongoClient[F]] = MongoClient.fromConnectionString(config.url)
 
