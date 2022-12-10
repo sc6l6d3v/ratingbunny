@@ -27,7 +27,7 @@ object EmailContactRoutess {
           emailId <- maybeEmail match {
             case Some(Email(name, email, subject, msg)) =>
               Sync[F].delay(L.info(s""""request" $name $email $subject $msg"""))
-              E.saveEmail2(name, email, subject, msg)
+              E.saveEmail(name, email, subject, msg)
             case _ =>
               Sync[F].delay("bad email string")
           }
