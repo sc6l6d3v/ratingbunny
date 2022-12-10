@@ -39,8 +39,9 @@
         <appender-ref ref="STDOUT" />
     </appender>
 
-  <logger name="org.http4s.client" level="INFO" />
-  <logger name="org.mongodb.scala" level="DEBUG" />
+    <logger name="org.http4s.client" level="INFO" />
+    <logger name="org.mongodb.scala" level="DEBUG" />
+    <logger name="com.mongodb" level="DEBUG" />
 
   <root level="DEBUG">
       <appender-ref ref="DEFAULT-FILE-ASYNC" />

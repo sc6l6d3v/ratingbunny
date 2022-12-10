@@ -74,9 +74,12 @@ object EmailContact {
         ts <- Sync[F].delay(new java.util.Date().getTime)
         fieldCreationUpdate <- Sync[F].delay(Update.setOnInsert(fieldCreationDate, ts))
         fieldLastModifiedUpdate <- Sync[F].delay(Update.currentDate(fieldLastModified))
-        tsdoc <- Sync[F].delay(setOnInsert(fieldCreationDate, ts))
-        curdateDoc <- Sync[F].delay(currentDate(fieldLastModified))
-        updateDoc <- Sync[F].delay(Seq(Update.set("$set",doc), fieldCreationUpdate, fieldLastModifiedUpdate).reduce(_ combinedWith _))
+//        tsdoc <- Sync[F].delay(setOnInsert(fieldCreationDate, ts))
+//        curdateDoc <- Sync[F].delay(currentDate(fieldLastModified))
+        updateDoc <- Sync[F].delay{
+          val comboUpdate = Seq(Update.set("$set",doc), fieldCreationUpdate, fieldLastModifiedUpdate).reduce(_ combinedWith _)
+          comboUpdate
+        }
       } yield updateDoc
 
       def updateMsg2(name: String, email: String, subject: String, msg: String): F[String] = for {
