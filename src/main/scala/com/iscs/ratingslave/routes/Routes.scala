@@ -72,10 +72,7 @@ object Routes { // TODO - remove
     CORS(service, methodConfig)
   }*/
 
-  private def showReqParam(queryType: String, query: Option[String], rating: String, params: ReqParams): Unit =
-    L.info(s""""request" $queryType=${query.getOrElse("UNSET")} rating=$rating ${params.toString}""")
-
-/*  def imdbRoutes[F[_]: Monad : Sync](I: ImdbQuery[F]): HttpRoutes[F] = {
+  /*  def imdbRoutes[F[_]: Monad : Sync](I: ImdbQuery[F]): HttpRoutes[F] = {
     val dsl = new Http4sDsl[F]{}
     import dsl._
     val service = HttpRoutes.of[F] {
