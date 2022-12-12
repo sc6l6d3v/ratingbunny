@@ -6,8 +6,10 @@ import com.iscs.ratingslave.model.Requests._
 import com.iscs.ratingslave.util.DecodeUtils.getRating
 import com.typesafe.scalalogging.Logger
 import fs2.Stream
+import org.http4s.MediaType.application._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.HttpRoutes
+import org.http4s.headers.`Content-Type`
 import zio.json._
 
 object ImdbRoutess {
@@ -64,6 +66,6 @@ object ImdbRoutess {
           resp <- I.getAutosuggestTitle2(title)
           scrapeJson <- Stream.eval(Sync[F].delay(resp.toJson))
         } yield scrapeJson)
-    }
+    }.map(_.withContentType(`Content-Type`(`json`)))
   }
 }

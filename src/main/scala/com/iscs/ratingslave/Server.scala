@@ -3,9 +3,10 @@ package com.iscs.ratingslave
 import cats.effect.{Async, Resource, Sync}
 import cats.implicits._
 import com.comcast.ip4s._
+import com.iscs.ratingslave.codecs.CustomCodecs
 import com.iscs.ratingslave.domains.ImdbQuery.TitleRec
 import com.iscs.ratingslave.domains.{EmailContact, ImdbQuery, ReleaseDates}
-import com.iscs.ratingslave.routes.{EmailContactRoutess, ImdbRoutess, ScrapeRoutess}
+import com.iscs.ratingslave.routes.{EmailContactRoutess, ImdbRoutess, ReleaseRoutes}
 import com.typesafe.scalalogging.Logger
 import mongo4cats.client.MongoClient
 import mongo4cats.database.MongoDatabase
@@ -18,7 +19,7 @@ import org.http4s.server.{Router, Server}
 import java.util.concurrent.Executors
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
 
-object Server {
+object Server extends CustomCodecs {
   private val L = Logger[this.type]
 
   private val port = sys.env.getOrElse("PORT", "8080").toInt
@@ -37,13 +38,15 @@ object Server {
     ex <- Sync[F].delay(ExecutionContext.fromExecutorService(es))
   } yield ex
 
+  implicit val codecProvider = zioJsonBasedCodecProvider[TitleRec]
+
   def getImdbSvc[F[_]: Async](db: MongoDatabase[F]): F[ImdbQuery[F]] =  for {
     titleColl <- db.getCollection(titleCollection)
-    titleCollCodec <- db.getCollection/*WithCodec[TitleRec]*/(titleCollection)
+    titleCollCodec <- db.getCollectionWithCodec[TitleRec](titleCollection)
     titlePrincipleColl <- db.getCollection(titlePrincipalsCollection)
-    titlePrincipleCollCodec <- db.getCollection/*WithCodec[TitleRec]*/(titlePrincipalsCollection)
+    titlePrincipleCollCodec <- db.getCollectionWithCodec[TitleRec](titlePrincipalsCollection)
     nameColl <- db.getCollection(nameCollection)
-    nameCollCodec <- db.getCollection/*WithCodec[TitleRec]*/(nameCollection)
+    nameCollCodec <- db.getCollectionWithCodec[TitleRec](nameCollection)
     imdbSvc <- Sync[F].delay(ImdbQuery.impl[F](titleColl, titleCollCodec.as[TitleRec],
       titlePrincipleColl, titlePrincipleCollCodec.as[TitleRec],
       nameColl, nameCollCodec.as[TitleRec]))
@@ -61,7 +64,7 @@ object Server {
       scrapeSvc <- Sync[F].delay(new ReleaseDates[F](defaultHost))
       httpApp <- Sync[F].delay(
         Router("/" ->
-          (ScrapeRoutess.httpRoutes(scrapeSvc) <+>
+          (ReleaseRoutes.httpRoutes(scrapeSvc) <+>
             EmailContactRoutess.httpRoutes(emailSvc) <+>
             ImdbRoutess.httpRoutes(imdbSvc))
         )
