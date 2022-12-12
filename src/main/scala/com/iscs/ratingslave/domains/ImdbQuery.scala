@@ -84,13 +84,9 @@ object ImdbQuery {
     implicit val nameTitleRecEncoder: JsonEncoder[NameTitleRec] = DeriveJsonEncoder.gen[NameTitleRec]
   }
 
-  def impl[F[_]: Sync](titleFx: MongoCollection[F, Document],
-                       titleFx2: MongoCollection[F, TitleRec],
-                       titlePrincipalsFx: MongoCollection[F, Document],
+  def impl[F[_]: Sync](titleFx2: MongoCollection[F, TitleRec],
                        titlePrincipalsFx2: MongoCollection[F, TitleRec],
-                       nameFx: MongoCollection[F, Document],
-                       nameFx2: MongoCollection[F, TitleRec],
-                      ): ImdbQuery[F] =
+                       nameFx2: MongoCollection[F, TitleRec]): ImdbQuery[F] =
     new ImdbQuery[F] {
       val nameCollection = "name_basics"
       val titleCollection = "title_basics_ratings"
@@ -410,7 +406,7 @@ object ImdbQuery {
 
         dbList <- Stream.eval{
           implicit val codecProvider = zioJsonBasedCodecProvider[AutoNameRec]
-          nameFx.aggregateWithCodec[AutoNameRec](aggregation)
+          nameFx2.aggregateWithCodec[AutoNameRec](aggregation)
             .stream
             .compile.toList}
         json <- Stream.emits(dbList)
@@ -463,7 +459,7 @@ object ImdbQuery {
 
         dbList <- Stream.eval{
           implicit val codecProvider = zioJsonBasedCodecProvider[AutoTitleRec]
-          titleFx.aggregateWithCodec[AutoTitleRec](aggregation)
+          titleFx2.aggregateWithCodec[AutoTitleRec](aggregation)
             .stream
             .compile.toList}
         json <- Stream.emits(dbList)

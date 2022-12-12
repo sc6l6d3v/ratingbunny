@@ -41,15 +41,12 @@ object Server extends CustomCodecs {
   implicit val codecProvider = zioJsonBasedCodecProvider[TitleRec]
 
   def getImdbSvc[F[_]: Async](db: MongoDatabase[F]): F[ImdbQuery[F]] =  for {
-    titleColl <- db.getCollection(titleCollection)
     titleCollCodec <- db.getCollectionWithCodec[TitleRec](titleCollection)
-    titlePrincipleColl <- db.getCollection(titlePrincipalsCollection)
     titlePrincipleCollCodec <- db.getCollectionWithCodec[TitleRec](titlePrincipalsCollection)
-    nameColl <- db.getCollection(nameCollection)
     nameCollCodec <- db.getCollectionWithCodec[TitleRec](nameCollection)
-    imdbSvc <- Sync[F].delay(ImdbQuery.impl[F](titleColl, titleCollCodec.as[TitleRec],
-      titlePrincipleColl, titlePrincipleCollCodec.as[TitleRec],
-      nameColl, nameCollCodec.as[TitleRec]))
+    imdbSvc <- Sync[F].delay(ImdbQuery.impl[F](titleCollCodec,
+      titlePrincipleCollCodec,
+      nameCollCodec))
   } yield imdbSvc
 
   def getEmailSvc[F[_]: Async](db: MongoDatabase[F]): F[EmailContact[F]] = for {
