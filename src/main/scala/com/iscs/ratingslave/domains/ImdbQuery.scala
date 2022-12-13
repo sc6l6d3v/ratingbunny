@@ -4,10 +4,8 @@ import cats.effect.Sync
 import com.iscs.ratingslave.util.ProjectionUtils
 import mongo4cats.collection.operations._
 import mongo4cats.collection.operations.Filter._
-import org.bson.codecs.configuration.CodecProvider
 import mongo4cats.collection.MongoCollection
 import cats.implicits._
-import com.iscs.ratingslave.Server.zioJsonBasedCodecProvider
 import com.iscs.ratingslave.domains.ImdbQuery.{AutoNameRec, AutoTitleRec, TitleRec}
 import com.iscs.ratingslave.model.Requests.ReqParams
 import com.iscs.ratingslave.util.asInt
@@ -15,7 +13,6 @@ import com.typesafe.scalalogging.Logger
 import fs2.Stream
 import mongo4cats.bson.{BsonValue, Document}
 import mongo4cats.collection.operations.{Accumulator, Aggregate, Sort}
-import org.mongodb.scala.bson.codecs.Macros
 import org.bson.types.Decimal128
 
 import scala.language.implicitConversions
@@ -59,19 +56,16 @@ object ImdbQuery {
   object AutoNameRec {
     implicit val autonameRecDecoder: JsonDecoder[AutoNameRec] = DeriveJsonDecoder.gen[AutoNameRec]
     implicit val autonameRecEncoder: JsonEncoder[AutoNameRec] = DeriveJsonEncoder.gen[AutoNameRec]
-    val autoNameRecCodecProvider: CodecProvider = Macros.createCodecProvider[AutoNameRec]()
   }
 
   object AutoTitleRec {
     implicit val autotitleRecDecoder: JsonDecoder[AutoTitleRec] = DeriveJsonDecoder.gen[AutoTitleRec]
     implicit val autotitleRecEncoder: JsonEncoder[AutoTitleRec] = DeriveJsonEncoder.gen[AutoTitleRec]
-    val autoTitleRecCodecProvider: CodecProvider = Macros.createCodecProvider[AutoTitleRec]()
   }
 
   object TitleRec {
     implicit val titleRecDecoder: JsonDecoder[TitleRec] = DeriveJsonDecoder.gen[TitleRec]
     implicit val titleRecEncoder: JsonEncoder[TitleRec] = DeriveJsonEncoder.gen[TitleRec]
-    val titleRecCodecProvider: CodecProvider = Macros.createCodecProvider[TitleRec]()
   }
 
   object TitlePrincipals {
@@ -266,13 +260,10 @@ object ImdbQuery {
             groupFilter
           ).reduce{ _ combinedWith _}
         ))
-        dbList <- Stream.eval{
-          implicit val codecProvider = zioJsonBasedCodecProvider[TitleRec]
-          nameFx2.aggregateWithCodec[TitleRec](aggregation)
+        dbList <- Stream.eval(
+          nameFx2.aggregate[TitleRec](aggregation)
             .stream
-            //          .through(docToJson)
-            .compile.toList
-        }
+            .compile.toList)
         json <- Stream.emits(dbList)
       } yield json
 
@@ -330,11 +321,10 @@ object ImdbQuery {
           ).reduce(_ combinedWith _)
         ))
 
-        dbList <- Stream.eval{
-          implicit val codecProvider = zioJsonBasedCodecProvider[TitleRec]
-          titlePrincipalsFx2.aggregateWithCodec[TitleRec](aggregation)
+        dbList <- Stream.eval(
+          titlePrincipalsFx2.aggregate[TitleRec](aggregation)
             .stream
-            .compile.toList}
+            .compile.toList)
         json <- Stream.emits(dbList)
       } yield json
 
@@ -404,11 +394,10 @@ object ImdbQuery {
           ).reduce(_ combinedWith _)
         ))
 
-        dbList <- Stream.eval{
-          implicit val codecProvider = zioJsonBasedCodecProvider[AutoNameRec]
-          nameFx2.aggregateWithCodec[AutoNameRec](aggregation)
+        dbList <- Stream.eval(
+          nameFx2.aggregate[AutoNameRec](aggregation)
             .stream
-            .compile.toList}
+            .compile.toList)
         json <- Stream.emits(dbList)
       } yield json
 
@@ -457,11 +446,10 @@ object ImdbQuery {
           ).reduce(_ combinedWith _)
         ))
 
-        dbList <- Stream.eval{
-          implicit val codecProvider = zioJsonBasedCodecProvider[AutoTitleRec]
-          titleFx2.aggregateWithCodec[AutoTitleRec](aggregation)
+        dbList <- Stream.eval(
+          titleFx2.aggregate[AutoTitleRec](aggregation)
             .stream
-            .compile.toList}
+            .compile.toList)
         json <- Stream.emits(dbList)
       } yield json
     }

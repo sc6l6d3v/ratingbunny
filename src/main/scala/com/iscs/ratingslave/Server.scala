@@ -38,12 +38,12 @@ object Server extends CustomCodecs {
     ex <- Sync[F].delay(ExecutionContext.fromExecutorService(es))
   } yield ex
 
-  implicit val codecProvider = zioJsonBasedCodecProvider[TitleRec]
+//  implicit val codecProvider = zioJsonBasedCodecProvider[TitleRec]
 
   def getImdbSvc[F[_]: Async](db: MongoDatabase[F]): F[ImdbQuery[F]] =  for {
-    titleCollCodec <- db.getCollectionWithCodec[TitleRec](titleCollection)
-    titlePrincipleCollCodec <- db.getCollectionWithCodec[TitleRec](titlePrincipalsCollection)
-    nameCollCodec <- db.getCollectionWithCodec[TitleRec](nameCollection)
+    titleCollCodec <- db.getCollection[TitleRec](titleCollection,  getRegistry)
+    titlePrincipleCollCodec <- db.getCollection[TitleRec](titlePrincipalsCollection, getRegistry)
+    nameCollCodec <- db.getCollection[TitleRec](nameCollection, getRegistry)
     imdbSvc <- Sync[F].delay(ImdbQuery.impl[F](titleCollCodec,
       titlePrincipleCollCodec,
       nameCollCodec))
