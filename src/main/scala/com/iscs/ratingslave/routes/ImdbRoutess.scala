@@ -27,7 +27,7 @@ object ImdbRoutess {
           reqqParams <- Stream.eval(Sync[F].delay(asBytes.map(_.toChar).mkString.fromJson[ReqParams].getOrElse(ReqParams(year = Some(List())))))
           rtng <- Stream.eval(getRating(rating))
           resp <- reqqParams match {
-            case ReqParams(query, _, Some(year), _, _, _) if year.nonEmpty => I.getByTitle2(query, rtng, reqqParams)
+            case ReqParams(query, _, Some(year), _, _, _) if year.nonEmpty => I.getByTitle(query, rtng, reqqParams)
             case _                                                         => Stream.eval(Sync[F].delay(dummyTitle))
           }
           scrapeJson <- Stream.eval(Sync[F].delay(resp.toJson))
@@ -38,7 +38,7 @@ object ImdbRoutess {
           reqqParams <- Stream.eval(Sync[F].delay(asBytes.map(_.toChar).mkString.fromJson[ReqParams].getOrElse(ReqParams(year = Some(List())))))
           rtng <- Stream.eval(getRating(rating))
           resp <- reqqParams match {
-            case ReqParams(_, _, Some(year), _, _, _) if year.nonEmpty => I.getByName2(name, rtng, reqqParams)
+            case ReqParams(_, _, Some(year), _, _, _) if year.nonEmpty => I.getByName(name, rtng, reqqParams)
             case _                                                     => Stream.eval(Sync[F].delay(dummyTitle))
           }
           scrapeJson <- Stream.eval(Sync[F].delay(resp.toJson))
@@ -49,7 +49,7 @@ object ImdbRoutess {
           reqqParams <- Stream.eval(Sync[F].delay(asBytes.map(_.toChar).mkString.fromJson[ReqParams].getOrElse(ReqParams(year = Some(List())))))
           rtng <- Stream.eval(getRating(rating))
           resp <- reqqParams match {
-            case ReqParams(_, _, Some(year), _, _, _) if year.nonEmpty => I.getByEnhancedName2(name, rtng, reqqParams)
+            case ReqParams(_, _, Some(year), _, _, _) if year.nonEmpty => I.getByEnhancedName(name, rtng, reqqParams)
             case _                                                     => Stream.eval(Sync[F].delay(dummyTitle))
           }
           scrapeJson <- Stream.eval(Sync[F].delay(resp.toJson))
@@ -57,13 +57,13 @@ object ImdbRoutess {
       case GET -> Root / "api" / "v1" / "autoname" / name =>
         Ok(for {
           _ <- Stream.eval(Sync[F].delay(L.info(s""""request" autoname=$name""")))
-          resp <- I.getAutosuggestName2(name)
+          resp <- I.getAutosuggestName(name)
           scrapeJson <- Stream.eval(Sync[F].delay(resp.toJson))
         } yield scrapeJson)
       case GET -> Root / "api" / "v1" / "autotitle" / title =>
         Ok(for {
           _ <- Stream.eval(Sync[F].delay(L.info(s""""request" autotitle=$title""")))
-          resp <- I.getAutosuggestTitle2(title)
+          resp <- I.getAutosuggestTitle(title)
           scrapeJson <- Stream.eval(Sync[F].delay(resp.toJson))
         } yield scrapeJson)
     }.map(_.withContentType(`Content-Type`(`json`)))

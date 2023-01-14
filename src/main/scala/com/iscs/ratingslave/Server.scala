@@ -4,7 +4,7 @@ import cats.effect.{Async, Resource, Sync}
 import cats.implicits._
 import com.comcast.ip4s._
 import com.iscs.ratingslave.codecs.CustomCodecs
-import com.iscs.ratingslave.domains.ImdbQuery.TitleRec
+import com.iscs.ratingslave.domains.ImdbQuery.{AutoNameRec, TitleRec}
 import com.iscs.ratingslave.domains.{EmailContact, ImdbQuery, ReleaseDates}
 import com.iscs.ratingslave.routes.{EmailContactRoutess, ImdbRoutess, ReleaseRoutes}
 import com.typesafe.scalalogging.Logger
@@ -38,12 +38,10 @@ object Server extends CustomCodecs {
     ex <- Sync[F].delay(ExecutionContext.fromExecutorService(es))
   } yield ex
 
-//  implicit val codecProvider = zioJsonBasedCodecProvider[TitleRec]
-
   def getImdbSvc[F[_]: Async](db: MongoDatabase[F]): F[ImdbQuery[F]] =  for {
     titleCollCodec <- db.getCollection[TitleRec](titleCollection,  getRegistry)
     titlePrincipleCollCodec <- db.getCollection[TitleRec](titlePrincipalsCollection, getRegistry)
-    nameCollCodec <- db.getCollection[TitleRec](nameCollection, getRegistry)
+    nameCollCodec <- db.getCollection[AutoNameRec](nameCollection, getRegistry)
     imdbSvc <- Sync[F].delay(ImdbQuery.impl[F](titleCollCodec,
       titlePrincipleCollCodec,
       nameCollCodec))

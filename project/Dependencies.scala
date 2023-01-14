@@ -13,7 +13,7 @@ object Dependencies {
     val zioJsonVersion = "0.3.0"
     val jsoupVersion = "1.13.1"
     val scalatestVersion = "3.2.2"
-    val mongoScalaVersion = "4.7.1"
+    val mongoScalaVersion = "4.8.0"
   }
 
   object http4s {

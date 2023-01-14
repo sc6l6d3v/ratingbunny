@@ -23,11 +23,11 @@ case object TitleQuery extends QueryObj
 case object NameQuery extends QueryObj
 
 trait ImdbQuery[F[_]] {
-  def getByTitle2(title: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRec]
-  def getByName2(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec]
-  def getByEnhancedName2(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec]
-  def getAutosuggestTitle2(titlePrefix: String): Stream[F, AutoTitleRec]
-  def getAutosuggestName2(titlePrefix: String): Stream[F, AutoNameRec]
+  def getByTitle(title: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRec]
+  def getByName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec]
+  def getByEnhancedName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec]
+  def getAutosuggestTitle(titlePrefix: String): Stream[F, AutoTitleRec]
+  def getAutosuggestName(titlePrefix: String): Stream[F, AutoNameRec]
 }
 
 object ImdbQuery {
@@ -78,9 +78,9 @@ object ImdbQuery {
     implicit val nameTitleRecEncoder: JsonEncoder[NameTitleRec] = DeriveJsonEncoder.gen[NameTitleRec]
   }
 
-  def impl[F[_]: Sync](titleFx2: MongoCollection[F, TitleRec],
-                       titlePrincipalsFx2: MongoCollection[F, TitleRec],
-                       nameFx2: MongoCollection[F, TitleRec]): ImdbQuery[F] =
+  def impl[F[_]: Sync](titleFx: MongoCollection[F, TitleRec],
+                       titlePrincipalsFx: MongoCollection[F, TitleRec],
+                       nameFx: MongoCollection[F, AutoNameRec]): ImdbQuery[F] =
     new ImdbQuery[F] {
       val nameCollection = "name_basics"
       val titleCollection = "title_basics_ratings"
@@ -175,7 +175,7 @@ object ImdbQuery {
        * @param params    other params
        * @return
        */
-      override def getByTitle2(optTitle: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRec] = for {
+      override def getByTitle(optTitle: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRec] = for {
         paramBson <- Stream.eval(getParamModelFilters(params, TitleQuery))
         ratingBson <- Stream.eval(Sync[F].delay(
             Filter.exists(averageRating).and(
@@ -187,19 +187,18 @@ object ImdbQuery {
           case Some(title) => getTitleModelFilters(title)
           case _           => Sync[F].delay(Filter.empty)
         })
-        sortBson <- Stream.eval(Sync[F].delay(Document(startYear -> BsonValue.int(-1))))
         bsonFilter <- Stream.eval(Sync[F].delay(titleFilter.and(ratingBson).and(paramBson)))
-        dbList <- Stream.eval(titleFx2.find(bsonFilter)
+        dbList <- Stream.eval(titleFx.find(bsonFilter)
           .limit(DOCLIMIT)
           .skip(0)
-          .sort(sortBson)
+          .sortByDesc(startYear)
           .projection(Projection.exclude(genres))
           .stream
           .compile.toList)
         json <- Stream.emits(dbList)
       } yield json
 
-      override def getByName2(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec] = for {
+      override def getByName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec] = for {
         matchTitleWithName <- Stream.eval(Sync[F].delay(
           exists(knownForTitles).and(
             Filter.ne(knownForTitles, "")).and(
@@ -261,13 +260,13 @@ object ImdbQuery {
           ).reduce{ _ combinedWith _}
         ))
         dbList <- Stream.eval(
-          nameFx2.aggregate[TitleRec](aggregation)
+          nameFx.aggregate[TitleRec](aggregation)
             .stream
             .compile.toList)
         json <- Stream.emits(dbList)
       } yield json
 
-      override def getByEnhancedName2(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec] = for {
+      override def getByEnhancedName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec] = for {
         matchNameAndRole <- Stream.eval(Sync[F].delay(
             Filter.eq(primaryName, name).and(
             Filter.in(category, roleList))
@@ -322,13 +321,13 @@ object ImdbQuery {
         ))
 
         dbList <- Stream.eval(
-          titlePrincipalsFx2.aggregate[TitleRec](aggregation)
+          titlePrincipalsFx.aggregate[TitleRec](aggregation)
             .stream
             .compile.toList)
         json <- Stream.emits(dbList)
       } yield json
 
-      override def getAutosuggestName2(namePrefix: String): Stream[F, AutoNameRec] = for {
+      override def getAutosuggestName(namePrefix: String): Stream[F, AutoNameRec] = for {
         names <- Stream.eval(Sync[F].delay(
           if (namePrefix contains " ")
             namePrefix.split(" ").toList
@@ -395,13 +394,13 @@ object ImdbQuery {
         ))
 
         dbList <- Stream.eval(
-          nameFx2.aggregate[AutoNameRec](aggregation)
+          nameFx.aggregate[AutoNameRec](aggregation)
             .stream
             .compile.toList)
         json <- Stream.emits(dbList)
       } yield json
 
-      override def getAutosuggestTitle2(titlePrefix: String): Stream[F, AutoTitleRec] = for {
+      override def getAutosuggestTitle(titlePrefix: String): Stream[F, AutoTitleRec] = for {
         titleTextRegex <- Stream.eval(
           Sync[F].delay(Filter.text(titlePrefix).and(
             Filter.regex(primaryTitle, s"""^$titlePrefix""")))
@@ -447,7 +446,7 @@ object ImdbQuery {
         ))
 
         dbList <- Stream.eval(
-          titleFx2.aggregate[AutoTitleRec](aggregation)
+          titleFx.aggregate[AutoTitleRec](aggregation)
             .stream
             .compile.toList)
         json <- Stream.emits(dbList)
