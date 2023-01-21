@@ -8,7 +8,9 @@ import com.iscs.ratingslave.domains.ImdbQuery.{AutoNameRec, TitleRec}
 import com.iscs.ratingslave.domains.{EmailContact, ImdbQuery, ReleaseDates}
 import com.iscs.ratingslave.routes.{EmailContactRoutess, ImdbRoutess, ReleaseRoutes}
 import com.typesafe.scalalogging.Logger
+import io.circe.generic.auto._
 import mongo4cats.client.MongoClient
+import mongo4cats.circe._
 import mongo4cats.database.MongoDatabase
 import org.http4s.HttpApp
 import org.http4s.ember.server._
@@ -39,9 +41,9 @@ object Server extends CustomCodecs {
   } yield ex
 
   def getImdbSvc[F[_]: Async](db: MongoDatabase[F]): F[ImdbQuery[F]] =  for {
-    titleCollCodec <- db.getCollection[TitleRec](titleCollection,  getRegistry)
-    titlePrincipleCollCodec <- db.getCollection[TitleRec](titlePrincipalsCollection, getRegistry)
-    nameCollCodec <- db.getCollection[AutoNameRec](nameCollection, getRegistry)
+    titleCollCodec <- db.getCollectionWithCodec[TitleRec](titleCollection)
+    titlePrincipleCollCodec <- db.getCollectionWithCodec[TitleRec](titlePrincipalsCollection)
+    nameCollCodec <- db.getCollectionWithCodec[AutoNameRec](nameCollection)
     imdbSvc <- Sync[F].delay(ImdbQuery.impl[F](titleCollCodec,
       titlePrincipleCollCodec,
       nameCollCodec))

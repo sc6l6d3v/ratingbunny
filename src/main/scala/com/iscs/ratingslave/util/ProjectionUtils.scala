@@ -1,8 +1,7 @@
 package com.iscs.ratingslave.util
 
-import mongo4cats.collection.operations.Projection
-import mongo4cats.collection.operations.Projection.{exclude, include}
-
+import mongo4cats.operations.Projection
+import mongo4cats.operations.Projection.{exclude, include}
 object ProjectionUtils {
   def getProjectionFields(projSet: Map[String, Boolean]): List[Projection] =
     projSet.map{ case(field, action) =>

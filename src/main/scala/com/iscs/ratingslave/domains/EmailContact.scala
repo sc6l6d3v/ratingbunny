@@ -1,16 +1,15 @@
 package com.iscs.ratingslave.domains
 
+import cats.effect._
 import cats.implicits._
-import cats.effect.Sync
 import com.typesafe.scalalogging.Logger
-import mongo4cats.bson.{BsonValue, Document}
 import mongo4cats.bson.syntax._
+import mongo4cats.bson.{BsonValue, Document}
+import mongo4cats.circe._
 import mongo4cats.collection.MongoCollection
-import zio.json.{DeriveJsonDecoder, DeriveJsonEncoder, JsonDecoder, JsonEncoder}
-import org.mongodb.scala.model._
 import org.bson.conversions.{Bson => mbson}
-
-import java.time.{Instant, LocalTime}
+import org.mongodb.scala.model._
+import java.time.Instant
 import scala.language.implicitConversions
 import scala.util.matching.Regex
 
@@ -30,11 +29,6 @@ object EmailContact {
       s"subject=$subject",
       s"msg=$msg"
     ).mkString("| ")
-  }
-
-  object Email {
-    implicit val emailDecoder: JsonDecoder[Email] = DeriveJsonDecoder.gen[Email]
-    implicit val emailEncoder: JsonEncoder[Email] = DeriveJsonEncoder.gen[Email]
   }
 
   def impl[F[_] : Sync](emailFx: MongoCollection[F, Document]): EmailContact[F] =

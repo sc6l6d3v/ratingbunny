@@ -1,7 +1,5 @@
 package com.iscs.ratingslave.model
 
-import zio.json.{DeriveJsonDecoder, DeriveJsonEncoder, JsonDecoder, JsonEncoder}
-
 object Requests {
   final case class ReqParams(query: Option[String] = None,
                              votes: Option[Int] = None,
@@ -19,7 +17,4 @@ object Requests {
     ).flatten
       .mkString(", ")
   }
-
-  implicit val reqParamsDecoder: JsonDecoder[ReqParams] = DeriveJsonDecoder.gen[ReqParams]
-  implicit val reqParamsEncoder: JsonEncoder[ReqParams] = DeriveJsonEncoder.gen[ReqParams]
 }

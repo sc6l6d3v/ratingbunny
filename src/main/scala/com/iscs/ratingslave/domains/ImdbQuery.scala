@@ -2,21 +2,20 @@ package com.iscs.ratingslave.domains
 
 import cats.effect.Sync
 import com.iscs.ratingslave.util.ProjectionUtils
-import mongo4cats.collection.operations._
-import mongo4cats.collection.operations.Filter._
 import mongo4cats.collection.MongoCollection
 import cats.implicits._
-import com.iscs.ratingslave.domains.ImdbQuery.{AutoNameRec, AutoTitleRec, TitleRec}
+import com.iscs.ratingslave.domains.ImdbQuery.{AutoNameRec, AutoTitleRec, NameTitleRec, TitleRec}
 import com.iscs.ratingslave.model.Requests.ReqParams
 import com.iscs.ratingslave.util.asInt
 import com.typesafe.scalalogging.Logger
 import fs2.Stream
-import mongo4cats.bson.{BsonValue, Document}
-import mongo4cats.collection.operations.{Accumulator, Aggregate, Sort}
+import io.circe.generic.auto._
+import mongo4cats.circe._
+import mongo4cats.operations.{Accumulator, Aggregate, Filter, Projection, Sort}
+import mongo4cats.operations.Filter.{regex, text}
 import org.bson.types.Decimal128
 
 import scala.language.implicitConversions
-import zio.json._
 
 abstract class QueryObj
 case object TitleQuery extends QueryObj
@@ -24,7 +23,7 @@ case object NameQuery extends QueryObj
 
 trait ImdbQuery[F[_]] {
   def getByTitle(title: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRec]
-  def getByName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec]
+  def getByName(name: String, rating: Double, params: ReqParams): Stream[F, NameTitleRec]
   def getByEnhancedName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec]
   def getAutosuggestTitle(titlePrefix: String): Stream[F, AutoTitleRec]
   def getAutosuggestName(titlePrefix: String): Stream[F, AutoNameRec]
@@ -33,12 +32,12 @@ trait ImdbQuery[F[_]] {
 object ImdbQuery {
   private val L = Logger[this.type]
 
-  val DOCLIMIT = 200
-  val AUTOSUGGESTLIMIT = 20
+  private val DOCLIMIT = 200
+  private val AUTOSUGGESTLIMIT = 20
 
   def apply[F[_]](implicit ev: ImdbQuery[F]): ImdbQuery[F] = ev
 
-  final case class AutoNameRec(firstName: String, lastname: Option[String])
+  final case class AutoNameRec(firstName: String, lastName: Option[String])
 
   final case class AutoTitleRec(primaryTitle: Option[String])
 
@@ -47,44 +46,15 @@ object ImdbQuery {
                             isAdult: Int, startYear: Int, endYear: String, runTimeMinutes: Option[Int],
                             genresList: List[String])
 
-  final case class  TitlePrincipals(tconst: String, ordering: Int, nconst: String, category: String, job: String,
-                                   primaryName: Option[String], firstName: Option[String], lastName: Option[String])
-
-  final case class NameTitleRec(primaryName: String, birthYear: Int,
+  final case class NameTitleRec(primaryName: String, firstName: String, lastName: String, birthYear: Int,
+                                deathYear1: Option[String] = None,
                                 matchedTitles: List[TitleRec])
-
-  object AutoNameRec {
-    implicit val autonameRecDecoder: JsonDecoder[AutoNameRec] = DeriveJsonDecoder.gen[AutoNameRec]
-    implicit val autonameRecEncoder: JsonEncoder[AutoNameRec] = DeriveJsonEncoder.gen[AutoNameRec]
-  }
-
-  object AutoTitleRec {
-    implicit val autotitleRecDecoder: JsonDecoder[AutoTitleRec] = DeriveJsonDecoder.gen[AutoTitleRec]
-    implicit val autotitleRecEncoder: JsonEncoder[AutoTitleRec] = DeriveJsonEncoder.gen[AutoTitleRec]
-  }
-
-  object TitleRec {
-    implicit val titleRecDecoder: JsonDecoder[TitleRec] = DeriveJsonDecoder.gen[TitleRec]
-    implicit val titleRecEncoder: JsonEncoder[TitleRec] = DeriveJsonEncoder.gen[TitleRec]
-  }
-
-  object TitlePrincipals {
-    implicit val titlePrincipalsDecoder: JsonDecoder[TitlePrincipals] = DeriveJsonDecoder.gen[TitlePrincipals]
-    implicit val titlePrincipalsEncoder: JsonEncoder[TitlePrincipals] = DeriveJsonEncoder.gen[TitlePrincipals]
-  }
-
-  object NameTitleRec {
-    implicit val nameTitleRecDecoder: JsonDecoder[NameTitleRec] = DeriveJsonDecoder.gen[NameTitleRec]
-    implicit val nameTitleRecEncoder: JsonEncoder[NameTitleRec] = DeriveJsonEncoder.gen[NameTitleRec]
-  }
 
   def impl[F[_]: Sync](titleFx: MongoCollection[F, TitleRec],
                        titlePrincipalsFx: MongoCollection[F, TitleRec],
                        nameFx: MongoCollection[F, AutoNameRec]): ImdbQuery[F] =
     new ImdbQuery[F] {
-      val nameCollection = "name_basics"
       val titleCollection = "title_basics_ratings"
-      val titlePrincipalsCollection = "title_principals_withname"
 
       val id = "_id"
       val birthYear = "birthYear"
@@ -95,7 +65,7 @@ object ImdbQuery {
       val knownForTitlesList = "knownForTitlesList"
       val category = "category"
       val tconst = "tconst"
-      val roleList = List("actor", "actress")
+      private val roleList = List("actor", "actress")
       val primaryName = "primaryName"
       val primaryTitle = "primaryTitle"
       val matchedTitles = "matchedTitles"
@@ -198,74 +168,111 @@ object ImdbQuery {
         json <- Stream.emits(dbList)
       } yield json
 
-      override def getByName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec] = for {
+      /**
+       * ('name_basics').aggregate(
+       * [
+       *   {"$match": {"$and": [{"$and": [{"knownForTitles": {"$exists": true}}, {"knownForTitles": {"$ne": ""}}]}, {"primaryName": "Steve McQueen"}]}},
+       *   {"$lookup": {"from": "title_basics_ratings", "localField": "knownForTitlesList", "foreignField": "_id", "as": "matchedTitles"}},
+       *   {"$project": {"matchedTitles.genres": 0, "deathYear1": 0}},
+       *   {"$unwind": {"path": "$matchedTitles"}},
+       *   {"$match": {"$and": [{"$and": [{"$and": [{"$and": [{}, {"$and": [{"matchedTitles.startYear": {"$gte": 2010}}, {"matchedTitles.startYear": {"$lte": 2018}}]}]}, {"matchedTitles.genresList": {"$in": ["Action", "Drama", "Horror"]}}]}, {"matchedTitles.titleType": "movie"}]}, {"$or": [{"matchedTitles.averageRating": {"$numberDecimal": "NaN"}}, {"matchedTitles.averageRating": {"$gte": 4.0}}]}]}},
+       *   {"$group": {"_id": "$_id",
+       *               "primaryName": {"$first": "$primaryName"},
+       *               "firstName": {"$first": "$firstName"},
+       *               "lastName": {"$first": "$lastName"},
+       *               "birthYear": {"$first": "$birthYear"},
+       *               "deathYear": {"$first": "$deathYear"},
+       *                "matchedTitles": {
+                                           "$push": "$matchedTitles"
+                                         }
+                       }}
+       * ])
+       * @param name first lastname
+       * @param rating IMDB
+       * @param params object
+       * @return stream of object
+       */
+      override def getByName(name: String, rating: Double, params: ReqParams): Stream[F, NameTitleRec] = for {
         matchTitleWithName <- Stream.eval(Sync[F].delay(
-          exists(knownForTitles).and(
+          Filter.exists(knownForTitles).and(
             Filter.ne(knownForTitles, "")).and(
             Filter.eq(primaryName, name))
-        ))
-        titleMatchFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.matchBy(matchTitleWithName)
-        ))
-
-        lookupFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.lookup(titleCollection,
-            knownForTitlesList,
-            "_id",
-            matchedTitles)
         ))
 
         paramsList <- Stream.eval(getParamList(params, NameQuery))
         ratingBson <- Stream.eval(Sync[F].delay(
-            Filter.eq(matchedTitles_averageRating, Decimal128.NaN).or(
-              Filter.gte(matchedTitles_averageRating, rating)))
-        )
+          Filter.eq(matchedTitles_averageRating, Decimal128.NaN).or(
+            Filter.gte(matchedTitles_averageRating, rating))))
         bsonCondensedList <- Stream.eval(Sync[F].delay(paramsList.and(ratingBson)))
-        matchLookupsFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.matchBy(bsonCondensedList)
-        ))
 
         projectionsList <- Stream.eval(Sync[F].delay(
           ProjectionUtils.getProjectionFields(Map(
-            matchedTitles_genres -> false
+            matchedTitles_genres -> false,
+            deathYear -> false
           ))
         ))
-        projectionFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.project(ProjectionUtils.getProjections(projectionsList))
-        ))
 
-        unwindFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.unwind(s"$$$matchedTitles")
-        ))
-
-        groupFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.group("$_id",
-            Accumulator.first(primaryName, s"$$$primaryName")
-              .first(firstName, s"$$$firstName")
-              .first(lastName, s"$$$lastName")
-              .first(birthYear, s"$$$birthYear")
-              .first(deathYear, s"$$$deathYear")
-              .push(matchedTitles, s"$$$matchedTitles")
-          )
-        ))
-
-        aggregation <- Stream.eval(Sync[F].delay(
-          Seq(
-            titleMatchFilter,
-            lookupFilter,
-            projectionFilter,
-            unwindFilter,
-            matchLookupsFilter,
-            groupFilter
-          ).reduce{ _ combinedWith _}
+        comboagg <- Stream.eval(Sync[F].delay(
+          Aggregate.matchBy(matchTitleWithName)
+            .lookup(titleCollection,
+              knownForTitlesList,
+              "_id",
+              matchedTitles)
+            .project(ProjectionUtils.getProjections(projectionsList))
+            .unwind(s"$$$matchedTitles")
+            .matchBy(bsonCondensedList)
+            .group("$_id",
+              Accumulator.first(primaryName, s"$$$primaryName")
+                .first(firstName, s"$$$firstName")
+                .first(lastName, s"$$$lastName")
+                .first(birthYear, s"$$$birthYear")
+                .first(deathYear, s"$$$deathYear")
+                .push(matchedTitles, s"$$$matchedTitles")
+            )
         ))
         dbList <- Stream.eval(
-          nameFx.aggregate[TitleRec](aggregation)
+          nameFx.aggregateWithCodec[NameTitleRec](comboagg)
             .stream
             .compile.toList)
         json <- Stream.emits(dbList)
       } yield json
 
+      /**
+       *  ('name_basics').aggregate([
+       *     {"$match": {"$and": [{"primaryName": "June Lockhart"}, {"category": {"$in": ["actor", "actress"]}}]}},
+       *     {"$lookup": {"from": "title_basics_ratings", "localField": "tconst", "foreignField": "_id", "as": "matchedTitles"}},
+       *     {"$match": {"$and": [
+       *                           {"$and": [
+       *                                      {"$and": [
+       *                                                 {"$and": [
+       *                                                            {"$and": [
+       *                                                                       {},
+       *                                                                       {"$and": [
+       *                                                                                  {"matchedTitles.startYear": {"$gte": 1937}},
+       *                                                                                  {"matchedTitles.startYear": {"$lte": 1979}}
+       *                                                                                ]}
+       *                                                                     ]},
+       *                                                            {"matchedTitles.genresList": "Comedy"}
+       *                                                          ]},
+       *                                                  {"matchedTitles.isAdult": 0}
+       *                                               ]},
+       *                                        {"matchedTitles.numVotes": {"$gte": 0}}
+       *                                     ]},
+       *                            {"$or": [
+       *                                       {"matchedTitles.averageRating": {"$numberDecimal": "NaN"}},
+       *                                       {"matchedTitles.averageRating": {"$gte": 4.0}}
+       *                                    ]}
+       *                          ]}},
+       *     {"$unwind": {"path": "$matchedTitles"}},
+       *     {"$group": {"_id": "$_id", "matchedTitles": {"$push": "$matchedTitles"}}},
+       *     {"$unwind": {"path": "$matchedTitles"}},
+       *     {"$replaceWith": "$matchedTitles"}]
+       *  ])
+       * @param name first lastname
+       * @param rating IMDB
+       * @param params object
+       * @return stream object
+       */
       override def getByEnhancedName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec] = for {
         matchNameAndRole <- Stream.eval(Sync[F].delay(
             Filter.eq(primaryName, name).and(
@@ -321,12 +328,25 @@ object ImdbQuery {
         ))
 
         dbList <- Stream.eval(
-          titlePrincipalsFx.aggregate[TitleRec](aggregation)
+          titlePrincipalsFx.aggregateWithCodec[TitleRec](aggregation)
             .stream
             .compile.toList)
         json <- Stream.emits(dbList)
       } yield json
 
+      /**
+       * ('name_basics').aggregate([
+       *   {"$match": {"$and": [{"lastName": "/%Caret%Cra"}, {"firstName": "Daniel"}]}},
+       *   {"$project": {"firstName": 1, "lastName": 1}},
+       *   {"$group": {"_id": "$lastName",
+       *               "firstName": {"$first": "$firstName"}}},
+       *               {"$sort": {"_id": 1, "firstName": 1}},
+       *   {"$project": {"_id": 0, "firstName": 1, "lastName": "$_id"}},
+       *   {"$limit": 20}
+       * ])
+       * @param namePrefix first prefix
+       * @return stream of object
+       */
       override def getAutosuggestName(namePrefix: String): Stream[F, AutoNameRec] = for {
         names <- Stream.eval(Sync[F].delay(
           if (namePrefix contains " ")
@@ -394,12 +414,23 @@ object ImdbQuery {
         ))
 
         dbList <- Stream.eval(
-          nameFx.aggregate[AutoNameRec](aggregation)
+          nameFx.aggregateWithCodec[AutoNameRec](aggregation)
             .stream
             .compile.toList)
         json <- Stream.emits(dbList)
       } yield json
 
+      /**
+       * ('name_basics').aggregate([
+       *     {"$match": {"$and": [{"$text": {"$search": "Gone with the W"}}, {"primaryTitle": /%caret%Gone with the W/}]}},
+       *     {"$project": {"_id": 0, "primaryTitle": 1}},
+       *     {"$group": {"_id": "$primaryTitle", "primaryTitle": {"$first": "$primaryTitle"}}}, {"$sort": {"primaryTitle": 1}},
+       *     {"$limit": 20},
+       *     {"$project": {"_id": 0, "primaryTitle": 1}}
+       * ])
+       * @param titlePrefix title regex
+       * @return stream of object
+       */
       override def getAutosuggestTitle(titlePrefix: String): Stream[F, AutoTitleRec] = for {
         titleTextRegex <- Stream.eval(
           Sync[F].delay(Filter.text(titlePrefix).and(
@@ -446,7 +477,7 @@ object ImdbQuery {
         ))
 
         dbList <- Stream.eval(
-          titleFx.aggregate[AutoTitleRec](aggregation)
+          titleFx.aggregateWithCodec[AutoTitleRec](aggregation)
             .stream
             .compile.toList)
         json <- Stream.emits(dbList)

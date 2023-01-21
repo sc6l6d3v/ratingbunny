@@ -10,7 +10,12 @@ lazy val root = (project in file("."))
     libraryDependencies ++= Seq(
       http4s.server,
       http4s.dsl,
-      zio.json,
+      http4s.circe,
+      fs2.core,
+      fs2.io,
+      circe.circeCore,
+      circe.circeGeneric,
+      circe.circeParser,
       mongo4cats.core,
       mongo4cats.circe,
       mongodb.driver,
