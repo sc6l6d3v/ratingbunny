@@ -8,9 +8,9 @@ import com.iscs.ratingslave.util.DecodeUtils.getRating
 import com.typesafe.scalalogging.Logger
 import fs2.Stream
 import io.circe.generic.auto._
-import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder}
 import org.http4s.HttpRoutes
 import org.http4s.MediaType.application._
+import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder}
 import org.http4s.dsl.Http4sDsl
 import org.http4s.headers.`Content-Type`
 
@@ -20,37 +20,34 @@ object ImdbRoutess {
   def httpRoutes[F[_]: Async](I: ImdbQuery[F]): HttpRoutes[F] = {
     val dsl = Http4sDsl[F]
     import dsl._
-    HttpRoutes.of[F] {
+    val svc = HttpRoutes.of[F] {
       case req@POST -> Root / "api" / "v1" / "title" / rating =>
         for {
           reqParams <- req.as[ReqParams]
           rtng <- getRating(rating)
-          titleStream <- Sync[F].delay(if (reqParams.year.nonEmpty)
+          titleStreamResp <- Ok(if (reqParams.year.nonEmpty)
             I.getByTitle(reqParams.query, rtng, reqParams)
           else
             Stream.empty)
-          resp <- Ok(titleStream)
-        } yield resp
+        } yield titleStreamResp
       case req@POST -> Root / "api" / "v1" / "name2" / name / rating =>
         for {
           reqParams <- req.as[ReqParams]
           rtng <- getRating(rating)
-          imdbNames <- Sync[F].delay(if (reqParams.year.nonEmpty)
+          imdbNames <- Ok(if (reqParams.year.nonEmpty)
             I.getByName(name, rtng, reqParams)
           else
             Stream.empty)
-          resp <- Ok(imdbNames)
-        } yield resp
+        } yield imdbNames
       case req@POST -> Root / "api" / "v1" / "name" / name / rating =>
         for {
           reqParams <- req.as[ReqParams]
           rtng <- getRating(rating)
-          imdbNames <- Sync[F].delay(if(reqParams.year.nonEmpty)
+          imdbNames <- Ok(if (reqParams.year.nonEmpty)
             I.getByEnhancedName(name, rtng, reqParams)
           else
             Stream.empty)
-          resp <- Ok(imdbNames)
-        } yield resp
+        } yield imdbNames
       case GET -> Root / "api" / "v1" / "autoname" / name =>
         for {
           _ <- Sync[F].delay(L.info(s""""request" autoname=$name"""))
@@ -62,5 +59,6 @@ object ImdbRoutess {
           resp <- Ok(I.getAutosuggestTitle(title))
         } yield resp
     }.map(_.withContentType(`Content-Type`(`json`)))
+    CORSSetup.methodConfig(svc)
   }
 }

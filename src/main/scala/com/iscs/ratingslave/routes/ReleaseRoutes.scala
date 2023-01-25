@@ -18,28 +18,29 @@ object ReleaseRoutes {
   def httpRoutes[F[_] : Async](R: ReleaseDates[F]): HttpRoutes[F] = {
     val dsl = Http4sDsl[F]
     import dsl._
-    HttpRoutes.of[F] {
+    val svc = HttpRoutes.of[F] {
       case _ @ GET -> Root / "api" / "v1" / "reldate" / year / month / rating =>
         for {
           _ <- Sync[F].delay(L.info(s""""request" date=$year/$month rating=$rating"""))
           ratingVal <- getRating(rating)
-          releases <- Sync[F].delay(R.findReleases("rel", year, month, ratingVal))
-          resp <- Ok(releases)
+          resp <- Ok(R.findReleases("rel", year, month, ratingVal))
         } yield resp
        case _ @ GET -> Root / "api" / "v1" / "top" / year / rating =>
         for {
           _ <- Sync[F].delay(L.info(s""""request" date=$year rating=$rating"""))
           ratingVal <- getRating(rating)
-          releases <- Sync[F].delay(R.findMovies("top", year, ratingVal))
-          resp <- Ok(releases)
+          resp <- Ok(R.findMovies("top", year, ratingVal))
         } yield resp
       case _ @ GET -> Root / "api" / "v1" / "new" / year / rating =>
         for {
           _ <- Sync[F].delay(L.info(s""""request" date=$year rating=$rating"""))
           ratingVal <- getRating(rating)
-          releases <- Sync[F].delay(R.findMovies("new", year, ratingVal))
-          resp <- Ok(releases)
+          resp <- Ok(R.findMovies("new", year, ratingVal))
         } yield resp
+/*      case default =>
+        L.error(s"got bad request: ${default.pathInfo}")
+        Ok(RouteNotFound(default.pathInfo.toString))*/
     }.map(_.withContentType(`Content-Type`(`json`)))
+    CORSSetup.methodConfig(svc)
   }
 }

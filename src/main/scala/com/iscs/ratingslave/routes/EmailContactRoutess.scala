@@ -16,7 +16,7 @@ object EmailContactRoutess {
   def httpRoutes[F[_]: Async](E: EmailContact[F]): HttpRoutes[F] = {
     val dsl = Http4sDsl[F]
     import dsl._
-    HttpRoutes.of[F] {
+    val svc = HttpRoutes.of[F] {
       case req@POST -> Root / "api" / "v1" / "addMsg" =>
         for {
           email <- req.as[Email]
@@ -25,5 +25,6 @@ object EmailContactRoutess {
           resp <- Ok(emailId)
         } yield resp
     }
+    CORSSetup.methodConfig(svc)
   }
 }
