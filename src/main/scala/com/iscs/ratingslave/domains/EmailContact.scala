@@ -74,10 +74,11 @@ object EmailContact {
       def updateMsg(name: String, email: String, subject: String, msg: String): F[String] = for {
         asDoc <- makeDoc(name, email, subject, msg)
         updateDoc <- makeUpdateDoc(asDoc)
-        updateResult <- emailFx.updateOne(
+        (updateTime, updateResult) <- Clock[F].timed(emailFx.updateOne(
           Filters.eq(field_id, email),
           updateDoc,
-          UpdateOptions().upsert(true))
+          UpdateOptions().upsert(true)))
+        _ <- Sync[F].delay(L.info(s"update email doc in {} ms", updateTime.toMillis))
         emailResponse <- Sync[F].delay {
           if (updateResult.getUpsertedId == null)
             email
@@ -90,9 +91,11 @@ object EmailContact {
         truncSubject <- Sync[F].delay(subject.take(maxValLen))
         truncMsg <- Sync[F].delay(msg.take(maxMsgLen))
         isValid <- validate(name, email)
-        emailJson <-
+        (totEmailTime, emailJson) <- Clock[F].timed {
           if (isValid) updateMsg(name, email, truncSubject, truncMsg)
-          else         Sync[F].delay(s"Invalid: $email")
+          else Sync[F].delay(s"Invalid: $email")
+        }
+        _ <- Sync[F].delay(L.info(s"total email time {} ms", totEmailTime.toMillis))
       } yield emailJson
     }
 }

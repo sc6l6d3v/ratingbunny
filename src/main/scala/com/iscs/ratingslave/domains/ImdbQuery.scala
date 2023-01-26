@@ -1,6 +1,7 @@
 package com.iscs.ratingslave.domains
 
 import cats.effect.Sync
+import cats.effect.kernel.Clock
 import com.iscs.ratingslave.util.ProjectionUtils
 import mongo4cats.collection.MongoCollection
 import cats.implicits._
@@ -158,13 +159,14 @@ object ImdbQuery {
           case _           => Sync[F].delay(Filter.empty)
         })
         bsonFilter <- Stream.eval(Sync[F].delay(titleFilter.and(ratingBson).and(paramBson)))
-        dbList <- Stream.eval(titleFx.find(bsonFilter)
+        (byTitleTime, dbList) <- Stream.eval(Clock[F].timed(titleFx.find(bsonFilter)
           .limit(DOCLIMIT)
           .skip(0)
           .sortByDesc(startYear)
           .projection(Projection.exclude(genres))
           .stream
-          .compile.toList)
+          .compile.toList))
+        _ <- Stream.eval(Sync[F].delay(L.info(s"getByTitle {} ms", byTitleTime.toMillis)))
         json <- Stream.emits(dbList)
       } yield json
 
@@ -230,10 +232,11 @@ object ImdbQuery {
                 .push(matchedTitles, s"$$$matchedTitles")
             )
         ))
-        dbList <- Stream.eval(
+        (byNameTime, dbList) <- Stream.eval(Clock[F].timed(
           nameFx.aggregateWithCodec[NameTitleRec](comboagg)
             .stream
-            .compile.toList)
+            .compile.toList))
+        _ <- Stream.eval(Sync[F].delay(L.info(s"getByName {} ms", byNameTime.toMillis)))
         json <- Stream.emits(dbList)
       } yield json
 
@@ -327,10 +330,11 @@ object ImdbQuery {
           ).reduce(_ combinedWith _)
         ))
 
-        dbList <- Stream.eval(
+        (byEnhancedNameTime, dbList) <- Stream.eval(Clock[F].timed(
           titlePrincipalsFx.aggregateWithCodec[TitleRec](aggregation)
             .stream
-            .compile.toList)
+            .compile.toList))
+        _ <- Stream.eval(Sync[F].delay(L.info(s"getByEnhancedName {} ms", byEnhancedNameTime.toMillis)))
         json <- Stream.emits(dbList)
       } yield json
 
@@ -413,10 +417,11 @@ object ImdbQuery {
           ).reduce(_ combinedWith _)
         ))
 
-        dbList <- Stream.eval(
+        (autosuggestTime, dbList) <- Stream.eval(Clock[F].timed(
           nameFx.aggregateWithCodec[AutoNameRec](aggregation)
             .stream
-            .compile.toList)
+            .compile.toList))
+        _ <- Stream.eval(Sync[F].delay(L.info(s"getAutosuggestName {} ms", autosuggestTime.toMillis)))
         json <- Stream.emits(dbList)
       } yield json
 
@@ -476,10 +481,11 @@ object ImdbQuery {
           ).reduce(_ combinedWith _)
         ))
 
-        dbList <- Stream.eval(
+        (autosuggestTitleTime, dbList) <- Stream.eval(Clock[F].timed(
           titleFx.aggregateWithCodec[AutoTitleRec](aggregation)
             .stream
-            .compile.toList)
+            .compile.toList))
+        _ <- Stream.eval(Sync[F].delay(L.info(s"getAutosuggestTitle {} ms", autosuggestTitleTime.toMillis)))
         json <- Stream.emits(dbList)
       } yield json
     }
