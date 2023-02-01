@@ -10,7 +10,7 @@ import com.typesafe.scalalogging.Logger
 import org.http4s.HttpRoutes
 import org.http4s.dsl.Http4sDsl
 
-object EmailContactRoutess {
+object EmailContactRoutes {
   private val L = Logger[this.type]
 
   def httpRoutes[F[_]: Async](E: EmailContact[F]): HttpRoutes[F] = {

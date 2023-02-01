@@ -14,7 +14,7 @@ import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder
 import org.http4s.dsl.Http4sDsl
 import org.http4s.headers.`Content-Type`
 
-object ImdbRoutess {
+object ImdbRoutes {
   private val L = Logger[this.type]
 
   def httpRoutes[F[_]: Async](I: ImdbQuery[F]): HttpRoutes[F] = {

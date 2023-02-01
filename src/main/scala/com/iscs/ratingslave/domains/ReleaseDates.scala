@@ -1,17 +1,21 @@
 package com.iscs.ratingslave.domains
 
-import cats.effect.Sync
 import cats.effect.kernel.Clock
+import cats.effect.{Async, Sync}
 import cats.implicits._
 import com.iscs.ratingslave.model.ScrapeResult.Scrape
+import com.typesafe.scalalogging.Logger
 import fs2.Stream
+import org.http4s.client.Client
+import org.http4s.{Method, Request, Uri}
 import org.jsoup.Jsoup
 import org.jsoup.nodes.{Document, Element}
-import com.typesafe.scalalogging.Logger
+import scodec.bits.ByteVector
+
 import java.time.LocalDate
 import scala.jdk.CollectionConverters._
 
-class ReleaseDates[F[_]: Sync](defaultHost: String) {
+class ReleaseDates[F[_]: Async](defaultHost: String, imageHost: String, client: Client[F]) {
   private val L = Logger[this.type]
   private val yearRegex = "[0-9][0-9][0-9][0-9]".r
   private val monthRegex = "[0-9][0-9]".r
@@ -34,6 +38,7 @@ class ReleaseDates[F[_]: Sync](defaultHost: String) {
     "new" -> s"https://$defaultHost/new-movies-YYYY/",
     "top" -> s"https://$defaultHost/top-movies-YYYY/"
   )
+  private val metaImage = if (imageHost.contains("localhost") ) s"http://$imageHost/meta" else  s"https://$imageHost/meta"
   private val now = LocalDate.now
   private val curYear = now.getYear.toString
   private val curMonth = f"${now.getMonthValue}%02d"
@@ -54,7 +59,7 @@ class ReleaseDates[F[_]: Sync](defaultHost: String) {
     doc <- Sync[F].blocking(Jsoup.connect(finalURL).get())
   } yield doc
 
-  private def processElementF(e: Element, minRating: Double): F[Option[Scrape]] =  for {
+  private def processElement(e: Element, minRating: Double): F[Option[Scrape]] =  for {
     links <- Sync[F].delay(e.select("a").asScala)
     title <- Sync[F].delay(links(1).text)
     textRating <- Sync[F].delay(links(2).text)
@@ -69,20 +74,31 @@ class ReleaseDates[F[_]: Sync](defaultHost: String) {
       Sync[F].delay(None)
   } yield maybeScrape
 
+  def getImage(imdb: String): Stream[F, Byte] = for {
+    imgReq <- Stream.eval(Sync[F].delay(Request[F](Method.GET, Uri.unsafeFromString(s"""$metaImage/$imdb/S"""))))
+    (imgTime, imgBytes) <- Stream.eval(Clock[F].timed(client.run(imgReq)
+      .use(resp =>
+        resp.body.compile
+          .to(ByteVector)
+          .map(_.toArray))))
+    _ <- Stream.eval(Sync[F].delay(L.info(s"image id {} size {} time {} ms", imdb, imgBytes.length, imgTime.toMillis)))
+    imgStream <- Stream.emits(imgBytes)
+  } yield imgStream
+
   def findReleases(urlType: String, year: String, month: String, minRating: Double): Stream[F, Scrape] = for {
     (jsoupAccessTime, indexDoc) <- Stream.eval(Clock[F].timed(getDocument(urlType, year, Some(month))))
-    _ <- Stream.eval(Sync[F].delay(L.info(s"findReleases {} ms", jsoupAccessTime.toMillis)))
+    _ <- Stream.eval(Sync[F].delay(L.info(s"findReleases time {} ms", jsoupAccessTime.toMillis)))
     elt <- Stream.emits(indexDoc.select(fieldDoc).asScala.toList)
-    scrape <- Stream.eval(processElementF(elt, minRating))
-        .filter(_.isDefined)
-        .map(_.get)
+    scrape <- Stream.eval(processElement(elt, minRating))
+      .filter(_.isDefined)
+      .map(_.get)
   } yield scrape
 
   def findMovies(urlType: String, year: String, minRating: Double): Stream[F, Scrape] = for {
     (jsoupAccessTime, indexDoc) <- Stream.eval(Clock[F].timed(getDocument(urlType, year)))
-    _ <- Stream.eval(Sync[F].delay(L.info(s""""findMovies {} ms"""", jsoupAccessTime.toMillis)))
+    _ <- Stream.eval(Sync[F].delay(L.info(s""""findMovies time {} ms"""", jsoupAccessTime.toMillis)))
     elt <- Stream.emits(indexDoc.select(fieldDoc).asScala.toList)
-    scrape <- Stream.eval(processElementF(elt, minRating))
+    scrape <- Stream.eval(processElement(elt, minRating))
       .filter(_.isDefined)
       .map(_.get)
   } yield scrape

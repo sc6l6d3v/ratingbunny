@@ -15,7 +15,6 @@ import mongo4cats.circe._
 import mongo4cats.operations.{Accumulator, Aggregate, Filter, Projection, Sort}
 import mongo4cats.operations.Filter.{regex, text}
 import org.bson.types.Decimal128
-
 import scala.language.implicitConversions
 
 abstract class QueryObj

@@ -6,13 +6,13 @@ import com.comcast.ip4s._
 import com.iscs.ratingslave.codecs.CustomCodecs
 import com.iscs.ratingslave.domains.ImdbQuery.{AutoNameRec, TitleRec}
 import com.iscs.ratingslave.domains.{EmailContact, ImdbQuery, ReleaseDates}
-import com.iscs.ratingslave.routes.{EmailContactRoutess, ImdbRoutess, ReleaseRoutes}
+import com.iscs.ratingslave.routes.{EmailContactRoutes, ImdbRoutes, ReleaseRoutes}
 import com.typesafe.scalalogging.Logger
 import io.circe.generic.auto._
-import mongo4cats.client.MongoClient
 import mongo4cats.circe._
 import mongo4cats.database.MongoDatabase
 import org.http4s.HttpApp
+import org.http4s.client.Client
 import org.http4s.ember.server._
 import org.http4s.implicits._
 import org.http4s.server.middleware.{Logger => hpLogger}
@@ -28,6 +28,7 @@ object Server extends CustomCodecs {
   private val bindHost = sys.env.getOrElse("BINDHOST", "0.0.0.0")
   private val serverPoolSize = sys.env.getOrElse("SERVERPOOL", "16").toInt
   private val defaultHost = sys.env.getOrElse("DATASOURCE", "www.dummy.com")
+  private val imageHost = sys.env.getOrElse("IMAGESOURCE", "localhost:8083")
 
   private val nameCollection = "name_basics"
   private val titleCollection = "title_basics_ratings"
@@ -40,7 +41,7 @@ object Server extends CustomCodecs {
     ex <- Sync[F].delay(ExecutionContext.fromExecutorService(es))
   } yield ex
 
-  def getImdbSvc[F[_]: Async](db: MongoDatabase[F]): F[ImdbQuery[F]] =  for {
+  private def getImdbSvc[F[_]: Async](db: MongoDatabase[F]): F[ImdbQuery[F]] =  for {
     titleCollCodec <- db.getCollectionWithCodec[TitleRec](titleCollection)
     titlePrincipleCollCodec <- db.getCollectionWithCodec[TitleRec](titlePrincipalsCollection)
     nameCollCodec <- db.getCollectionWithCodec[AutoNameRec](nameCollection)
@@ -49,32 +50,27 @@ object Server extends CustomCodecs {
       nameCollCodec))
   } yield imdbSvc
 
-  def getEmailSvc[F[_]: Async](db: MongoDatabase[F]): F[EmailContact[F]] = for {
+  private def getEmailSvc[F[_]: Async](db: MongoDatabase[F]): F[EmailContact[F]] = for {
     emailColl <- db.getCollection(emailCollection)
     emailSvc <- Sync[F].delay(EmailContact.impl[F](emailColl))
   } yield emailSvc
 
-  def getServices[F[_]: Async](db: MongoDatabase[F]): F[HttpApp[F]] = {
+  def getServices[F[_]: Async](db: MongoDatabase[F], client: Client[F]): F[HttpApp[F]] = {
     for {
       imdbSvc <- getImdbSvc(db)
       emailSvc <- getEmailSvc(db)
-      scrapeSvc <- Sync[F].delay(new ReleaseDates[F](defaultHost))
+      scrapeSvc <- Sync[F].delay(new ReleaseDates[F](defaultHost, imageHost, client))
       httpApp <- Sync[F].delay(
         Router("/" ->
           (ReleaseRoutes.httpRoutes(scrapeSvc) <+>
-            EmailContactRoutess.httpRoutes(emailSvc) <+>
-            ImdbRoutess.httpRoutes(imdbSvc))
+            EmailContactRoutes.httpRoutes(emailSvc) <+>
+            ImdbRoutes.httpRoutes(imdbSvc))
         )
           .orNotFound)
       _ <- Sync[F].delay(L.info(s""""added routes for reldate"""))
-      finalHttpApp <- Sync[F].delay(hpLogger.httpApp(logHeaders = true, logBody = true)(httpApp))
+      finalHttpApp <- Sync[F].delay(hpLogger.httpApp(logHeaders = true, logBody = false)(httpApp))
     } yield finalHttpApp
   }
-
-  def clientToServices[F[_]: Async](dbName: String, mongoClient: MongoClient[F]): F[HttpApp[F]] = for {
-    db <- mongoClient.getDatabase(dbName)
-    service <- getServices(db)
-  } yield service
 
   def getResource[F[_]: Async](finalHttpApp: HttpApp[F]): Resource[F, Server] = {
     for {

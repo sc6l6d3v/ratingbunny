@@ -19,6 +19,7 @@ object Dependencies {
   }
 
   object http4s {
+    val client = "org.http4s"  %% "http4s-ember-client" % Versions.Http4sVersion
     val server = "org.http4s"  %% "http4s-ember-server" % Versions.Http4sVersion
     val circe  = "org.http4s"  %% "http4s-circe"        % Versions.Http4sVersion
     val dsl =    "org.http4s"  %% "http4s-dsl"          % Versions.Http4sVersion
