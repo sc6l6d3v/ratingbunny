@@ -41,7 +41,7 @@ object ImdbQuery {
 
   final case class AutoTitleRec(primaryTitle: Option[String])
 
-  final case class TitleRec(averageRating: Option[Double], numVotes: Option[Int],
+  final case class TitleRec(_id: String, averageRating: Option[Double], numVotes: Option[Int],
                             titleType: String, primaryTitle: String, originalTitle: String,
                             isAdult: Int, startYear: Int, endYear: String, runTimeMinutes: Option[Int],
                             genresList: List[String])
