@@ -12,7 +12,7 @@ FROM openjdk:8
 ENV SCALA_VERSION 2.13.1
 ENV SBT_VERSION   1.0.2
 ENV APP_NAME      ratingslave
-ENV APP_VERSION   0.1-SNAPSHOT
+ENV APP_VERSION   1.0
 
 # ENV variables for App
 
