@@ -6,7 +6,7 @@
 #
 
 # Pull base image
-FROM openjdk:8
+FROM amazoncorretto:17-alpine-jdk
 
 # Env variables
 ENV SCALA_VERSION 2.13.1
@@ -15,6 +15,8 @@ ENV APP_NAME      ratingslave
 ENV APP_VERSION   1.0
 
 # ENV variables for App
+RUN \
+   apk add --no-cache tar curl bash
 
 # Install Scala
 ## Piping curl directly in tar
