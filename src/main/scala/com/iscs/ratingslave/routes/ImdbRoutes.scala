@@ -25,38 +25,48 @@ object ImdbRoutes {
         for {
           reqParams <- req.as[ReqParams]
           rtng <- getRating(rating)
-          titleStreamResp <- Ok(if (reqParams.year.nonEmpty)
+          titleStream <- Sync[F].delay(if (reqParams.year.nonEmpty)
             I.getByTitle(reqParams.query, rtng, reqParams)
           else
             Stream.empty)
-        } yield titleStreamResp
+          titleList <- titleStream.compile.toList
+          resp <- Ok(titleList)
+        } yield resp
       case req@POST -> Root / "api" / "v1" / "name2" / name / rating =>
         for {
           reqParams <- req.as[ReqParams]
           rtng <- getRating(rating)
-          imdbNames <- Ok(if (reqParams.year.nonEmpty)
+          imdbNameStream <- Sync[F].delay(if (reqParams.year.nonEmpty)
             I.getByName(name, rtng, reqParams)
           else
             Stream.empty)
-        } yield imdbNames
+          nameList <- imdbNameStream.compile.toList
+          resp <- Ok(nameList)
+        } yield resp
       case req@POST -> Root / "api" / "v1" / "name" / name / rating =>
         for {
           reqParams <- req.as[ReqParams]
           rtng <- getRating(rating)
-          imdbNames <- Ok(if (reqParams.year.nonEmpty)
+          imdbNameStream <- Sync[F].delay(if (reqParams.year.nonEmpty)
             I.getByEnhancedName(name, rtng, reqParams)
           else
             Stream.empty)
-        } yield imdbNames
+          nameList <- imdbNameStream.compile.toList
+          resp <- Ok(nameList)
+        } yield resp
       case GET -> Root / "api" / "v1" / "autoname" / name =>
         for {
           _ <- Sync[F].delay(L.info(s""""request" autoname=$name"""))
-          resp <- Ok(I.getAutosuggestName(name))
+          nameStream <- Sync[F].delay(I.getAutosuggestName(name))
+          nameList <- nameStream.compile.toList
+          resp <- Ok(nameList)
         } yield resp
       case GET -> Root / "api" / "v1" / "autotitle" / title =>
         for {
           _ <- Sync[F].delay(L.info(s""""request" autotitle=$title"""))
-          resp <- Ok(I.getAutosuggestTitle(title))
+          titleStream <- Sync[F].delay(I.getAutosuggestTitle(title))
+          titleList <- titleStream.compile.toList
+          resp <- Ok(titleList)
         } yield resp
     }.map(_.withContentType(`Content-Type`(`json`)))
     CORSSetup.methodConfig(svc)

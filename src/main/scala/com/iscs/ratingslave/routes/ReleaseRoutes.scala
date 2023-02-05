@@ -31,19 +31,25 @@ object ReleaseRoutes {
         for {
           _ <- Sync[F].delay(L.info(s""""request" date=$year/$month rating=$rating"""))
           ratingVal <- getRating(rating)
-          resp <- Ok(R.findReleases("rel", year, month, ratingVal))
+          relStream <- Sync[F].delay(R.findReleases("rel", year, month, ratingVal))
+          relList <- relStream.compile.toList
+          resp <- Ok(relList)
         } yield resp
        case _ @ GET -> Root / "api" / "v1" / "top" / year / rating =>
         for {
           _ <- Sync[F].delay(L.info(s""""request" date=$year rating=$rating"""))
           ratingVal <- getRating(rating)
-          resp <- Ok(R.findMovies("top", year, ratingVal))
+          topStream <- Sync[F].delay(R.findMovies("top", year, ratingVal))
+          topList <- topStream.compile.toList
+          resp <- Ok(topList)
         } yield resp
       case _ @ GET -> Root / "api" / "v1" / "new" / year / rating =>
         for {
           _ <- Sync[F].delay(L.info(s""""request" date=$year rating=$rating"""))
           ratingVal <- getRating(rating)
-          resp <- Ok(R.findMovies("new", year, ratingVal))
+          newStream <- Sync[F].delay(R.findMovies("new", year, ratingVal))
+          newList <- newStream.compile.toList
+          resp <- Ok(newList)
         } yield resp
 /*      case default =>
         L.error(s"got bad request: ${default.pathInfo} ")
