@@ -38,7 +38,7 @@ class ReleaseDates[F[_]: Async](defaultHost: String, imageHost: String, client: 
     "new" -> s"https://$defaultHost/new-movies-YYYY/",
     "top" -> s"https://$defaultHost/top-movies-YYYY/"
   )
-  private val metaImage = if (imageHost.contains("localhost") ) s"http://$imageHost/meta" else  s"https://$imageHost/meta"
+  private val metaImage = if (imageHost.contains("localhost") || imageHost.startsWith("192") ) s"http://$imageHost/meta" else  s"https://$imageHost/meta"
   private val now = LocalDate.now
   private val curYear = now.getYear.toString
   private val curMonth = f"${now.getMonthValue}%02d"
