@@ -6,44 +6,21 @@
 #
 
 # Pull base image
-FROM amazoncorretto:17-alpine-jdk
+FROM bellsoft/liberica-openjdk-alpine:17.0.5
 
 # Env variables
-ENV SCALA_VERSION 2.13.1
+ENV SCALA_VERSION 2.13.8
 ENV SBT_VERSION   1.0.2
 ENV APP_NAME      ratingslave
 ENV APP_VERSION   1.0
 
 # ENV variables for App
 RUN \
-   apk add --no-cache tar curl bash
-
-# Install Scala
-## Piping curl directly in tar
-RUN \
-  curl -fsL https://downloads.typesafe.com/scala/$SCALA_VERSION/scala-$SCALA_VERSION.tgz | tar xfz - -C /root/ && \
-  echo >> /root/.bashrc && \
-  echo "export PATH=~/scala-$SCALA_VERSION/bin:$PATH" >> /root/.bashrc
-
-# Install sbt
-#RUN \
-#  curl -L -o sbt-$SBT_VERSION.deb https://dl.bintray.com/sbt/debian/sbt-$SBT_VERSION.deb && \
-#  dpkg -i sbt-$SBT_VERSION.deb && \
-#  rm sbt-$SBT_VERSION.deb && \
-#  apt-get update && \
-#  apt-get install sbt && \
-#   sbt sbtVersion
+   apk add --no-cache curl bash busybox-extras
 
 # Define working directory
 WORKDIR /root
 ENV PROJECT_HOME /usr/src
-
-COPY ["build.sbt", "/tmp/build/"]
-COPY ["project/Dependencies.scala", "project/plugins.sbt", "project/build.properties", "/tmp/build/project/"]
-# RUN cd /tmp/build && \
-#  sbt update && \
-#  sbt compile && \
-#  sbt assembly
 
 RUN mkdir -p $PROJECT_HOME/data
 

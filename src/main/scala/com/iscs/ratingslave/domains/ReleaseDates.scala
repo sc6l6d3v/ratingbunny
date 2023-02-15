@@ -38,7 +38,8 @@ class ReleaseDates[F[_]: Async](defaultHost: String, imageHost: String, client: 
     "new" -> s"https://$defaultHost/new-movies-YYYY/",
     "top" -> s"https://$defaultHost/top-movies-YYYY/"
   )
-  private val metaImage = if (imageHost.contains("localhost") || imageHost.startsWith("192") ) s"http://$imageHost/meta" else  s"https://$imageHost/meta"
+  L.info(s"imageHost {}", imageHost)
+  private val metaImage = if (imageHost startsWith  "tmdbimg") s"http://$imageHost/meta" else  s"https://$imageHost/meta"
   private val now = LocalDate.now
   private val curYear = now.getYear.toString
   private val curMonth = f"${now.getMonthValue}%02d"
@@ -75,6 +76,8 @@ class ReleaseDates[F[_]: Async](defaultHost: String, imageHost: String, client: 
   } yield maybeScrape
 
   def getImage(imdb: String): Stream[F, Byte] = for {
+    imgStr <- Stream.eval(Sync[F].delay(s"""$metaImage/$imdb/S"""))
+    _ <- Stream.eval(Sync[F].delay(L.info(s"image uri {}", imgStr)))
     imgReq <- Stream.eval(Sync[F].delay(Request[F](Method.GET, Uri.unsafeFromString(s"""$metaImage/$imdb/S"""))))
     (imgTime, imgBytes) <- Stream.eval(Clock[F].timed(client.run(imgReq)
       .use(resp =>
