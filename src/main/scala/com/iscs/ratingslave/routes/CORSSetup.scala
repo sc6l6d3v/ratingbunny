@@ -22,6 +22,7 @@ object CORSSetup {
       case Left(l) => L.error(s"got bad host: $l"); List.empty[Origin.Host]
     })
     .toSet
+  L.info(s"got origins: ${reactDeploys.mkString(",")}")
   private val methods = Set(Method.GET, Method.POST)
 
   def methodConfig[F[_] : Async](svc: HttpRoutes[F]) = CORS.policy
