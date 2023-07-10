@@ -24,12 +24,18 @@ object CORSSetup {
     .toSet
   L.info(s"got origins: ${reactDeploys.mkString(",")}")
   private val methods = Set(Method.GET, Method.POST)
+  private val checkOrigin = (host: Origin.Host) => {
+    reactDeploys.exists{ curHosts =>
+      L.debug(s"compare ${curHosts.host.value} to ${host.host.value}")
+      curHosts.host.value == host.host.value
+    }
+  }
 
-  def methodConfig[F[_] : Async](svc: HttpRoutes[F]) = CORS.policy
+  def methodConfig[F[_] : Async](svc: HttpRoutes[F]): HttpRoutes[F] = CORS.policy
     .withAllowCredentials(true)
     .withMaxAge(1.day)
     .withAllowMethodsIn(methods)
-    .withAllowOriginHost(reactDeploys)
+    .withAllowOriginHost(checkOrigin)
     .apply(svc)
 
   def RouteNotFound(badVal: String): RouteMessage =

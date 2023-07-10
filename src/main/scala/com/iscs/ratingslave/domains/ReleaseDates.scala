@@ -38,8 +38,9 @@ class ReleaseDates[F[_]: Async](defaultHost: String, imageHost: String, client: 
     "new" -> s"https://$defaultHost/new-movies-YYYY/",
     "top" -> s"https://$defaultHost/top-movies-YYYY/"
   )
-  L.info(s"imageHost {}", imageHost)
-  private val metaImage = if (imageHost startsWith  "tmdbimg") s"http://$imageHost/meta" else  s"https://$imageHost/meta"
+  private val proto = if (List("tmdbimg", "localhost", "192.168.4").exists(host => imageHost startsWith host)) "http" else  "https"
+  private val metaImage = s"$proto://$imageHost/meta"
+  L.info(s"imageHost {} metaImage {}", imageHost, metaImage)
   private val now = LocalDate.now
   private val curYear = now.getYear.toString
   private val curMonth = f"${now.getMonthValue}%02d"
@@ -77,14 +78,14 @@ class ReleaseDates[F[_]: Async](defaultHost: String, imageHost: String, client: 
 
   def getImage(imdb: String): Stream[F, Byte] = for {
     imgStr <- Stream.eval(Sync[F].delay(s"""$metaImage/$imdb/S"""))
-    _ <- Stream.eval(Sync[F].delay(L.info(s"image uri {}", imgStr)))
-    imgReq <- Stream.eval(Sync[F].delay(Request[F](Method.GET, Uri.unsafeFromString(s"""$metaImage/$imdb/S"""))))
+    imgReq <- Stream.eval(Sync[F].delay(Request[F](Method.GET, Uri.unsafeFromString(imgStr))))
     (imgTime, imgBytes) <- Stream.eval(Clock[F].timed(client.run(imgReq)
       .use(resp =>
         resp.body.compile
           .to(ByteVector)
           .map(_.toArray))))
-    _ <- Stream.eval(Sync[F].delay(L.info(s"image id {} size {} time {} ms", imdb, imgBytes.length, imgTime.toMillis)))
+    _ <- Stream.eval(Sync[F].delay(L.info(s"imgStr {} image id {} size {} time {} ms",
+      imgStr, imdb, imgBytes.length, imgTime.toMillis)))
     imgStream <- Stream.emits(imgBytes)
   } yield imgStream
 

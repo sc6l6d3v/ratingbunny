@@ -17,7 +17,7 @@ object EmailContactRoutes {
     val dsl = Http4sDsl[F]
     import dsl._
     val svc = HttpRoutes.of[F] {
-      case req@POST -> Root / "api" / "v1" / "addMsg" =>
+      case req@POST -> Root / "api" / "v2" / "addMsg" =>
         for {
           email <- req.as[Email]
           _ <- Sync[F].delay(L.info(s""""request" ${email.name} ${email.email} ${email.subject} ${email.msg}"""))

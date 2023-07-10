@@ -20,7 +20,7 @@ object ReleaseRoutes {
     val dsl = Http4sDsl[F]
     import dsl._
     val imgSvc = HttpRoutes.of[F] {
-      case _@GET -> Root / "api" / "v1" / "image" / imdbId =>
+      case _@GET -> Root / "api" / "v2" / "image" / imdbId =>
         for {
           _ <- Sync[F].delay(L.info(s""""request" image=$imdbId"""))
           resp <- Ok(R.getImage(imdbId))

@@ -159,7 +159,6 @@ object ImdbQuery {
         })
         bsonFilter <- Stream.eval(Sync[F].delay(titleFilter.and(ratingBson).and(paramBson)))
         (byTitleTime, dbList) <- Stream.eval(Clock[F].timed(titleFx.find(bsonFilter)
-          .limit(DOCLIMIT)
           .skip(0)
           .sortByDesc(startYear)
           .projection(Projection.exclude(genres))
@@ -334,7 +333,7 @@ object ImdbQuery {
             .stream
             .compile.toList))
         _ <- Stream.eval(Sync[F].delay(L.info(s"getByEnhancedName {} ms", byEnhancedNameTime.toMillis)))
-        json <- Stream.emits(dbList)
+        json <- Stream.emits(dbList.sortBy(_.startYear)(Ordering.Int.reverse))
       } yield json
 
       /**
