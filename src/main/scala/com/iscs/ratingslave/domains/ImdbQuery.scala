@@ -13,8 +13,10 @@ import fs2.Stream
 import io.circe.generic.auto._
 import mongo4cats.circe._
 import mongo4cats.operations.{Accumulator, Aggregate, Filter, Projection, Sort}
-import mongo4cats.operations.Filter.{regex, text}
-import org.bson.types.Decimal128
+import mongo4cats.operations.Filter.regex
+import org.mongodb.scala.bson.{BsonArray, BsonDocument, BsonElement, BsonInt32}
+import org.mongodb.scala.model.{Accumulators, Aggregates, Projections}
+
 import scala.language.implicitConversions
 
 abstract class QueryObj
@@ -29,10 +31,9 @@ trait ImdbQuery[F[_]] {
   def getAutosuggestName(titlePrefix: String): Stream[F, AutoNameRec]
 }
 
-object ImdbQuery {
+object ImdbQuery extends FilterHelper {
   private val L = Logger[this.type]
 
-  private val DOCLIMIT = 200
   private val AUTOSUGGESTLIMIT = 20
 
   def apply[F[_]](implicit ev: ImdbQuery[F]): ImdbQuery[F] = ev
@@ -58,7 +59,7 @@ object ImdbQuery {
 
       val id = "_id"
       val birthYear = "birthYear"
-      val deathYear = "deathYear1"
+      val deathYear = "deathYear"
       val firstName = "firstName"
       val lastName = "lastName"
       val knownForTitles = "knownForTitles"
@@ -70,24 +71,20 @@ object ImdbQuery {
       val primaryTitle = "primaryTitle"
       val matchedTitles = "matchedTitles"
 
-      val averageRating = "averageRating"
       val matchedTitles_averageRating = "matchedTitles.averageRating"
       val genres = "genres"
       val matchedTitles_genres = "matchedTitles.genres"
-      val genresList = "genresList"
       val matchedTitles_genresList = "matchedTitles.genresList"
-      val isAdult = "isAdult"
-      val numvotes = "numVotes"
       val matchedTitles_isAdult = "matchedTitles.isAdult"
       val matchedTitles_numvotes = "matchedTitles.numVotes"
-      val startYear = "startYear"
       val matchedTitles_startYear = "matchedTitles.startYear"
-      val titleType = "titleType"
       val matchedTitles_titleType = "matchedTitles.titleType"
 
-      def getTitleModelFilters(title: String): F[Filter] = for {
-        bsonCombo <- Sync[F].delay(text(title).and(regex(primaryTitle, title)))
-      } yield bsonCombo
+      def getTitleModelFilters(title: String): F[Option[List[BsonElement]]] = for {
+        bsonElts <- Sync[F].delay(
+          List(searchText(title), searchTitle(primaryTitle, title))
+        )
+      } yield Some(bsonElts)
 
       implicit def convertBooleanToInt(b: Boolean): asInt = new asInt(b)
 
@@ -97,31 +94,23 @@ object ImdbQuery {
           case NameQuery  => nameString
         }
 
-      private def inOrEq[T](fieldName: String, inputList: List[T]): Filter = inputList match {
-        case manyElements:List[T] if manyElements.size > 1    => Filter.in(fieldName, manyElements)
-        case singleElement:List[T] if singleElement.size == 1 => Filter.eq(fieldName, singleElement.head)
+      def getParamList(params: ReqParams, qType: QueryObj): F[List[BsonElement]] = {
+        val filters: List[Option[BsonElement]] = List(
+          params.year.map(yr => betweenYearsMap(mapQtype(qType, startYear, matchedTitles_startYear), yr.head, yr.last)),
+          params.genre.map(genre => inOrEqList(mapQtype(qType, genresList, matchedTitles_genresList), genre)),
+          params.titleType.map(tt => inOrEqList(mapQtype(qType, titleType, matchedTitles_titleType), tt)),
+          params.isAdult.map(isAdlt => isIntElt(mapQtype(qType, isAdult, matchedTitles_isAdult), isAdlt.toInt)),
+          params.votes.map(v => numVotesMap(mapQtype(qType, numVotes, matchedTitles_numvotes), v))
+        )
+        Sync[F].delay(filters.flatten)
       }
 
-      private def between(fieldname: String, valueRange: List[Int]): Filter = {
-        Filter.gte(fieldname, valueRange.head).and(Filter.lte(fieldname, valueRange.last))
+      def buildOrCheck(fieldName: String, dbl: Double): BsonElement = {
+        BsonElement("$or",
+          BsonArray(BsonDocument(extractElt(fieldNotNaN(fieldName))),
+            BsonDocument(extractElt(strExists(fieldName, tf = false))),
+            BsonDocument(extractElt(dblGte(fieldName, dbl)))))
       }
-
-      def getParamList(params: ReqParams, qType: QueryObj): F[Filter] = for {
-        bList <- Sync[F].delay(
-          List(
-            params.year.map(yr => between(mapQtype(qType, startYear, matchedTitles_startYear), yr)),
-            params.genre.map(genre => inOrEq(mapQtype(qType, genresList, matchedTitles_genresList), genre)),
-            params.titleType.map(tt => inOrEq(mapQtype(qType, titleType, matchedTitles_titleType), tt)),
-            params.isAdult.map(isAdlt => Filter.eq(mapQtype(qType, isAdult, matchedTitles_isAdult), isAdlt.toInt)),
-            params.votes.map(v => Filter.gte(mapQtype(qType, numvotes, matchedTitles_numvotes), v))
-          ).flatten)
-        bList2 <- Sync[F].delay(bList
-          .foldLeft(Filter.empty){ case (acc, filt) =>
-            acc.and(filt)
-          })
-      } yield bList2
-
-      def getParamModelFilters(params: ReqParams, qType: QueryObj): F[Filter] = getParamList(params, qType)
 
       /**
        * {
@@ -146,19 +135,18 @@ object ImdbQuery {
        * @return
        */
       override def getByTitle(optTitle: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRec] = for {
-        paramBson <- Stream.eval(getParamModelFilters(params, TitleQuery))
-        ratingBson <- Stream.eval(Sync[F].delay(
-            Filter.exists(averageRating).and(
-              Filter.eq(averageRating, Decimal128.NaN)).or(
-              Filter.notExists(averageRating)).or(
-              Filter.gte(averageRating, rating))
-        ))
-        titleFilter <- Stream.eval(optTitle match {
-          case Some(title) => getTitleModelFilters(title)
-          case _           => Sync[F].delay(Filter.empty)
+        paramElt <- Stream.eval(getParamList(params, TitleQuery))
+        ratingElt <- Stream.eval(Sync[F].delay(buildOrCheck(averageRating, rating)))
+        titleElts <- Stream.eval(optTitle match {
+          case Some(title)  => getTitleModelFilters(title)
+          case _            => Sync[F].delay(Option.empty[List[BsonElement]])
         })
-        bsonFilter <- Stream.eval(Sync[F].delay(titleFilter.and(ratingBson).and(paramBson)))
-        (byTitleTime, dbList) <- Stream.eval(Clock[F].timed(titleFx.find(bsonFilter)
+        nonEmptyElts <- Stream.eval(Sync[F].delay {
+          val eltList = List(titleElts, Some(paramElt :+ ratingElt)).flatten
+          eltList.flatten
+        })
+        bsonElts <-  Stream.eval(Sync[F].delay {BsonDocument(composeElts(nonEmptyElts))})
+        (byTitleTime, dbList) <- Stream.eval(Clock[F].timed(titleFx.find(bsonElts)
           .skip(0)
           .sortByDesc(startYear)
           .projection(Projection.exclude(genres))
@@ -171,67 +159,88 @@ object ImdbQuery {
       /**
        * ('name_basics').aggregate(
        * [
-       *   {"$match": {"$and": [{"$and": [{"knownForTitles": {"$exists": true}}, {"knownForTitles": {"$ne": ""}}]}, {"primaryName": "Steve McQueen"}]}},
-       *   {"$lookup": {"from": "title_basics_ratings", "localField": "knownForTitlesList", "foreignField": "_id", "as": "matchedTitles"}},
-       *   {"$project": {"matchedTitles.genres": 0, "deathYear1": 0}},
-       *   {"$unwind": {"path": "$matchedTitles"}},
-       *   {"$match": {"$and": [{"$and": [{"$and": [{"$and": [{}, {"$and": [{"matchedTitles.startYear": {"$gte": 2010}}, {"matchedTitles.startYear": {"$lte": 2018}}]}]}, {"matchedTitles.genresList": {"$in": ["Action", "Drama", "Horror"]}}]}, {"matchedTitles.titleType": "movie"}]}, {"$or": [{"matchedTitles.averageRating": {"$numberDecimal": "NaN"}}, {"matchedTitles.averageRating": {"$gte": 4.0}}]}]}},
-       *   {"$group": {"_id": "$_id",
-       *               "primaryName": {"$first": "$primaryName"},
-       *               "firstName": {"$first": "$firstName"},
-       *               "lastName": {"$first": "$lastName"},
-       *               "birthYear": {"$first": "$birthYear"},
-       *               "deathYear": {"$first": "$deathYear"},
-       *                "matchedTitles": {
-                                           "$push": "$matchedTitles"
-                                         }
-                       }}
+       *   {
+       *      "$match":{
+       *                 "knownForTitles":{"$ne":""},
+       *                 "primaryName":"Steve McQueen"
+       *               }
+       *   },{
+       *      "$lookup":{
+       *          "from":"title_basics_ratings",
+       *          "localField":"knownForTitlesList",
+       *          "foreignField":"_id",
+       *          "as":"matchedTitles"
+       *       }
+       *   },{
+       *       "$project":{
+       *           "matchedTitles.genres":0,
+       *           "deathYear":0
+       *        }
+       *   },{
+       *       "$unwind":"$matchedTitles"
+       *   },{
+       *       "$match":{
+       *           "matchedTitles.startYear":{"$gte":2010,"$lte":2018},
+       *           "matchedTitles.genresList":{"$in":["Action","Drama","Horror"]},
+       *           "matchedTitles.titleType":"movie",
+       *           "$or":[
+       *                  { "matchedTitles.averageRating":{"$not":{"$eq":{"$numberDecimal":"NaN"}}}},
+       *                  { "matchedTitles.averageRating":{"$exists":false}},
+       *                  { "matchedTitles.averageRating":{"$gte":4.0}}
+       *                 ]
+       *       }
+       *   },{
+       *       "$group":{
+       *           "_id":"$_id",
+       *           "primaryName":{"$first":"$primaryName"},
+       *           "firstName":{"$first":"$firstName"},
+       *           "lastName":{"$first":"$lastName"},
+       *           "birthYear":{"$first":"$birthYear"},
+       *           "deathYear":{"$first":"$deathYear"},
+       *           "matchedTitles":{"$push":"$matchedTitles"}
+       *         }
+       *   }
        * ])
+       *
        * @param name first lastname
        * @param rating IMDB
        * @param params object
        * @return stream of object
        */
       override def getByName(name: String, rating: Double, params: ReqParams): Stream[F, NameTitleRec] = for {
-        matchTitleWithName <- Stream.eval(Sync[F].delay(
-          Filter.exists(knownForTitles).and(
-            Filter.ne(knownForTitles, "")).and(
-            Filter.eq(primaryName, name))
+        paramsElt <- Stream.eval(getParamList(params, NameQuery))
+        ratingElt <- Stream.eval(Sync[F].delay(
+          paramsElt :+ buildOrCheck(matchedTitles_averageRating, rating)
         ))
-
-        paramsList <- Stream.eval(getParamList(params, NameQuery))
-        ratingBson <- Stream.eval(Sync[F].delay(
-          Filter.eq(matchedTitles_averageRating, Decimal128.NaN).or(
-            Filter.gte(matchedTitles_averageRating, rating))))
-        bsonCondensedList <- Stream.eval(Sync[F].delay(paramsList.and(ratingBson)))
-
-        projectionsList <- Stream.eval(Sync[F].delay(
-          ProjectionUtils.getProjectionFields(Map(
-            matchedTitles_genres -> false,
-            deathYear -> false
-          ))
+        projectionsList2 <- Stream.eval(Sync[F].delay(Projections.exclude(matchedTitles_genres,deathYear)))
+        matchTitleWithNameElt <- Stream.eval(Sync[F].delay(
+          List(
+            strExists(knownForTitles),
+            strNe(knownForTitles, ""),
+            strEq(primaryName, name)
+          )
         ))
-
-        comboagg <- Stream.eval(Sync[F].delay(
-          Aggregate.matchBy(matchTitleWithName)
-            .lookup(titleCollection,
+        aggElt <- Stream.eval(Sync[F].delay(
+          Seq(
+            Aggregates.`match`(BsonDocument(composeElts(matchTitleWithNameElt))),
+            Aggregates.lookup(titleCollection,
               knownForTitlesList,
               "_id",
-              matchedTitles)
-            .project(ProjectionUtils.getProjections(projectionsList))
-            .unwind(s"$$$matchedTitles")
-            .matchBy(bsonCondensedList)
-            .group("$_id",
-              Accumulator.first(primaryName, s"$$$primaryName")
-                .first(firstName, s"$$$firstName")
-                .first(lastName, s"$$$lastName")
-                .first(birthYear, s"$$$birthYear")
-                .first(deathYear, s"$$$deathYear")
-                .push(matchedTitles, s"$$$matchedTitles")
-            )
+              matchedTitles),
+            Aggregates.project(projectionsList2),
+            Aggregates.unwind(s"$$$matchedTitles"),
+            Aggregates.`match`(BsonDocument(composeElts(ratingElt))),
+            Aggregates.group("$_id",
+              Accumulators.first(primaryName, s"$$$primaryName"),
+              Accumulators.first(firstName, s"$$$firstName"),
+              Accumulators.first(lastName, s"$$$lastName"),
+              Accumulators.first(birthYear, s"$$$birthYear"),
+              Accumulators.first(deathYear, s"$$$deathYear"),
+              Accumulators.push(matchedTitles, s"$$$matchedTitles"))
+          )
         ))
         (byNameTime, dbList) <- Stream.eval(Clock[F].timed(
-          nameFx.aggregateWithCodec[NameTitleRec](comboagg)
+          nameFx.aggregateWithCodec[NameTitleRec](aggElt)
             .stream
             .compile.toList))
         _ <- Stream.eval(Sync[F].delay(L.info(s"getByName {} ms", byNameTime.toMillis)))
@@ -239,97 +248,79 @@ object ImdbQuery {
       } yield json
 
       /**
-       *  ('name_basics').aggregate([
-       *     {"$match": {"$and": [{"primaryName": "June Lockhart"}, {"category": {"$in": ["actor", "actress"]}}]}},
-       *     {"$lookup": {"from": "title_basics_ratings", "localField": "tconst", "foreignField": "_id", "as": "matchedTitles"}},
-       *     {"$match": {"$and": [
-       *                           {"$and": [
-       *                                      {"$and": [
-       *                                                 {"$and": [
-       *                                                            {"$and": [
-       *                                                                       {},
-       *                                                                       {"$and": [
-       *                                                                                  {"matchedTitles.startYear": {"$gte": 1937}},
-       *                                                                                  {"matchedTitles.startYear": {"$lte": 1979}}
-       *                                                                                ]}
-       *                                                                     ]},
-       *                                                            {"matchedTitles.genresList": "Comedy"}
-       *                                                          ]},
-       *                                                  {"matchedTitles.isAdult": 0}
-       *                                               ]},
-       *                                        {"matchedTitles.numVotes": {"$gte": 0}}
-       *                                     ]},
-       *                            {"$or": [
-       *                                       {"matchedTitles.averageRating": {"$numberDecimal": "NaN"}},
-       *                                       {"matchedTitles.averageRating": {"$gte": 4.0}}
-       *                                    ]}
-       *                          ]}},
-       *     {"$unwind": {"path": "$matchedTitles"}},
-       *     {"$group": {"_id": "$_id", "matchedTitles": {"$push": "$matchedTitles"}}},
-       *     {"$unwind": {"path": "$matchedTitles"}},
-       *     {"$replaceWith": "$matchedTitles"}]
-       *  ])
+       *  ('title_principals_withname').aggregate([
+       *     {
+       *       "$match":{
+       *          "primaryName":"June Lockhart",
+       *          "category":{"$in":["actor","actress"]}
+       *        }
+       *     },{
+       *       "$lookup":{
+       *          "from":"title_basics_ratings",
+       *          "localField":"tconst",
+       *          "foreignField":"_id",
+       *          "as":"matchedTitles"
+       *        }
+       *    },{
+       *      "$match":{
+       *         "matchedTitles.startYear":{"$gte":1937,"$lte":1979},
+       *         "matchedTitles.genresList":"Comedy",
+       *         "matchedTitles.isAdult":0,
+       *         "matchedTitles.numVotes":{"$gte":0},
+       *         "$or":[
+       *             {"matchedTitles.averageRating":{"$not":{"$eq":{"$numberDecimal":"NaN"}}}},
+       *             {"matchedTitles.averageRating":{"$exists":false}},
+       *             {"matchedTitles.averageRating":{"$gte":4.0}}
+       *          ]
+       *        }
+       *   },{
+       *        "$unwind":"$matchedTitles"
+       *   },{
+       *        "$group":{
+       *           "_id":"$_id",
+       *           "matchedTitles":{"$push":"$matchedTitles"}
+       *        }
+       *   },{
+       *        "$unwind":"$matchedTitles"
+       *   },{
+       *        "$replaceWith":"$matchedTitles"
+       *   },{
+       *        "$project":{"genres":0}
+       *   }
+       * ])
        * @param name first lastname
        * @param rating IMDB
        * @param params object
        * @return stream object
        */
       override def getByEnhancedName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec] = for {
-        matchNameAndRole <- Stream.eval(Sync[F].delay(
-            Filter.eq(primaryName, name).and(
-            Filter.in(category, roleList))
-          ))
-        nameMatchFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.matchBy(matchNameAndRole)
-        ))
-
-        lookupFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.lookup(titleCollection,
-            tconst,
-            "_id",
-            matchedTitles)
-        ))
-
-        paramsList <- Stream.eval(getParamList(params, NameQuery))
-        ratingBson <- Stream.eval(Sync[F].delay(
-            Filter.eq(matchedTitles_averageRating, Decimal128.NaN).or(
-            Filter.gte(matchedTitles_averageRating, rating)))
-        )
-        bsonCondensedList <- Stream.eval(Sync[F].delay{
-          paramsList.and(ratingBson)
-        })
-        matchLookupsFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.matchBy(bsonCondensedList)
-        ))
-
-        unwindFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.unwind(s"$$$matchedTitles")
-        ))
-
-        groupFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.group("$_id",
-            Accumulator.push(matchedTitles, s"$$$matchedTitles")
+        paramElts <- Stream.eval(getParamList(params, NameQuery))
+        ratingElt <- Stream.eval(Sync[F].delay(buildOrCheck(matchedTitles_averageRating, rating)))
+        bsonCondensedElts <- Stream.eval(Sync[F].delay(paramElts :+ ratingElt))
+        matchNameAndElt <- Stream.eval(Sync[F].delay(
+          List(strEq(primaryName, name),
+            inOrEqList(category, roleList)
           )
         ))
 
-        replaceFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.replaceWith(s"""$$$matchedTitles""")
-        ))
-
-        aggregation <- Stream.eval(Sync[F].delay(
+        aggregationElt <- Stream.eval(Sync[F].delay(
           Seq(
-            nameMatchFilter,
-            lookupFilter,
-            matchLookupsFilter,
-            unwindFilter,
-            groupFilter,
-            unwindFilter,
-            replaceFilter,
-          ).reduce(_ combinedWith _)
-        ))
+            Aggregates.`match`(BsonDocument(composeElts(matchNameAndElt))),
+            Aggregates.lookup(titleCollection,
+              tconst,
+              "_id",
+              matchedTitles),
+            Aggregates.`match`(BsonDocument(composeElts(bsonCondensedElts))),
+            Aggregates.unwind(s"$$$matchedTitles"),
+            Aggregates.group("$_id",
+              Accumulators.push(matchedTitles, s"$$$matchedTitles")),
+            Aggregates.unwind(s"$$$matchedTitles"),
+            Aggregates.replaceWith(s"""$$$matchedTitles"""),
+            Aggregates.project(BsonDocument(List((genres, BsonInt32(0)))))
+          )))
 
         (byEnhancedNameTime, dbList) <- Stream.eval(Clock[F].timed(
-          titlePrincipalsFx.aggregateWithCodec[TitleRec](aggregation)
+          titlePrincipalsFx.aggregateWithCodec[TitleRec](aggregationElt)
             .stream
             .compile.toList))
         _ <- Stream.eval(Sync[F].delay(L.info(s"getByEnhancedName {} ms", byEnhancedNameTime.toMillis)))
