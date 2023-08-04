@@ -37,6 +37,12 @@ trait FilterHelper {
 
   def strExists(fieldName: String, tf: Boolean = true): BsonElement = BsonElement(fieldName, BsonDocument("$exists" -> BsonBoolean(tf)))
 
+  def sortElt(fieldName: String, upDown: Int = 1): BsonElement =
+    if (List(1,1).contains(upDown))
+      BsonElement(fieldName, BsonInt32(upDown))
+    else
+      BsonElement(fieldName, BsonInt32(1))
+
   def strNe(fieldName: String, str: String): BsonElement = BsonElement(fieldName, BsonDocument("$ne" -> BsonString(str)))
 
   def inOrEqList(fieldName: String, inputList: List[String]): BsonElement = inputList match {
@@ -44,9 +50,9 @@ trait FilterHelper {
     case singleElement: List[String] if singleElement.size == 1 => BsonElement(fieldName, BsonString(singleElement.head))
   }
 
-  def searchText(msg: String): BsonElement = BsonElement("$text", BsonDocument("$search" -> BsonString(msg)))
+  def searchTextElt(msg: String): BsonElement = BsonElement("$text", BsonDocument("$search" -> BsonString(msg)))
 
-  def searchTitle(fieldName: String, msg: String): BsonElement = BsonElement(fieldName, BsonDocument("$regex" -> BsonRegularExpression(msg)))
+  def regexElt(fieldName: String, msg: String): BsonElement = BsonElement(fieldName, BsonDocument("$regex" -> BsonRegularExpression(msg)))
 
   def isIntElt(fieldName: String, isOn: Int): BsonElement = BsonElement(fieldName, BsonInt32(isOn))
 

@@ -16,6 +16,7 @@ import mongo4cats.operations.{Accumulator, Aggregate, Filter, Projection, Sort}
 import mongo4cats.operations.Filter.regex
 import org.mongodb.scala.bson.{BsonArray, BsonDocument, BsonElement, BsonInt32}
 import org.mongodb.scala.model.{Accumulators, Aggregates, Projections}
+import org.mongodb.scala.model.Projections._
 
 import scala.language.implicitConversions
 
@@ -82,7 +83,7 @@ object ImdbQuery extends FilterHelper {
 
       def getTitleModelFilters(title: String): F[Option[List[BsonElement]]] = for {
         bsonElts <- Sync[F].delay(
-          List(searchText(title), searchTitle(primaryTitle, title))
+          List(searchTextElt(title), regexElt(primaryTitle, title))
         )
       } yield Some(bsonElts)
 
@@ -329,11 +330,11 @@ object ImdbQuery extends FilterHelper {
 
       /**
        * ('name_basics').aggregate([
-       *   {"$match": {"$and": [{"lastName": "/%Caret%Cra"}, {"firstName": "Daniel"}]}},
+       *   {"$match": {"lastName": {$regex: /%Caret%Cra/, "firstName": "Daniel"}}},
        *   {"$project": {"firstName": 1, "lastName": 1}},
        *   {"$group": {"_id": "$lastName",
        *               "firstName": {"$first": "$firstName"}}},
-       *               {"$sort": {"_id": 1, "firstName": 1}},
+       *   {"$sort": {"_id": 1, "firstName": 1}}},
        *   {"$project": {"_id": 0, "firstName": 1, "lastName": "$_id"}},
        *   {"$limit": 20}
        * ])
@@ -348,62 +349,37 @@ object ImdbQuery extends FilterHelper {
             List(namePrefix)
         ))
 
-        lastFirst <- Stream.eval(
+        lastFirstElt <- Stream.eval(
           if (names.size == 1)
-            Sync[F].delay(regex(lastName, s"""^${names.head}"""))
+            Sync[F].delay(List(regexElt(lastName, s"""^${names.head}""")))
           else
-            Sync[F].delay(Filter.regex(lastName, s"""^${names.last}""").and(
-              Filter.eq(firstName, names.head)))
+            Sync[F].delay(List(
+              regexElt(lastName, s"""^${names.last}"""),
+              strEq(firstName, names.head)))
         )
 
-        nameMatchFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.matchBy(lastFirst)
-        ))
+        projectionsList2 <- Stream.eval(Sync[F].delay(include(firstName, lastName)))
 
-        projectionsList <- Stream.eval(Sync[F].delay(
-          ProjectionUtils.getProjectionFields(Map(
-            firstName -> true,
-            lastName -> true
-          ))
-        ))
+        sortElt <- Stream.eval(Sync[F].delay(List(sortElt(id), sortElt(firstName))))
 
-        projectionFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.project(ProjectionUtils.getProjections(projectionsList))
-        ))
-
-        groupFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.group("$lastName",
-            Accumulator.first(firstName, s"$$$firstName"))
-        ))
-
-        sortFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.sort(Sort.asc(id, firstName))
-        ))
-
-        lastProjectionsList <- Stream.eval(Sync[F].delay(
-          ProjectionUtils.getProjectionFields(Map(
-            id -> false,
-            firstName -> true,
-          )) ++ List(Projection.computed(lastName, "$_id"))
-        ))
-
-        lastProjectFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.project(ProjectionUtils.getProjections(lastProjectionsList))
-        ))
-
-        limitFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.limit(AUTOSUGGESTLIMIT)
+        lastProjectionsBson <- Stream.eval(Sync[F].delay(
+          fields(
+            exclude(id),
+            include(firstName),
+            computed(lastName, "$_id")
+          )
         ))
 
         aggregation <- Stream.eval(Sync[F].delay(
           Seq(
-            nameMatchFilter,
-            projectionFilter,
-            groupFilter,
-            sortFilter,
-            lastProjectFilter,
-            limitFilter
-          ).reduce(_ combinedWith _)
+            Aggregates.`match`(BsonDocument(composeElts(lastFirstElt))),
+            Aggregates.project(projectionsList2),
+            Aggregates.group("$lastName",
+              Accumulators.first(firstName, s"$$$firstName")),
+            Aggregates.sort(BsonDocument(composeElts(sortElt))),
+            Aggregates.project(lastProjectionsBson),
+            Aggregates.limit(AUTOSUGGESTLIMIT)
+          )
         ))
 
         (autosuggestTime, dbList) <- Stream.eval(Clock[F].timed(
