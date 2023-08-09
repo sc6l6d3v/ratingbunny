@@ -2,8 +2,6 @@ package com.iscs.ratingslave.domains
 
 import cats.effect.Sync
 import cats.effect.kernel.Clock
-import com.iscs.ratingslave.util.ProjectionUtils
-import mongo4cats.collection.MongoCollection
 import cats.implicits._
 import com.iscs.ratingslave.domains.ImdbQuery.{AutoNameRec, AutoTitleRec, NameTitleRec, TitleRec}
 import com.iscs.ratingslave.model.Requests.ReqParams
@@ -12,11 +10,11 @@ import com.typesafe.scalalogging.Logger
 import fs2.Stream
 import io.circe.generic.auto._
 import mongo4cats.circe._
-import mongo4cats.operations.{Accumulator, Aggregate, Filter, Projection, Sort}
-import mongo4cats.operations.Filter.regex
+import mongo4cats.collection.MongoCollection
+import mongo4cats.operations.Projection
 import org.mongodb.scala.bson.{BsonArray, BsonDocument, BsonElement, BsonInt32}
-import org.mongodb.scala.model.{Accumulators, Aggregates, Projections}
 import org.mongodb.scala.model.Projections._
+import org.mongodb.scala.model.{Accumulators, Aggregates, Projections}
 
 import scala.language.implicitConversions
 
@@ -391,10 +389,11 @@ object ImdbQuery extends FilterHelper {
       } yield json
 
       /**
-       * ('name_basics').aggregate([
-       *     {"$match": {"$and": [{"$text": {"$search": "Gone with the W"}}, {"primaryTitle": /%caret%Gone with the W/}]}},
+       * ('title_basics_ratings').aggregate([
+       *     {"$match": {"$text": {"$search": "Gone with the W"}, "primaryTitle": {$regex: /%caret%Gone with the W/}}},
        *     {"$project": {"_id": 0, "primaryTitle": 1}},
-       *     {"$group": {"_id": "$primaryTitle", "primaryTitle": {"$first": "$primaryTitle"}}}, {"$sort": {"primaryTitle": 1}},
+       *     {"$group": {"_id": "$primaryTitle", "primaryTitle": {"$first": "$primaryTitle"}}},
+       *     {"$sort": {"primaryTitle": 1}},
        *     {"$limit": 20},
        *     {"$project": {"_id": 0, "primaryTitle": 1}}
        * ])
@@ -402,48 +401,22 @@ object ImdbQuery extends FilterHelper {
        * @return stream of object
        */
       override def getAutosuggestTitle(titlePrefix: String): Stream[F, AutoTitleRec] = for {
-        titleTextRegex <- Stream.eval(
-          Sync[F].delay(Filter.text(titlePrefix).and(
-            Filter.regex(primaryTitle, s"""^$titlePrefix""")))
-        )
-
-        titleMatchFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.matchBy(titleTextRegex)
+        titleTextElts <- Stream.eval(Sync[F].delay(
+          List(searchTextElt(titlePrefix), regexElt(primaryTitle, s"""^$titlePrefix"""))
         ))
 
-        projectionsList <- Stream.eval(Sync[F].delay(
-          ProjectionUtils.getProjectionFields(Map(
-            id -> false,
-            primaryTitle -> true
-          ))
-        ))
-
-        projectionFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.project(ProjectionUtils.getProjections(projectionsList))
-        ))
-
-        groupFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.group("$primaryTitle",
-            Accumulator.first(primaryTitle, s"$$$primaryTitle"))
-        ))
-
-        sortFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.sort(Sort.asc(primaryTitle))
-        ))
-
-        limitFilter <- Stream.eval(Sync[F].delay(
-          Aggregate.limit(AUTOSUGGESTLIMIT)
-        ))
-
+        projectionsList <- Stream.eval(Sync[F].delay(fields(exclude(id), include(primaryTitle))))
+        sortElt <- Stream.eval(Sync[F].delay(sortElt(primaryTitle)))
         aggregation <- Stream.eval(Sync[F].delay(
           Seq(
-            titleMatchFilter,
-            projectionFilter,
-            groupFilter,
-            sortFilter,
-            limitFilter,
-            projectionFilter
-          ).reduce(_ combinedWith _)
+            Aggregates.`match`(BsonDocument(composeElts(titleTextElts))),
+            Aggregates.project(projectionsList),
+            Aggregates.group("$primaryTitle",
+              Accumulators.first(primaryTitle, s"$$$primaryTitle")),
+            Aggregates.sort(BsonDocument(extractElt(sortElt))),
+            Aggregates.limit(AUTOSUGGESTLIMIT),
+            Aggregates.project(projectionsList)
+          )
         ))
 
         (autosuggestTitleTime, dbList) <- Stream.eval(Clock[F].timed(
