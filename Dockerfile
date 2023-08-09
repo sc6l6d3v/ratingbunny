@@ -6,7 +6,7 @@
 #
 
 # Pull base image
-FROM bellsoft/liberica-openjdk-alpine:17.0.5
+FROM bellsoft/liberica-openjdk-alpine:17.0.8
 
 # Env variables
 ENV SCALA_VERSION 2.13.8

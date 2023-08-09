@@ -9,13 +9,13 @@ object Dependencies {
     val log4catsVersion = "2.3.1"
     val fs2Version = "3.4.0"
     val loggingVersion = "3.9.2"
-    val mongo4catsVersion = "0.6.6"
+    val mongo4catsVersion = "0.6.15"
     val jsoupVersion = "1.13.1"
     val scalatestVersion = "3.2.2"
-    val mongoScalaVersion = "4.8.0"
+    val mongoScalaVersion = "4.10.0"
     val circeVersion      = "0.14.3"
     val catsVersion       = "3.9.0"
-    val catsEffectVersion       = "3.4.4"
+    val catsEffectVersion = "3.5.0"
   }
 
   object http4s {

@@ -25,7 +25,7 @@ object ImdbRoutes {
   private val columnSpacer = 50
   private val rowsPerPage = 3 // function of window height
   private def cardsPerRow(width: Int): Int = width / (cardWidth + columnSpacer)
-  private def pageSize(width: Int) = cardsPerRow(width) * rowsPerPage
+  private def pageSize(width: Int): Int = cardsPerRow(width) * rowsPerPage
 
   def httpRoutes[F[_]: Async](I: ImdbQuery[F]): HttpRoutes[F] = {
     val dsl = Http4sDsl[F]
@@ -33,7 +33,6 @@ object ImdbRoutes {
     val svc = HttpRoutes.of[F] {
       case req@POST -> Root / "api" / "v2" / "title" / page / rating :? WindowWidthQueryParameterMatcher(ws) +& WindowHeightQueryParameterMatcher(wh) =>
         for {
-          _ <- Sync[F].delay(L.debug(s""""params" ws=$ws wh=$wh"""))
           reqParams <- req.as[ReqParams]
           rtng <- getRating(rating)
           titleStream <- Sync[F].delay(if (reqParams.year.nonEmpty)
@@ -44,6 +43,7 @@ object ImdbRoutes {
           pg <- Sync[F].delay(Try(page.toInt).toOption.getOrElse(1))
           wsInt <- Sync[F].delay(Try(ws.toInt).toOption.getOrElse(600))
           pgs <- Sync[F].delay(pageSize(wsInt))
+          _ <- Sync[F].delay(L.info(s""""params" ws=$ws wh=$wh pgs=$pgs"""))
           portionTitleList <- Sync[F].delay(titleList.slice((pg - 1) * pgs, (pg - 1) * pgs + pgs))
           resp <- Ok(portionTitleList)
         } yield resp
@@ -70,6 +70,7 @@ object ImdbRoutes {
           pg <- Sync[F].delay(Try(page.toInt).toOption.getOrElse(1))
           wsInt <- Sync[F].delay(Try(ws.toInt).toOption.getOrElse(600))
           pgs <- Sync[F].delay(pageSize(wsInt))
+          _ <- Sync[F].delay(L.info("pg={} pgs={} wsInt={}", pg, pgs, wsInt))
           portionNameList <- Sync[F].delay(nameList.slice((pg - 1) * pgs, (pg - 1) * pgs + pgs))
           resp <- Ok(portionNameList)
         } yield resp
