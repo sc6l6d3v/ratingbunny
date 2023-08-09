@@ -3,7 +3,6 @@ package com.iscs.ratingslave
 import cats.effect.{Async, Resource, Sync}
 import cats.implicits._
 import com.comcast.ip4s._
-import com.iscs.ratingslave.codecs.CustomCodecs
 import com.iscs.ratingslave.domains.ImdbQuery.{AutoNameRec, TitleRec}
 import com.iscs.ratingslave.domains.{EmailContact, ImdbQuery, ReleaseDates}
 import com.iscs.ratingslave.routes.{EmailContactRoutes, ImdbRoutes, ReleaseRoutes}
@@ -18,10 +17,7 @@ import org.http4s.implicits._
 import org.http4s.server.middleware.{Logger => hpLogger}
 import org.http4s.server.{Router, Server}
 
-import java.util.concurrent.Executors
-import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
-
-object Server extends CustomCodecs {
+object Server {
   private val L = Logger[this.type]
 
   private val port = sys.env.getOrElse("PORT", "8080").toInt
@@ -35,11 +31,6 @@ object Server extends CustomCodecs {
   private val titlePrincipalsCollection = "title_principals_withname"
 
   private val emailCollection = "email_contact"
-
-  def getPool[F[_] : Sync](size: Int): F[ExecutionContextExecutorService] = for {
-    es <- Sync[F].delay(Executors.newFixedThreadPool(size))
-    ex <- Sync[F].delay(ExecutionContext.fromExecutorService(es))
-  } yield ex
 
   private def getImdbSvc[F[_]: Async](db: MongoDatabase[F]): F[ImdbQuery[F]] =  for {
     titleCollCodec <- db.getCollectionWithCodec[TitleRec](titleCollection)
