@@ -1,13 +1,13 @@
-# Release Scraper
+# Rating Slave
 
-Working Scala REST backend to allow scraping of release dates for movie info.
+Working Scala REST backend to allow retrieval of movie info and posters.
 
 ### Docker
 
 To run in production mode inside a Docker container we first have to build the image. E.g.
 
 ```
-docker build -t releasescraper:rest .
+docker build -t nanothermite/ratingslave:rest .
 ```
 
 The aforementioned command will build the image and tag it with the latest commit hash.
@@ -15,7 +15,7 @@ The aforementioned command will build the image and tag it with the latest commi
 To run said image:
 
 ```
-docker run -d -p 8080:8080 releasescraper:rest
+docker run -d -p 8080:8080 nanothermite/ratingslave:rest
 ```
 
 To attach to said image via shell:

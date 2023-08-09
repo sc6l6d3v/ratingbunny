@@ -356,7 +356,7 @@ object ImdbQuery extends FilterHelper {
               strEq(firstName, names.head)))
         )
 
-        projectionsList2 <- Stream.eval(Sync[F].delay(include(firstName, lastName)))
+        projectionsList <- Stream.eval(Sync[F].delay(include(firstName, lastName)))
 
         sortElt <- Stream.eval(Sync[F].delay(List(sortElt(id), sortElt(firstName))))
 
@@ -371,7 +371,7 @@ object ImdbQuery extends FilterHelper {
         aggregation <- Stream.eval(Sync[F].delay(
           Seq(
             Aggregates.`match`(BsonDocument(composeElts(lastFirstElt))),
-            Aggregates.project(projectionsList2),
+            Aggregates.project(projectionsList),
             Aggregates.group("$lastName",
               Accumulators.first(firstName, s"$$$firstName")),
             Aggregates.sort(BsonDocument(composeElts(sortElt))),
