@@ -3,6 +3,7 @@ package com.iscs.ratingslave.routes
 import cats.effect._
 import cats.implicits._
 import com.iscs.ratingslave.domains.ImdbQuery
+import com.iscs.ratingslave.domains.ImdbQuery.TitleRec
 import com.iscs.ratingslave.dslparams._
 import com.iscs.ratingslave.model.Requests._
 import com.iscs.ratingslave.util.DecodeUtils.getRating
@@ -22,25 +23,26 @@ object ImdbRoutes {
   private val L = Logger[this.type]
   private val rowSpacer = 64
   private val columnSpacer = 64
-  private def rowsPerPage2(height: Int, cardHeight: Int): Int = {
+
+  private def rowsPerPage(height: Int, spacer: Int, cardHeight: Int): Int = {
     @tailrec
     def rowsPerPageTR(remainingHeight: Int, count: Int): Int = {
       if (remainingHeight < 0) count
-      else rowsPerPageTR(remainingHeight - columnSpacer - cardHeight, count + 1)
+      else rowsPerPageTR(remainingHeight - spacer - cardHeight, count + 1)
     }
     rowsPerPageTR(height, 0)
   }
-  private def cardsPerRow(width: Int, cardWidth: Int): Int = {
+  private def cardsPerRow(width: Int, spacer: Int, offset: Int, cardWidth: Int): Int = {
     @tailrec
     def cardsPerRowTR(remainingWidth: Int, count: Int): Int = {
       if (remainingWidth < 0) count
-      else cardsPerRowTR(remainingWidth - rowSpacer - cardWidth, count + 1)
+      else cardsPerRowTR(remainingWidth - spacer - offset - cardWidth, count + 1)
     }
     cardsPerRowTR(width, 0)
   }
 
-  private def pageSize(width: Int, cardWidth: Int, height: Int, cardHeight: Int): Int =
-    cardsPerRow(width, cardWidth) * rowsPerPage2(height, cardHeight)
+  private def pageSize(width: Int, cardWidth: Int, height: Int, cardHeight: Int, offset: Int): Int =
+    cardsPerRow(width, columnSpacer, offset, cardWidth) * rowsPerPage(height, rowSpacer, cardHeight)
 
   private def dimsFromString(strPairs: List[(String, Int)]): List[Int] = {
     strPairs.map { case (strVal, defInt) =>
@@ -48,14 +50,41 @@ object ImdbRoutes {
     }
   }
 
+  private def convertParams[F[_]: Sync](page: String, ws: String, wh: String, cs: String,
+                                        ch: String, offset: String): F[List[Int]] = for {
+    dimList <- Sync[F].delay(dimsFromString(List(
+      (page, 1),
+      (ws, 600),
+      (wh, 900),
+      (cs, 160),
+      (ch, 238),
+      (offset, 0),
+    )
+    ))
+  } yield dimList
+
+  private def calcWithParams[F[_]: Sync](params: List[Int]): F[Int] = for {
+    pgs <- Sync[F].delay {
+      val wsInt = params(1)
+      val whInt = params(2)
+      val csInt = params(3)
+      val chInt = params(4)
+      val offsetInt = params(5)
+      pageSize(wsInt, csInt, whInt, chInt, offsetInt)
+    }
+  } yield pgs
+
+  private def extractRecords[F[_]: Sync](records: List[TitleRec], pg: Int, pgs: Int): F[List[TitleRec]] = for {
+    sliced <- Sync[F].delay(records.slice((pg - 1) * pgs, (pg - 1) * pgs + pgs))
+  } yield sliced
+
   def httpRoutes[F[_]: Async](I: ImdbQuery[F]): HttpRoutes[F] = {
     val dsl = Http4sDsl[F]
     import dsl._
     val svc = HttpRoutes.of[F] {
       case req@POST -> Root / "api" / "v2" / "title" / page / rating :? WindowWidthQueryParameterMatcher(ws)
-        +& WindowHeightQueryParameterMatcher(wh)
-        +& CardWidthQueryParameterMatcher(cs)
-        +& CardHeightQueryParameterMatcher(ch) =>
+        +& WindowHeightQueryParameterMatcher(wh) +& CardWidthQueryParameterMatcher(cs)
+        +& CardHeightQueryParameterMatcher(ch)   +& OffsetQUeryParameterMatcher(offset) =>
         for {
           reqParams <- req.as[ReqParams]
           rtng <- getRating(rating)
@@ -64,26 +93,10 @@ object ImdbRoutes {
           else
             Stream.empty)
           titleList <- titleStream.compile.toList
-          dimList <- Sync[F].delay(dimsFromString(List(
-            (page, 1),
-            (ws, 600),
-            (wh, 900),
-            (cs, 160),
-            (ch, 238),
-          )
-          ))
-          pgs <- Sync[F].delay{
-            val wsInt = dimList(1)
-            val whInt = dimList(2)
-            val csInt = dimList(3)
-            val chInt = dimList(4)
-            pageSize(wsInt, csInt, whInt, chInt)
-          }
-          _ <- Sync[F].delay(L.info(s""""params" ws=$ws wh=$wh cs=$cs ch=$ch pgs=$pgs"""))
-          portionTitleList <- Sync[F].delay{
-            val pg = dimList.head
-            titleList.slice((pg - 1) * pgs, (pg - 1) * pgs + pgs)
-          }
+          dimList <- convertParams(page, ws, wh, cs, ch, offset)
+          pgs <-  calcWithParams(dimList)
+          _ <- Sync[F].delay(L.info(s""""params" ws=$ws wh=$wh cs=$cs ch=$ch pgs=$pgs offset=$offset"""))
+          portionTitleList <- extractRecords(titleList, dimList.head, pgs)
           resp <- Ok(portionTitleList)
         } yield resp
       case req@POST -> Root / "api" / "v2" / "name2" / name / rating =>
@@ -98,9 +111,8 @@ object ImdbRoutes {
           resp <- Ok(nameList)
         } yield resp
       case req@POST -> Root / "api" / "v2" / "name" / page / rating :? WindowWidthQueryParameterMatcher(ws)
-        +& WindowHeightQueryParameterMatcher(wh)
-        +& CardWidthQueryParameterMatcher(cs)
-        +& CardHeightQueryParameterMatcher(ch) =>
+        +& WindowHeightQueryParameterMatcher(wh) +& CardWidthQueryParameterMatcher(cs)
+        +& CardHeightQueryParameterMatcher(ch)   +& OffsetQUeryParameterMatcher(offset) =>
         for {
           reqParams <- req.as[ReqParams]
           rtng <- getRating(rating)
@@ -109,26 +121,10 @@ object ImdbRoutes {
           else
             Stream.empty)
           nameList <- imdbNameStream.compile.toList
-          dimList <- Sync[F].delay(dimsFromString(List(
-            (page, 1),
-            (ws, 600),
-            (wh, 900),
-            (cs, 160),
-            (ch, 238),
-          )
-          ))
-          pgs <- Sync[F].delay {
-            val wsInt = dimList(1)
-            val whInt = dimList(2)
-            val csInt = dimList(3)
-            val chInt = dimList(4)
-            pageSize(wsInt, csInt, whInt, chInt)
-          }
-          _ <- Sync[F].delay(L.info(s""""name params" ws=$ws wh=$wh cs=$cs ch=$ch pgs=$pgs"""))
-          portionNameList <- Sync[F].delay{
-            val pg = dimList.head
-            nameList.slice((pg - 1) * pgs, (pg - 1) * pgs + pgs)
-          }
+          dimList <- convertParams(page, ws, wh, cs, ch, offset)
+          pgs <- calcWithParams(dimList)
+           _ <- Sync[F].delay(L.info(s""""name params" ws=$ws wh=$wh cs=$cs ch=$ch pgs=$pgs offset=$offset"""))
+          portionNameList <- extractRecords(nameList, dimList.head, pgs)
           resp <- Ok(portionNameList)
         } yield resp
       case GET -> Root / "api" / "v2" / "autoname" / name =>

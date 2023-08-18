@@ -3,10 +3,11 @@ import Dependencies._
 ThisBuild / version := "1.0"
 ThisBuild / scalaVersion := "2.13.8"
 ThisBuild / organization := "com.iscs"
-// ThisBuild / name := "ratingslave"
+ThisBuild / name := "ratingslave"
 
 lazy val root = (project in file("."))
   .settings(
+    name := "ratingslave",
 //    scalacOptions ++= Seq("-target:17"),
     libraryDependencies ++= Seq(
       http4s.client,
@@ -30,7 +31,7 @@ lazy val root = (project in file("."))
     ),
     addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.10.3"),
     addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1"),
-    Revolver.enableDebugging(5061, true),
+    Revolver.enableDebugging(5061, suspend = true),
     dependencyOverrides ++= Seq(
       "org.typelevel" %% "cats-effect" % "3.5.1"
     )
