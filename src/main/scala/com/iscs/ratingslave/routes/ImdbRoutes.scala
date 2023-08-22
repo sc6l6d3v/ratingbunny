@@ -36,9 +36,9 @@ object ImdbRoutes {
     @tailrec
     def cardsPerRowTR(remainingWidth: Int, count: Int): Int = {
       if (remainingWidth < 0) count
-      else cardsPerRowTR(remainingWidth - spacer - offset - cardWidth, count + 1)
+      else cardsPerRowTR(remainingWidth - spacer - cardWidth, count + 1)
     }
-    cardsPerRowTR(width, 0)
+    cardsPerRowTR(width - offset, 0)
   }
 
   private def pageSize(width: Int, cardWidth: Int, height: Int, cardHeight: Int, offset: Int): Int =
