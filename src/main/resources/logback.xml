@@ -42,6 +42,7 @@
     <logger name="org.http4s.client" level="INFO" />
     <logger name="org.mongodb.scala" level="DEBUG" />
     <logger name="com.mongodb" level="DEBUG" />
+    <logger name="com.sun.mail" level="DEBUG" />
 
   <root level="DEBUG">
       <appender-ref ref="DEFAULT-FILE-ASYNC" />

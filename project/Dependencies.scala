@@ -16,6 +16,7 @@ object Dependencies {
     val circeVersion      = "0.14.3"
     val catsVersion       = "3.9.0"
     val catsEffectVersion = "3.5.0"
+    val emailVersion = "0.14.0"
   }
 
   object http4s {
@@ -61,5 +62,10 @@ object Dependencies {
   object mongo4cats {
     val core = "io.github.kirill5k" %% "mongo4cats-core" % Versions.mongo4catsVersion
     val circe = "io.github.kirill5k" %% "mongo4cats-circe" % Versions.mongo4catsVersion
+  }
+
+  object email {
+    val core = "com.github.eikek" %% "emil-common" % Versions.emailVersion
+    val javamail = "com.github.eikek" %% "emil-javamail" % Versions.emailVersion
   }
 }

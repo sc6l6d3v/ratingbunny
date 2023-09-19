@@ -22,6 +22,8 @@ lazy val root = (project in file("."))
       mongo4cats.core,
       mongo4cats.circe,
       mongodb.driver,
+      email.core,
+      email.javamail,
       scalaTest,
       logback.classic,
       logback.logging,
