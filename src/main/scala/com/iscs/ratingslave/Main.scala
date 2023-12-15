@@ -1,7 +1,7 @@
 package com.iscs.ratingslave
 
 import cats.effect.{ExitCode, IO, IOApp}
-import com.iscs.ratingslave.util.{DbClient, Mongo}
+import com.iscs.ratingslave.util.DbClient
 import com.typesafe.scalalogging.Logger
 import org.http4s.ember.client.EmberClientBuilder
 
@@ -10,7 +10,7 @@ object Main extends IOApp {
   private val dbName = sys.env.getOrElse("DBNAME", "db")
 
   def run(args: List[String]): IO[ExitCode] = for {
-    dbClient <- IO.delay(new DbClient[IO](Mongo.fromUrl()))
+    dbClient <- IO.delay(new DbClient[IO](DbClient.fromUrl()))
     resources <- IO.delay(for {
       dbres <- dbClient.dbResource
       clres <- EmberClientBuilder.default[IO].build

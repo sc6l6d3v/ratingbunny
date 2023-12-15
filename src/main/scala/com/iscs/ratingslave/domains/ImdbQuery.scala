@@ -1,17 +1,20 @@
 package com.iscs.ratingslave.domains
 
-import cats.effect.Sync
+import cats.effect._
 import cats.effect.kernel.Clock
 import cats.implicits._
-import com.iscs.ratingslave.domains.ImdbQuery.{AutoNameRec, AutoTitleRec, NameTitleRec, TitleRec}
+import com.iscs.ratingslave.domains.ImdbQuery.{AutoNameRec, AutoTitleRec, NameTitleRec, TitleRec, TitleRecPath}
 import com.iscs.ratingslave.model.Requests.ReqParams
-import com.iscs.ratingslave.util.asInt
+import com.iscs.ratingslave.util.{DecodeUtils, asInt}
 import com.typesafe.scalalogging.Logger
 import fs2.Stream
 import io.circe.generic.auto._
 import mongo4cats.circe._
 import mongo4cats.collection.MongoCollection
 import mongo4cats.operations.Projection
+import org.http4s.circe._
+import org.http4s.client.Client
+import org.http4s.{EntityDecoder, Method, Request, Uri}
 import org.mongodb.scala.bson.{BsonArray, BsonDocument, BsonElement, BsonInt32}
 import org.mongodb.scala.model.Projections._
 import org.mongodb.scala.model.{Accumulators, Aggregates, Projections}
@@ -24,13 +27,14 @@ case object NameQuery extends QueryObj
 
 trait ImdbQuery[F[_]] {
   def getByTitle(title: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRec]
+  def getByTitlePath(title: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRecPath]
   def getByName(name: String, rating: Double, params: ReqParams): Stream[F, NameTitleRec]
   def getByEnhancedName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec]
   def getAutosuggestTitle(titlePrefix: String): Stream[F, AutoTitleRec]
   def getAutosuggestName(titlePrefix: String): Stream[F, AutoNameRec]
 }
 
-object ImdbQuery extends FilterHelper {
+object ImdbQuery extends FilterHelper with DecodeUtils {
   private val L = Logger[this.type]
 
   private val AUTOSUGGESTLIMIT = 20
@@ -41,19 +45,34 @@ object ImdbQuery extends FilterHelper {
 
   final case class AutoTitleRec(primaryTitle: Option[String])
 
+  final case class PathRec(path: String)
+
   final case class TitleRec(_id: String, averageRating: Option[Double], numVotes: Option[Int],
                             titleType: String, primaryTitle: String, originalTitle: String,
                             isAdult: Int, startYear: Int, endYear: String, runTimeMinutes: Option[Int],
                             genresList: List[String])
 
+  final case class TitleRecPath(_id: String, averageRating: Option[Double], numVotes: Option[Int],
+                            titleType: String, primaryTitle: String, originalTitle: String,
+                            isAdult: Int, startYear: Int, endYear: String, runTimeMinutes: Option[Int],
+                            genresList: List[String], posterPath: String)
+
   final case class NameTitleRec(primaryName: String, firstName: String, lastName: String, birthYear: Int,
                                 deathYear1: Option[String] = None,
                                 matchedTitles: List[TitleRec])
 
-  def impl[F[_]: Sync](titleFx: MongoCollection[F, TitleRec],
+  def impl[F[_]: Async](titleFx: MongoCollection[F, TitleRec],
                        titlePrincipalsFx: MongoCollection[F, TitleRec],
-                       nameFx: MongoCollection[F, AutoNameRec]): ImdbQuery[F] =
+                       nameFx: MongoCollection[F, AutoNameRec],
+                       imageHost: String,
+                       client: Client[F]): ImdbQuery[F] =
     new ImdbQuery[F] {
+      private val proto = protoc(imageHost)
+      private val imagePath = s"$proto://$imageHost/path"
+      L.info(s"imageHost {} metaImage {}", imageHost, imagePath)
+
+      implicit val decoder: EntityDecoder[F, PathRec] = jsonOf[F, PathRec]
+
       val titleCollection = "title_basics_ratings"
 
       val id = "_id"
@@ -111,6 +130,26 @@ object ImdbQuery extends FilterHelper {
             BsonDocument(extractElt(dblGte(fieldName, dbl)))))
       }
 
+      def getTitlePaths(titleRecs: List[TitleRec]): F[List[TitleRecPath]] = {
+        titleRecs.traverse { titleRec =>
+          for {
+            pathRec <- getPath(titleRec._id)
+          } yield TitleRecPath(titleRec._id,
+            titleRec.averageRating,
+            titleRec.numVotes,
+            titleRec.titleType,
+            titleRec.primaryTitle,
+            titleRec.originalTitle,
+            titleRec.isAdult,
+            titleRec.startYear,
+            titleRec.endYear,
+            titleRec.runTimeMinutes,
+            titleRec.genresList,
+            pathRec.path)
+        }
+      }
+
+
       /**
        * {
        *    $text:{ $search: "Gone with the W" }
@@ -141,19 +180,18 @@ object ImdbQuery extends FilterHelper {
           case _            => Sync[F].delay(Option.empty[List[BsonElement]])
         })
         nonEmptyElts <- Stream.eval(Sync[F].delay {
-          val eltList = List(titleElts, Some(paramElt :+ ratingElt)).flatten
-          eltList.flatten
+          List(titleElts, Some(paramElt :+ ratingElt)).flatten.flatten
         })
         bsonElts <-  Stream.eval(Sync[F].delay {BsonDocument(composeElts(nonEmptyElts))})
-        (byTitleTime, dbList) <- Stream.eval(Clock[F].timed(titleFx.find(bsonElts)
+        (byTitleTime, recList) <- Stream.eval(Clock[F].timed(titleFx.find(bsonElts)
           .skip(0)
           .sortByDesc(startYear)
           .projection(Projection.exclude(genres))
           .stream
           .compile.toList))
         _ <- Stream.eval(Sync[F].delay(L.info(s"getByTitle {} ms", byTitleTime.toMillis)))
-        json <- Stream.emits(dbList)
-      } yield json
+        titleRec <- Stream.emits(recList)
+      } yield titleRec
 
       /**
        * ('name_basics').aggregate(
@@ -426,5 +464,37 @@ object ImdbQuery extends FilterHelper {
         _ <- Stream.eval(Sync[F].delay(L.info(s"getAutosuggestTitle {} ms", autosuggestTitleTime.toMillis)))
         json <- Stream.emits(dbList)
       } yield json
+
+      private def getPath(imdb: String): F[PathRec] = for {
+        pathStr <- Sync[F].delay(s"$imagePath/$imdb/S")
+        pathReq <- Sync[F].delay(Request[F](Method.GET, Uri.unsafeFromString(pathStr)))
+        (pathTime, pathVal) <- Clock[F].timed(client.expect(pathReq)(jsonOf[F, PathRec]))
+        _ <- Sync[F].delay(L.info(s"pathStr {} imdb {} time {} ms",
+          pathStr, imdb, pathTime.toMillis))
+      } yield pathVal
+
+      override def getByTitlePath(optTitle: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRecPath] = for {
+        paramElt <- Stream.eval(getParamList(params, TitleQuery))
+        ratingElt <- Stream.eval(Sync[F].delay(buildOrCheck(averageRating, rating)))
+        titleElts <- Stream.eval(optTitle match {
+          case Some(title) => getTitleModelFilters(title)
+          case _ => Sync[F].delay(Option.empty[List[BsonElement]])
+        })
+        nonEmptyElts <- Stream.eval(Sync[F].delay {
+          List(titleElts, Some(paramElt :+ ratingElt)).flatten.flatten
+        })
+        bsonElts <- Stream.eval(Sync[F].delay {
+          BsonDocument(composeElts(nonEmptyElts))
+        })
+        (byTitleTime, recList) <- Stream.eval(Clock[F].timed(titleFx.find(bsonElts)
+          .skip(0)
+          .sortByDesc(startYear)
+          .projection(Projection.exclude(genres))
+          .stream
+          .compile.toList))
+        _ <- Stream.eval(Sync[F].delay(L.info(s"getByTitle {} ms", byTitleTime.toMillis)))
+        recWithPathList <- Stream.eval(getTitlePaths(recList))
+        titlePathRec <- Stream.emits(recWithPathList)
+      } yield titlePathRec
     }
 }

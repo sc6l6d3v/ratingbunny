@@ -3,10 +3,9 @@ package com.iscs.ratingslave.routes
 import cats.effect._
 import cats.implicits._
 import com.iscs.ratingslave.domains.ImdbQuery
-import com.iscs.ratingslave.domains.ImdbQuery.TitleRec
 import com.iscs.ratingslave.dslparams._
 import com.iscs.ratingslave.model.Requests._
-import com.iscs.ratingslave.util.DecodeUtils.getRating
+import com.iscs.ratingslave.util.DecodeUtils
 import com.typesafe.scalalogging.Logger
 import fs2.Stream
 import io.circe.generic.auto._
@@ -19,7 +18,7 @@ import org.http4s.headers.`Content-Type`
 import scala.annotation.tailrec
 import scala.util.Try
 
-object ImdbRoutes {
+object ImdbRoutes extends DecodeUtils {
   private val L = Logger[this.type]
   private val rowSpacer = 64
   private val columnSpacer = 64
@@ -74,9 +73,12 @@ object ImdbRoutes {
     }
   } yield pgs
 
-  private def extractRecords[F[_]: Sync](records: List[TitleRec], pg: Int, pgs: Int): F[List[TitleRec]] = for {
+  private def extractRecords[F[_]: Sync, T](records: List[T], pg: Int, pgs: Int): F[List[T]] = for {
     sliced <- Sync[F].delay(records.slice((pg - 1) * pgs, (pg - 1) * pgs + pgs))
   } yield sliced
+
+  private def showParams[F[_]: Sync](pgs: Int, ws: String, wh: String, cs: String, ch: String, offset: String): F[Unit] =
+    Sync[F].delay(L.info(s""""params" ws=$ws wh=$wh cs=$cs ch=$ch pgs=$pgs offset=$offset"""))
 
   def httpRoutes[F[_]: Async](I: ImdbQuery[F]): HttpRoutes[F] = {
     val dsl = Http4sDsl[F]
@@ -88,14 +90,31 @@ object ImdbRoutes {
         for {
           reqParams <- req.as[ReqParams]
           rtng <- getRating(rating)
+          dimList <- convertParams(page, ws, wh, cs, ch, offset)
+          pgs <- calcWithParams(dimList)
+          _ <- showParams(pgs, ws, wh, cs, ch, offset)
           titleStream <- Sync[F].delay(if (reqParams.year.nonEmpty)
             I.getByTitle(reqParams.query, rtng, reqParams)
           else
             Stream.empty)
           titleList <- titleStream.compile.toList
+          portionTitleList <- extractRecords(titleList, dimList.head, pgs)
+          resp <- Ok(portionTitleList)
+        } yield resp
+      case req@POST -> Root / "api" / "v2" / "pathtitle" / page / rating :? WindowWidthQueryParameterMatcher(ws)
+        +& WindowHeightQueryParameterMatcher(wh) +& CardWidthQueryParameterMatcher(cs)
+        +& CardHeightQueryParameterMatcher(ch) +& OffsetQUeryParameterMatcher(offset) =>
+        for {
+          reqParams <- req.as[ReqParams]
+          rtng <- getRating(rating)
           dimList <- convertParams(page, ws, wh, cs, ch, offset)
-          pgs <-  calcWithParams(dimList)
-          _ <- Sync[F].delay(L.info(s""""params" ws=$ws wh=$wh cs=$cs ch=$ch pgs=$pgs offset=$offset"""))
+          pgs <- calcWithParams(dimList)
+          _ <- showParams(pgs, ws, wh, cs, ch, offset)
+          titleStream <- Sync[F].delay(if (reqParams.year.nonEmpty)
+            I.getByTitlePath(reqParams.query, rtng, reqParams)
+          else
+            Stream.empty)
+          titleList <- titleStream.compile.toList
           portionTitleList <- extractRecords(titleList, dimList.head, pgs)
           resp <- Ok(portionTitleList)
         } yield resp

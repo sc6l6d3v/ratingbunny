@@ -4,6 +4,7 @@ import cats.effect.kernel.Clock
 import cats.effect.{Async, Sync}
 import cats.implicits._
 import com.iscs.ratingslave.model.ScrapeResult.Scrape
+import com.iscs.ratingslave.util.DecodeUtils
 import com.typesafe.scalalogging.Logger
 import fs2.Stream
 import org.http4s.client.Client
@@ -15,7 +16,7 @@ import scodec.bits.ByteVector
 import java.time.LocalDate
 import scala.jdk.CollectionConverters._
 
-class ReleaseDates[F[_]: Async](defaultHost: String, imageHost: String, client: Client[F]) {
+class ReleaseDates[F[_]: Async](defaultHost: String, imageHost: String, client: Client[F]) extends DecodeUtils {
   private val L = Logger[this.type]
   private val yearRegex = "[0-9][0-9][0-9][0-9]".r
   private val monthRegex = "[0-9][0-9]".r
@@ -38,7 +39,7 @@ class ReleaseDates[F[_]: Async](defaultHost: String, imageHost: String, client: 
     "new" -> s"https://$defaultHost/new-movies-YYYY/",
     "top" -> s"https://$defaultHost/top-movies-YYYY/"
   )
-  private val proto = if (List("tmdbimg", "localhost", "192.168.4").exists(host => imageHost startsWith host)) "http" else  "https"
+  private val proto = protoc(imageHost)//if (List("tmdbimg", "localhost", "192.168.4").exists(host => imageHost startsWith host)) "http" else  "https"
   private val metaImage = s"$proto://$imageHost/meta"
   L.info(s"imageHost {} metaImage {}", imageHost, metaImage)
   private val now = LocalDate.now

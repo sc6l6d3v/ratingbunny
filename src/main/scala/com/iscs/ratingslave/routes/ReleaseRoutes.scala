@@ -3,7 +3,7 @@ package com.iscs.ratingslave.routes
 import cats.effect.{Async, Sync}
 import cats.implicits._
 import com.iscs.ratingslave.domains.ReleaseDates
-import com.iscs.ratingslave.util.DecodeUtils.getRating
+import com.iscs.ratingslave.util.DecodeUtils
 import com.typesafe.scalalogging.Logger
 import io.circe.generic.auto._
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
@@ -13,7 +13,7 @@ import org.http4s._
 import org.http4s.dsl.Http4sDsl
 import org.http4s.headers.`Content-Type`
 
-object ReleaseRoutes {
+object ReleaseRoutes extends DecodeUtils {
   private val L = Logger[this.type]
 
   def httpRoutes[F[_] : Async](R: ReleaseDates[F]): HttpRoutes[F] = {

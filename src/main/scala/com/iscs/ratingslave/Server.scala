@@ -32,13 +32,15 @@ object Server {
 
   private val emailCollection = "email_contact"
 
-  private def getImdbSvc[F[_]: Async](db: MongoDatabase[F]): F[ImdbQuery[F]] =  for {
+  private def getImdbSvc[F[_]: Async](db: MongoDatabase[F], client: Client[F]): F[ImdbQuery[F]] =  for {
     titleCollCodec <- db.getCollectionWithCodec[TitleRec](titleCollection)
     titlePrincipleCollCodec <- db.getCollectionWithCodec[TitleRec](titlePrincipalsCollection)
     nameCollCodec <- db.getCollectionWithCodec[AutoNameRec](nameCollection)
     imdbSvc <- Sync[F].delay(ImdbQuery.impl[F](titleCollCodec,
       titlePrincipleCollCodec,
-      nameCollCodec))
+      nameCollCodec,
+      imageHost,
+      client))
   } yield imdbSvc
 
   private def getEmailSvc[F[_]: Async](db: MongoDatabase[F]): F[EmailContact[F]] = for {
@@ -48,7 +50,7 @@ object Server {
 
   def getServices[F[_]: Async](db: MongoDatabase[F], client: Client[F]): F[HttpApp[F]] = {
     for {
-      imdbSvc <- getImdbSvc(db)
+      imdbSvc <- getImdbSvc(db, client)
       emailSvc <- getEmailSvc(db)
       scrapeSvc <- Sync[F].delay(new ReleaseDates[F](defaultHost, imageHost, client))
       httpApp <- Sync[F].delay(
