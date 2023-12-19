@@ -1,6 +1,7 @@
 package com.iscs.ratingslave.domains
 
 import cats.effect._
+import cats.effect.implicits._
 import cats.effect.kernel.Clock
 import cats.implicits._
 import com.iscs.ratingslave.domains.ImdbQuery.{AutoNameRec, AutoTitleRec, NameTitleRec, TitleRec, TitleRecPath}
@@ -14,7 +15,7 @@ import mongo4cats.collection.MongoCollection
 import mongo4cats.operations.Projection
 import org.http4s.circe._
 import org.http4s.client.Client
-import org.http4s.{EntityDecoder, Method, Request, Uri}
+import org.http4s.{Method, Request, Uri}
 import org.mongodb.scala.bson.{BsonArray, BsonDocument, BsonElement, BsonInt32}
 import org.mongodb.scala.model.Projections._
 import org.mongodb.scala.model.{Accumulators, Aggregates, Projections}
@@ -45,7 +46,7 @@ object ImdbQuery extends FilterHelper with DecodeUtils {
 
   final case class AutoTitleRec(primaryTitle: Option[String])
 
-  final case class PathRec(path: String)
+  private final case class PathRec(path: String)
 
   final case class TitleRec(_id: String, averageRating: Option[Double], numVotes: Option[Int],
                             titleType: String, primaryTitle: String, originalTitle: String,
@@ -71,8 +72,6 @@ object ImdbQuery extends FilterHelper with DecodeUtils {
       private val imagePath = s"$proto://$imageHost/path"
       L.info(s"imageHost {} metaImage {}", imageHost, imagePath)
 
-      implicit val decoder: EntityDecoder[F, PathRec] = jsonOf[F, PathRec]
-
       val titleCollection = "title_basics_ratings"
 
       val id = "_id"
@@ -97,6 +96,8 @@ object ImdbQuery extends FilterHelper with DecodeUtils {
       val matchedTitles_numvotes = "matchedTitles.numVotes"
       val matchedTitles_startYear = "matchedTitles.startYear"
       val matchedTitles_titleType = "matchedTitles.titleType"
+
+      val chunkSize = 256
 
       def getTitleModelFilters(title: String): F[Option[List[BsonElement]]] = for {
         bsonElts <- Sync[F].delay(
@@ -130,25 +131,39 @@ object ImdbQuery extends FilterHelper with DecodeUtils {
             BsonDocument(extractElt(dblGte(fieldName, dbl)))))
       }
 
-      def getTitlePaths(titleRecs: List[TitleRec]): F[List[TitleRecPath]] = {
-        titleRecs.traverse { titleRec =>
-          for {
-            pathRec <- getPath(titleRec._id)
-          } yield TitleRecPath(titleRec._id,
-            titleRec.averageRating,
-            titleRec.numVotes,
-            titleRec.titleType,
-            titleRec.primaryTitle,
-            titleRec.originalTitle,
-            titleRec.isAdult,
-            titleRec.startYear,
-            titleRec.endYear,
-            titleRec.runTimeMinutes,
-            titleRec.genresList,
-            pathRec.path)
-        }
+      def getTitlePaths(titleRecs: List[TitleRec], chunkSize: Int): F[List[TitleRecPath]] = {
+        titleRecs
+          .grouped(chunkSize) // Split the list into chunks
+          .toList
+          .traverse { chunk =>
+            chunk.parTraverse { titleRec => // Process each chunk in parallel
+              for {
+                pathRec <- getPath(titleRec._id)
+              } yield
+                TitleRecPath(
+                  titleRec._id,
+                  titleRec.averageRating,
+                  titleRec.numVotes,
+                  titleRec.titleType,
+                  titleRec.primaryTitle,
+                  titleRec.originalTitle,
+                  titleRec.isAdult,
+                  titleRec.startYear,
+                  titleRec.endYear,
+                  titleRec.runTimeMinutes,
+                  titleRec.genresList,
+                  pathRec.path
+                )
+            }
+          }
+          .map(_.flatten) // Flatten the results back to a single list
       }
 
+
+      private def getOptFilters(optTitle: Option[String]): F[Option[List[BsonElement]]] = optTitle match {
+          case Some(title)  => getTitleModelFilters(title)
+          case _            => Sync[F].delay(Option.empty[List[BsonElement]])
+        }
 
       /**
        * {
@@ -175,10 +190,7 @@ object ImdbQuery extends FilterHelper with DecodeUtils {
       override def getByTitle(optTitle: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRec] = for {
         paramElt <- Stream.eval(getParamList(params, TitleQuery))
         ratingElt <- Stream.eval(Sync[F].delay(buildOrCheck(averageRating, rating)))
-        titleElts <- Stream.eval(optTitle match {
-          case Some(title)  => getTitleModelFilters(title)
-          case _            => Sync[F].delay(Option.empty[List[BsonElement]])
-        })
+        titleElts <- Stream.eval(getOptFilters(optTitle))
         nonEmptyElts <- Stream.eval(Sync[F].delay {
           List(titleElts, Some(paramElt :+ ratingElt)).flatten.flatten
         })
@@ -476,10 +488,7 @@ object ImdbQuery extends FilterHelper with DecodeUtils {
       override def getByTitlePath(optTitle: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRecPath] = for {
         paramElt <- Stream.eval(getParamList(params, TitleQuery))
         ratingElt <- Stream.eval(Sync[F].delay(buildOrCheck(averageRating, rating)))
-        titleElts <- Stream.eval(optTitle match {
-          case Some(title) => getTitleModelFilters(title)
-          case _ => Sync[F].delay(Option.empty[List[BsonElement]])
-        })
+        titleElts <- Stream.eval(getOptFilters(optTitle))
         nonEmptyElts <- Stream.eval(Sync[F].delay {
           List(titleElts, Some(paramElt :+ ratingElt)).flatten.flatten
         })
@@ -493,7 +502,7 @@ object ImdbQuery extends FilterHelper with DecodeUtils {
           .stream
           .compile.toList))
         _ <- Stream.eval(Sync[F].delay(L.info(s"getByTitle {} ms", byTitleTime.toMillis)))
-        recWithPathList <- Stream.eval(getTitlePaths(recList))
+        recWithPathList <- Stream.eval(getTitlePaths(recList, chunkSize))
         titlePathRec <- Stream.emits(recWithPathList)
       } yield titlePathRec
     }
