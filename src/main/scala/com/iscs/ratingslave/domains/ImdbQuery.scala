@@ -56,17 +56,18 @@ object ImdbQuery extends FilterHelper with DecodeUtils {
   final case class TitleRecPath(_id: String, averageRating: Option[Double], numVotes: Option[Int],
                             titleType: String, primaryTitle: String, originalTitle: String,
                             isAdult: Int, startYear: Int, endYear: String, runTimeMinutes: Option[Int],
-                            genresList: List[String], posterPath: String)
+                            genresList: List[String], posterPath: Option[String])
 
   final case class NameTitleRec(primaryName: String, firstName: String, lastName: String, birthYear: Int,
                                 deathYear1: Option[String] = None,
                                 matchedTitles: List[TitleRec])
 
   def impl[F[_]: Async](titleFx: MongoCollection[F, TitleRec],
-                       titlePrincipalsFx: MongoCollection[F, TitleRec],
-                       nameFx: MongoCollection[F, AutoNameRec],
-                       imageHost: String,
-                       client: Client[F]): ImdbQuery[F] =
+                        title2Fx: MongoCollection[F, TitleRecPath],
+                        titlePrincipalsFx: MongoCollection[F, TitleRec],
+                        nameFx: MongoCollection[F, AutoNameRec],
+                        imageHost: String,
+                        client: Client[F]): ImdbQuery[F] =
     new ImdbQuery[F] {
       private val proto = protoc(imageHost)
       private val imagePath = s"$proto://$imageHost/path"
@@ -131,29 +132,14 @@ object ImdbQuery extends FilterHelper with DecodeUtils {
             BsonDocument(extractElt(dblGte(fieldName, dbl)))))
       }
 
-      def getTitlePaths(titleRecs: List[TitleRec], chunkSize: Int): F[List[TitleRecPath]] = {
+      def getTitlePaths(titleRecs: List[TitleRecPath], chunkSize: Int): F[List[TitleRecPath]] = {
         titleRecs
           .grouped(chunkSize) // Split the list into chunks
           .toList
-          .traverse { chunk =>
-            chunk.parTraverse { titleRec => // Process each chunk in parallel
+          .traverse { _.parTraverse { titleRec => // Process each chunk in parallel
               for {
                 pathRec <- getPath(titleRec._id)
-              } yield
-                TitleRecPath(
-                  titleRec._id,
-                  titleRec.averageRating,
-                  titleRec.numVotes,
-                  titleRec.titleType,
-                  titleRec.primaryTitle,
-                  titleRec.originalTitle,
-                  titleRec.isAdult,
-                  titleRec.startYear,
-                  titleRec.endYear,
-                  titleRec.runTimeMinutes,
-                  titleRec.genresList,
-                  pathRec.path
-                )
+              } yield titleRec.copy(posterPath = Some(pathRec.path))
             }
           }
           .map(_.flatten) // Flatten the results back to a single list
@@ -481,8 +467,7 @@ object ImdbQuery extends FilterHelper with DecodeUtils {
         pathStr <- Sync[F].delay(s"$imagePath/$imdb/S")
         pathReq <- Sync[F].delay(Request[F](Method.GET, Uri.unsafeFromString(pathStr)))
         (pathTime, pathVal) <- Clock[F].timed(client.expect(pathReq)(jsonOf[F, PathRec]))
-        _ <- Sync[F].delay(L.info(s"pathStr {} imdb {} time {} ms",
-          pathStr, imdb, pathTime.toMillis))
+        _ <- Sync[F].delay(L.info(s"pathStr {} imdb {} time {} ms", pathStr, imdb, pathTime.toMillis))
       } yield pathVal
 
       override def getByTitlePath(optTitle: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRecPath] = for {
@@ -495,7 +480,7 @@ object ImdbQuery extends FilterHelper with DecodeUtils {
         bsonElts <- Stream.eval(Sync[F].delay {
           BsonDocument(composeElts(nonEmptyElts))
         })
-        (byTitleTime, recList) <- Stream.eval(Clock[F].timed(titleFx.find(bsonElts)
+        (byTitleTime, recList) <- Stream.eval(Clock[F].timed(title2Fx.find(bsonElts)
           .skip(0)
           .sortByDesc(startYear)
           .projection(Projection.exclude(genres))
