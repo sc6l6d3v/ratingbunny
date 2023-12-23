@@ -84,7 +84,7 @@ object ImdbRoutes extends DecodeUtils {
     val dsl = Http4sDsl[F]
     import dsl._
     val svc = HttpRoutes.of[F] {
-      case req@POST -> Root / "api" / "v2" / "title" / page / rating :? WindowWidthQueryParameterMatcher(ws)
+      case req@POST -> Root / "api" / "v2" / "oldtitle" / page / rating :? WindowWidthQueryParameterMatcher(ws)
         +& WindowHeightQueryParameterMatcher(wh) +& CardWidthQueryParameterMatcher(cs)
         +& CardHeightQueryParameterMatcher(ch)   +& OffsetQUeryParameterMatcher(offset) =>
         for {
@@ -101,7 +101,7 @@ object ImdbRoutes extends DecodeUtils {
           portionTitleList <- extractRecords(titleList, dimList.head, pgs)
           resp <- Ok(portionTitleList)
         } yield resp
-      case req@POST -> Root / "api" / "v2" / "pathtitle" / page / rating :? WindowWidthQueryParameterMatcher(ws)
+      case req@POST -> Root / "api" / "v2" / "title" / page / rating :? WindowWidthQueryParameterMatcher(ws)
         +& WindowHeightQueryParameterMatcher(wh) +& CardWidthQueryParameterMatcher(cs)
         +& CardHeightQueryParameterMatcher(ch) +& OffsetQUeryParameterMatcher(offset) =>
         for {
