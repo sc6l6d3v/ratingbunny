@@ -15,14 +15,15 @@ ENV APP_NAME      ratingslave
 ENV APP_VERSION   1.0
 
 # ENV variables for App
-RUN \
-   apk add --no-cache curl bash busybox-extras
+RUN apk add --no-cache curl bash busybox-extras
 
 # Define working directory
 WORKDIR /root
 ENV PROJECT_HOME /usr/src
 
 RUN mkdir -p $PROJECT_HOME/data
+
+RUN mkdir -p $PROJECT_HOME/data/logs
 
 WORKDIR $PROJECT_HOME/data
 

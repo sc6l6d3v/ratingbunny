@@ -2,15 +2,15 @@ import sbt._
 
 object Dependencies {
   object Versions {
-    val circeVersion = "0.14.3"
-    val fs2Version = "3.7.0"
+    val circeVersion = "0.14.6"
+    val fs2Version = "3.10.2"
     val Http4sVersion = "0.23.26"
-    val jsoupVersion = "1.13.1"
+    val jsoupVersion = "1.17.2"
     val LogbackVersion = "1.5.3"
     val loggingVersion = "3.9.5"
-    val mongo4catsVersion = "0.6.16"
-    val mongoScalaVersion = "4.11.1"
-    val scalaTestVersion = "3.2.17"
+    val mongo4catsVersion = "0.7.3"
+    val mongoScalaVersion = "5.0.1"
+    val scalaTestVersion = "3.2.18"
     val scalacheckVersion = "1.17.0"
   }
 

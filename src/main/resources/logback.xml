@@ -1,11 +1,5 @@
 <configuration>
   <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-    <!-- On Windows machines setting withJansi to true enables ANSI
-         color code interpretation by the Jansi library. This requires
-         org.fusesource.jansi:jansi:1.8 on the class path.  Note that
-         Unix-based operating systems such as Linux and Mac OS X
-         support ANSI color codes by default. -->
-    <withJansi>true</withJansi>
     <encoder>
       <pattern>service=release date=%d{yyyy-MM-dd'T'HH:mm:ss.SSS} - thread=%thread - level=%level - logger=%logger{50} - msg=%msg%n</pattern>
     </encoder>
@@ -45,6 +39,5 @@
 
   <root level="DEBUG">
       <appender-ref ref="DEFAULT-FILE-ASYNC" />
-      <appender-ref ref="DEFAULT-STDOUT-ASYNC" />
   </root>
 </configuration>

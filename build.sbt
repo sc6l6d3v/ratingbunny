@@ -28,12 +28,8 @@ lazy val root = (project in file("."))
       logback.logging,
       jsoup.base,
     ),
-    addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.10.3"),
     addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1"),
     Revolver.enableDebugging(5061, suspend = true),
-    dependencyOverrides ++= Seq(
-      "org.typelevel" %% "cats-effect" % "3.5.1"
-    )
   )
 
 scalacOptions ++= Seq(
@@ -46,6 +42,9 @@ scalacOptions ++= Seq(
 )
 
 assembly / assemblyMergeStrategy := {
+  case PathList("META-INF", "services", xs @ _*) => MergeStrategy.concat
   case PathList("META-INF", xs @ _*) => MergeStrategy.discard
+  case "io.netty.versions.properties" => MergeStrategy.discard
+  case "reference.conf" => MergeStrategy.concat
   case x => MergeStrategy.first
 }
