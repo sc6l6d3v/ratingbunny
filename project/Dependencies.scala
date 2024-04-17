@@ -2,20 +2,16 @@ import sbt._
 
 object Dependencies {
   object Versions {
-    val Http4sVersion = "0.23.17"
-    val Specs2Version = "4.9.3"
-    val LogbackVersion = "1.2.3"
-    val catsRetryVersion = "1.1.0"
-    val log4catsVersion = "2.3.1"
-    val fs2Version = "3.4.0"
-    val loggingVersion = "3.9.2"
-    val mongo4catsVersion = "0.6.15"
+    val circeVersion = "0.14.3"
+    val fs2Version = "3.7.0"
+    val Http4sVersion = "0.23.26"
     val jsoupVersion = "1.13.1"
-    val scalatestVersion = "3.2.2"
-    val mongoScalaVersion = "4.10.0"
-    val circeVersion      = "0.14.3"
-    val catsVersion       = "3.9.0"
-    val catsEffectVersion = "3.5.0"
+    val LogbackVersion = "1.5.3"
+    val loggingVersion = "3.9.5"
+    val mongo4catsVersion = "0.6.16"
+    val mongoScalaVersion = "4.11.1"
+    val scalaTestVersion = "3.2.17"
+    val scalacheckVersion = "1.17.0"
   }
 
   object http4s {
@@ -36,18 +32,9 @@ object Dependencies {
     val circeGeneric = "io.circe" %% "circe-generic" % Versions.circeVersion
   }
 
-  lazy val scalaTest = "org.scalatest" %% "scalatest" % Versions.scalatestVersion % Test
-
   object logback {
-    val classic = "ch.qos.logback"            % "logback-classic" % Versions.LogbackVersion
     val logging = "com.typesafe.scala-logging" %% "scala-logging" % Versions.loggingVersion
-  }
-
-  object cats {
-    val retry = "com.github.cb372" %% "cats-retry"      % Versions.catsRetryVersion
-    val log4cats = "org.typelevel" %% "log4cats-slf4j" % Versions.log4catsVersion
-    val cats = "org.typelevel" %% "cats-core" % Versions.catsVersion
-    val catsEffect = "org.typelevel" %% "cats-effect" % Versions.catsEffectVersion
+    val classic = "ch.qos.logback"            % "logback-classic" % Versions.LogbackVersion
   }
 
   object jsoup {
@@ -61,5 +48,10 @@ object Dependencies {
   object mongo4cats {
     val core = "io.github.kirill5k" %% "mongo4cats-core" % Versions.mongo4catsVersion
     val circe = "io.github.kirill5k" %% "mongo4cats-circe" % Versions.mongo4catsVersion
+  }
+
+  object test {
+    val scalatest = "org.scalatest" %% "scalatest" % Versions.scalaTestVersion % Test
+    val scalacheck = "org.scalacheck" %% "scalacheck" % Versions.scalacheckVersion % Test
   }
 }

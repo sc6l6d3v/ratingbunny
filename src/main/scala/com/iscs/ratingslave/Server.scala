@@ -8,6 +8,7 @@ import com.iscs.ratingslave.domains.{EmailContact, ImdbQuery, ReleaseDates}
 import com.iscs.ratingslave.routes.{EmailContactRoutes, ImdbRoutes, ReleaseRoutes}
 import com.typesafe.scalalogging.Logger
 import io.circe.generic.auto._
+import fs2.io.net.Network
 import mongo4cats.circe._
 import mongo4cats.database.MongoDatabase
 import org.http4s.HttpApp
@@ -68,6 +69,7 @@ object Server {
   }
 
   def getResource[F[_]: Async](finalHttpApp: HttpApp[F]): Resource[F, Server] = {
+    implicit val networkInstance: Network[F] = Network.forAsync[F]
     for {
       server <- EmberServerBuilder
         .default[F]

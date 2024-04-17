@@ -1,14 +1,15 @@
-import Dependencies._
+import Dependencies.{test, *}
 
 ThisBuild / version := "1.0"
-ThisBuild / scalaVersion := "2.13.8"
+ThisBuild / scalaVersion := "2.13.10"
 ThisBuild / organization := "com.iscs"
 ThisBuild / name := "ratingslave"
+ThisBuild / javacOptions     ++= Seq("--release", "17") // For Java 17
+ThisBuild / scalacOptions    ++= Seq("--release", "17")
 
 lazy val root = (project in file("."))
   .settings(
     name := "ratingslave",
-//    scalacOptions ++= Seq("-target:17"),
     libraryDependencies ++= Seq(
       http4s.client,
       http4s.server,
@@ -22,11 +23,9 @@ lazy val root = (project in file("."))
       mongo4cats.core,
       mongo4cats.circe,
       mongodb.driver,
-      scalaTest,
+      test.scalatest,
       logback.classic,
       logback.logging,
-      cats.retry,
-      cats.log4cats,
       jsoup.base,
     ),
     addCompilerPlugin("org.typelevel" %% "kind-projector"     % "0.10.3"),
