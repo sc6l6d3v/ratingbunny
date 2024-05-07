@@ -3,7 +3,7 @@ package com.iscs.ratingslave
 import cats.effect.{Async, Resource, Sync}
 import cats.implicits._
 import com.comcast.ip4s._
-import com.iscs.ratingslave.domains.ImdbQuery.{AutoNameRec, TitleRec, TitleRecPath}
+import com.iscs.ratingslave.domains.ImdbQuery.TitleRec
 import com.iscs.ratingslave.domains.{EmailContact, ImdbQuery, ReleaseDates}
 import com.iscs.ratingslave.routes.{EmailContactRoutes, ImdbRoutes, ReleaseRoutes}
 import com.typesafe.scalalogging.Logger
@@ -27,21 +27,14 @@ object Server {
   private val defaultHost = sys.env.getOrElse("DATASOURCE", "www.dummy.com")
   private val imageHost = sys.env.getOrElse("IMAGESOURCE", "localhost:8083")
 
-  private val nameCollection = "name_basics"
-  private val titleCollection = "title_basics_ratings"
-  private val titlePrincipalsCollection = "title_principals_withname"
+  private val compositeCollection = "title_principals_namerating"
 
   private val emailCollection = "email_contact"
 
   private def getImdbSvc[F[_]: Async](db: MongoDatabase[F], client: Client[F]): F[ImdbQuery[F]] =  for {
-    titleCollCodec <- db.getCollectionWithCodec[TitleRec](titleCollection)
-    title2CollCodec <- db.getCollectionWithCodec[TitleRecPath](titleCollection)
-    titlePrincipleCollCodec <- db.getCollectionWithCodec[TitleRec](titlePrincipalsCollection)
-    nameCollCodec <- db.getCollectionWithCodec[AutoNameRec](nameCollection)
-    imdbSvc <- Sync[F].delay(ImdbQuery.impl[F](titleCollCodec,
-      title2CollCodec,
-      titlePrincipleCollCodec,
-      nameCollCodec,
+    compCollCodec <- db.getCollectionWithCodec[TitleRec](compositeCollection)
+    imdbSvc <- Sync[F].delay(ImdbQuery.impl[F](
+      compCollCodec,
       imageHost,
       client))
   } yield imdbSvc

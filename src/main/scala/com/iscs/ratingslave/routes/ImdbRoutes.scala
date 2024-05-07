@@ -146,17 +146,21 @@ object ImdbRoutes extends DecodeUtils {
           portionNameList <- extractRecords(nameList, dimList.head, pgs)
           resp <- Ok(portionNameList)
         } yield resp
-      case GET -> Root / "api" / "v2" / "autoname" / name =>
+      case req@POST -> Root / "api" / "v2" / "autoname" / name / rating =>
         for {
-          _ <- Sync[F].delay(L.info(s""""request" autoname=$name"""))
-          nameStream <- Sync[F].delay(I.getAutosuggestName(name))
+          _ <- Sync[F].delay(L.info(s""""request" autoname=$name rating=$rating"""))
+          reqParams <- req.as[ReqParams]
+          rtng <- getRating(rating)
+          nameStream <- Sync[F].delay(I.getAutosuggestName(name, rtng, reqParams))
           nameList <- nameStream.compile.toList
           resp <- Ok(nameList)
         } yield resp
-      case GET -> Root / "api" / "v2" / "autotitle" / title =>
+      case req@POST -> Root / "api" / "v2" / "autotitle" / title / rating =>
         for {
-          _ <- Sync[F].delay(L.info(s""""request" autotitle=$title"""))
-          titleStream <- Sync[F].delay(I.getAutosuggestTitle(title))
+          _ <- Sync[F].delay(L.info(s""""request" autotitle=$title rating=$rating"""))
+          reqParams <- req.as[ReqParams]
+          rtng <- getRating(rating)
+          titleStream <- Sync[F].delay(I.getAutosuggestTitle(title, rtng, reqParams))
           titleList <- titleStream.compile.toList
           resp <- Ok(titleList)
         } yield resp
