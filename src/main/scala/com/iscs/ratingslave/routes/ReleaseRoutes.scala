@@ -15,19 +15,20 @@ import org.http4s.headers.`Content-Type`
 
 object ReleaseRoutes extends DecodeUtils {
   private val L = Logger[this.type]
+  private val apiVersion = "v3"
 
   def httpRoutes[F[_] : Async](R: ReleaseDates[F]): HttpRoutes[F] = {
     val dsl = Http4sDsl[F]
     import dsl._
     val imgSvc = HttpRoutes.of[F] {
-      case _@GET -> Root / "api" / "v2" / "image" / imdbId =>
+      case _@GET -> Root / "api" / `apiVersion` / "image" / imdbId =>
         for {
           _ <- Sync[F].delay(L.info(s""""request" image=$imdbId"""))
           resp <- Ok(R.getImage(imdbId))
         } yield resp
     }.map(_.withContentType(`Content-Type`(`jpeg`)))
     val metaSvc = HttpRoutes.of[F] {
-      case _ @ GET -> Root / "api" / "v1" / "reldate" / year / month / rating =>
+      case _ @ GET -> Root / "api" / `apiVersion` / "reldate" / year / month / rating =>
         for {
           _ <- Sync[F].delay(L.info(s""""request" date=$year/$month rating=$rating"""))
           ratingVal <- getRating(rating)
@@ -35,7 +36,7 @@ object ReleaseRoutes extends DecodeUtils {
           relList <- relStream.compile.toList
           resp <- Ok(relList)
         } yield resp
-       case _ @ GET -> Root / "api" / "v1" / "top" / year / rating =>
+       case _ @ GET -> Root / "api" / `apiVersion` / "top" / year / rating =>
         for {
           _ <- Sync[F].delay(L.info(s""""request" date=$year rating=$rating"""))
           ratingVal <- getRating(rating)
@@ -43,7 +44,7 @@ object ReleaseRoutes extends DecodeUtils {
           topList <- topStream.compile.toList
           resp <- Ok(topList)
         } yield resp
-      case _ @ GET -> Root / "api" / "v1" / "new" / year / rating =>
+      case _ @ GET -> Root / "api" / `apiVersion` / "new" / year / rating =>
         for {
           _ <- Sync[F].delay(L.info(s""""request" date=$year rating=$rating"""))
           ratingVal <- getRating(rating)

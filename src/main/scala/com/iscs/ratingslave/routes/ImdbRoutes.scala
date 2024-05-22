@@ -22,6 +22,7 @@ object ImdbRoutes extends DecodeUtils {
   private val L = Logger[this.type]
   private val rowSpacer = 64
   private val columnSpacer = 64
+  private val apiVersion = "v3"
 
   private def rowsPerPage(height: Int, spacer: Int, cardHeight: Int): Int = {
     @tailrec
@@ -84,7 +85,7 @@ object ImdbRoutes extends DecodeUtils {
     val dsl = Http4sDsl[F]
     import dsl._
     val svc = HttpRoutes.of[F] {
-      case req@POST -> Root / "api" / "v2" / "title" / page / rating :? WindowWidthQueryParameterMatcher(ws)
+      case req@POST -> Root / "api" / `apiVersion` / "title" / page / rating :? WindowWidthQueryParameterMatcher(ws)
         +& WindowHeightQueryParameterMatcher(wh) +& CardWidthQueryParameterMatcher(cs)
         +& CardHeightQueryParameterMatcher(ch)   +& OffsetQUeryParameterMatcher(offset) =>
         for {
@@ -101,7 +102,7 @@ object ImdbRoutes extends DecodeUtils {
           portionTitleList <- extractRecords(titleList, dimList.head, pgs)
           resp <- Ok(portionTitleList)
         } yield resp
-      case req@POST -> Root / "api" / "v2" / "pathtitle" / page / rating :? WindowWidthQueryParameterMatcher(ws)
+      case req@POST -> Root / "api" / `apiVersion` / "pathtitle" / page / rating :? WindowWidthQueryParameterMatcher(ws)
         +& WindowHeightQueryParameterMatcher(wh) +& CardWidthQueryParameterMatcher(cs)
         +& CardHeightQueryParameterMatcher(ch) +& OffsetQUeryParameterMatcher(offset) =>
         for {
@@ -118,7 +119,7 @@ object ImdbRoutes extends DecodeUtils {
           portionTitleList <- extractRecords(titleList, dimList.head, pgs)
           resp <- Ok(portionTitleList)
         } yield resp
-      case req@POST -> Root / "api" / "v2" / "name2" / name / rating =>
+      case req@POST -> Root / "api" / `apiVersion` / "name2" / name / rating =>
         for {
           reqParams <- req.as[ReqParams]
           rtng <- getRating(rating)
@@ -129,7 +130,7 @@ object ImdbRoutes extends DecodeUtils {
           nameList <- imdbNameStream.compile.toList
           resp <- Ok(nameList)
         } yield resp
-      case req@POST -> Root / "api" / "v2" / "name" / page / rating :? WindowWidthQueryParameterMatcher(ws)
+      case req@POST -> Root / "api" / `apiVersion` / "name" / page / rating :? WindowWidthQueryParameterMatcher(ws)
         +& WindowHeightQueryParameterMatcher(wh) +& CardWidthQueryParameterMatcher(cs)
         +& CardHeightQueryParameterMatcher(ch)   +& OffsetQUeryParameterMatcher(offset) =>
         for {
@@ -146,7 +147,7 @@ object ImdbRoutes extends DecodeUtils {
           portionNameList <- extractRecords(nameList, dimList.head, pgs)
           resp <- Ok(portionNameList)
         } yield resp
-      case req@POST -> Root / "api" / "v2" / "autoname" / name / rating =>
+      case req@POST -> Root / "api" / `apiVersion` / "autoname" / name / rating =>
         for {
           _ <- Sync[F].delay(L.info(s""""request" autoname=$name rating=$rating"""))
           reqParams <- req.as[ReqParams]
@@ -155,7 +156,7 @@ object ImdbRoutes extends DecodeUtils {
           nameList <- nameStream.compile.toList
           resp <- Ok(nameList)
         } yield resp
-      case req@POST -> Root / "api" / "v2" / "autotitle" / title / rating =>
+      case req@POST -> Root / "api" / `apiVersion` / "autotitle" / title / rating =>
         for {
           _ <- Sync[F].delay(L.info(s""""request" autotitle=$title rating=$rating"""))
           reqParams <- req.as[ReqParams]
