@@ -121,11 +121,17 @@ trait QuerySetup {
     val nonEmptyElts = combineBson(getParamList(params), dblExists(averageRating, rating), titleElt)
     val matchBson = and(nonEmptyElts: _*)
 
-    val sortBson = Sorts.ascending(id)
+    val sortBson = Sorts.ascending(primaryTitle)
+
+    val projectBson = fields(
+      exclude(id),
+      computed(primaryTitle, "$_id")
+    )
 
     Seq(
       Aggregates.`match`(matchBson),
       Aggregates.group("$primaryTitle"),
+      Aggregates.project(projectBson),
       Aggregates.sort(sortBson),
       Aggregates.limit(AUTOSUGGESTLIMIT)
     )

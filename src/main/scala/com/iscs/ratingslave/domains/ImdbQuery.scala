@@ -34,7 +34,7 @@ object ImdbQuery extends DecodeUtils {
 
   final case class AutoNameRec(firstName: String, lastName: Option[String])
 
-  final case class AutoTitleRec(_id: Option[String])
+  final case class AutoTitleRec(primaryTitle: Option[String])
 
   private final case class PathRec(path: String)
 
