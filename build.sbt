@@ -28,6 +28,7 @@ lazy val root = (project in file("."))
       logback.logging,
       jsoup.base,
     ),
+    Compile / mainClass := Some("com.iscs.ratingslave.Main"),
     addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1"),
     Revolver.enableDebugging(5061, suspend = true),
   )
