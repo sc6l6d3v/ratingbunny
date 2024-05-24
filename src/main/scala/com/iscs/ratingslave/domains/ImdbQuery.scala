@@ -74,7 +74,7 @@ object ImdbQuery extends DecodeUtils {
       /**
        * db.title_principals_namerating.aggregate([
        *    { $match: {
-       *            primaryTitle: { $regex: "Gone " },
+       *            primaryTitle: { $regex: "Gone " },   or primaryTitle: "Gone with the Light", if exact
        *            startYear: { "$gte": 2019, "$lte": 2023 },
        *            genresList: { "$in": ["Adventure"] },
        *            titleType: "tvEpisode",

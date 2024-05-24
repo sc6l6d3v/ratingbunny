@@ -11,6 +11,7 @@ import org.mongodb.scala.model.Filters._
 import org.mongodb.scala.model.Filters.{eq => feq}
 
 import scala.language.implicitConversions
+import scala.util.matching.Regex.quote
 
 trait QuerySetup {
   val id = "_id"
@@ -29,6 +30,7 @@ trait QuerySetup {
   private val runtimeMinutes = "runtimeMinutes"
   val titleType = "titleType"
   private val AUTOSUGGESTLIMIT = 20
+  private val EXACT = "exact"
 
   implicit def convertBooleanToInt(b: Boolean): asInt = new asInt(b)
 
@@ -80,7 +82,14 @@ trait QuerySetup {
     ).flatten
   }
 
-  private def getOptFilters(optTitle: Option[String]): Option[Bson] = optTitle.map(title => regex(primaryTitle, title))
+  private def getOptFilters(optTitle: Option[String], searchType: Option[String]): Option[Bson] = {
+    optTitle.map { title =>
+      searchType match {
+        case Some(EXACT) => feq(primaryTitle, title)
+        case _           => regex(primaryTitle, "^" + quote(title))
+      }
+    }
+  }
 
   def genAutonameFilter(namePrefix: String, rating: Double, params: ReqParams): Seq[Bson] = {
     val names = if (namePrefix contains " ")
@@ -144,7 +153,7 @@ trait QuerySetup {
 
   def genTitleFilter(optTitle: Option[String], rating: Double, params: ReqParams): Bson = {
     val paramWithRating = getParamList(params) :+ dblExists(averageRating, rating)
-    val nonEmptyElts = getOptFilters(optTitle).map { titleElts =>
+    val nonEmptyElts = getOptFilters(optTitle, params.searchType).map { titleElts =>
       paramWithRating :+ titleElts
     }.getOrElse(paramWithRating)
     and(nonEmptyElts: _*)
