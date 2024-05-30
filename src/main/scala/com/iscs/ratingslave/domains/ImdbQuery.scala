@@ -41,7 +41,7 @@ object ImdbQuery extends DecodeUtils {
   final case class TitleRec(_id: String, averageRating: Option[Double], numVotes: Option[Int],
                             titleType: String, primaryTitle: String, originalTitle: String,
                             isAdult: Int, startYear: Int, endYear: String, runtimeMinutes: Option[Int],
-                            genresList: List[String])
+                            genresList: Option[List[String]])
 
   final case class TitleRecPath(_id: String, averageRating: Option[Double], numVotes: Option[Int],
                             titleType: String, primaryTitle: String, originalTitle: String,
