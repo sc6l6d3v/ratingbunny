@@ -50,21 +50,20 @@ object ImdbRoutes extends DecodeUtils {
     }
   }
 
-  private def convertParams[F[_]: Sync](page: String, ws: String, wh: String, cs: String,
-                                        ch: String, offset: String): F[List[Int]] = for {
-    dimList <- Sync[F].delay(dimsFromString(List(
-      (page, 1),
-      (ws, 600),
-      (wh, 900),
-      (cs, 160),
-      (ch, 238),
-      (offset, 0),
+  private def convertParams(page: String, ws: String, wh: String, cs: String,
+                                        ch: String, offset: String): List[Int] =
+    dimsFromString(
+      List(
+        (page, 1),
+        (ws, 600),
+        (wh, 900),
+        (cs, 160),
+        (ch, 238),
+        (offset, 0),
+      )
     )
-    ))
-  } yield dimList
 
-  private def calcWithParams[F[_]: Sync](params: List[Int]): F[Int] = for {
-    pgs <- Sync[F].delay {
+  private def calcWithParams(params: List[Int]): Int = {
       val wsInt = params(1)
       val whInt = params(2)
       val csInt = params(3)
@@ -72,11 +71,9 @@ object ImdbRoutes extends DecodeUtils {
       val offsetInt = params(5)
       pageSize(wsInt, csInt, whInt, chInt, offsetInt)
     }
-  } yield pgs
 
-  private def extractRecords[F[_]: Sync, T](records: List[T], pg: Int, pgs: Int): F[List[T]] = for {
-    sliced <- Sync[F].delay(records.slice((pg - 1) * pgs, (pg - 1) * pgs + pgs))
-  } yield sliced
+  private def pureExtractRecords[T](records: List[T], pg: Int, pgs: Int): List[T] =
+    records.slice((pg - 1) * pgs, (pg - 1) * pgs + pgs)
 
   private def showParams[F[_]: Sync](pgs: Int, ws: String, wh: String, cs: String, ch: String, offset: String): F[Unit] =
     Sync[F].delay(L.info(s""""params" ws=$ws wh=$wh cs=$cs ch=$ch pgs=$pgs offset=$offset"""))
@@ -91,16 +88,15 @@ object ImdbRoutes extends DecodeUtils {
         for {
           reqParams <- req.as[ReqParams]
           rtng <- getRating(rating)
-          dimList <- convertParams(page, ws, wh, cs, ch, offset)
-          pgs <- calcWithParams(dimList)
+          dimList = convertParams(page, ws, wh, cs, ch, offset)
+          pgs = calcWithParams(dimList)
           _ <- showParams(pgs, ws, wh, cs, ch, offset)
           titleStream <- Sync[F].delay(if (reqParams.year.nonEmpty)
-            I.getByTitle(reqParams.query, rtng, reqParams)
+            I.getByTitle(reqParams.query, rtng, reqParams, pgs << 3)
           else
             Stream.empty)
           titleList <- titleStream.compile.toList
-          portionTitleList <- extractRecords(titleList, dimList.head, pgs)
-          resp <- Ok(portionTitleList)
+          resp <- Ok(pureExtractRecords(titleList, dimList.head, pgs))
         } yield resp
       case req@POST -> Root / "api" / `apiVersion` / "pathtitle" / page / rating :? WindowWidthQueryParameterMatcher(ws)
         +& WindowHeightQueryParameterMatcher(wh) +& CardWidthQueryParameterMatcher(cs)
@@ -108,16 +104,15 @@ object ImdbRoutes extends DecodeUtils {
         for {
           reqParams <- req.as[ReqParams]
           rtng <- getRating(rating)
-          dimList <- convertParams(page, ws, wh, cs, ch, offset)
-          pgs <- calcWithParams(dimList)
+          dimList = convertParams(page, ws, wh, cs, ch, offset)
+          pgs = calcWithParams(dimList)
           _ <- showParams(pgs, ws, wh, cs, ch, offset)
           titleStream <- Sync[F].delay(if (reqParams.year.nonEmpty)
             I.getByTitlePath(reqParams.query, rtng, reqParams)
           else
             Stream.empty)
           titleList <- titleStream.compile.toList
-          portionTitleList <- extractRecords(titleList, dimList.head, pgs)
-          resp <- Ok(portionTitleList)
+          resp <- Ok(pureExtractRecords(titleList, dimList.head, pgs))
         } yield resp
       case req@POST -> Root / "api" / `apiVersion` / "name2" / name / rating =>
         for {
@@ -141,11 +136,10 @@ object ImdbRoutes extends DecodeUtils {
           else
             Stream.empty)
           nameList <- imdbNameStream.compile.toList
-          dimList <- convertParams(page, ws, wh, cs, ch, offset)
-          pgs <- calcWithParams(dimList)
+          dimList = convertParams(page, ws, wh, cs, ch, offset)
+          pgs = calcWithParams(dimList)
            _ <- Sync[F].delay(L.info(s""""name params" ws=$ws wh=$wh cs=$cs ch=$ch pgs=$pgs offset=$offset"""))
-          portionNameList <- extractRecords(nameList, dimList.head, pgs)
-          resp <- Ok(portionNameList)
+          resp <- Ok(pureExtractRecords(nameList, dimList.head, pgs))
         } yield resp
       case req@POST -> Root / "api" / `apiVersion` / "autoname" / name / rating =>
         for {

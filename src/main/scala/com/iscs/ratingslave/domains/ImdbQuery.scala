@@ -19,7 +19,7 @@ import org.http4s.{Method, Request, Uri}
 import scala.language.implicitConversions
 
 trait ImdbQuery[F[_]] {
-  def getByTitle(title: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRec]
+  def getByTitle(title: Option[String], rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec]
   def getByTitlePath(title: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRecPath]
   def getByName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec]
   def getByEnhancedName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec]
@@ -115,8 +115,8 @@ object ImdbQuery extends DecodeUtils {
        * @param params   other params
        * @return
        */
-      override def getByTitle(optTitle: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRec] = {
-        val queryPipeline = genQueryPipeline(genTitleFilter(optTitle, rating, params))
+      override def getByTitle(optTitle: Option[String], rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec] = {
+        val queryPipeline = genQueryPipeline(genTitleFilter(optTitle, rating, params), isLimited = true, limit)
 
         Stream.eval(Clock[F].monotonic).flatMap { start =>
           compFx.aggregateWithCodec[TitleRec](queryPipeline).stream

@@ -29,6 +29,7 @@ trait QuerySetup {
   private val endYear = "endYear"
   private val runtimeMinutes = "runtimeMinutes"
   val titleType = "titleType"
+  private val STREAMLIMIT = 96
   private val AUTOSUGGESTLIMIT = 20
   private val EXACT = "exact"
 
@@ -71,6 +72,8 @@ trait QuerySetup {
   }
 
   private val sorting: Bson = Sorts.descending(startYear, numVotes)
+
+  private def limitBson(limit: Int): Bson = Aggregates.limit(limit)
 
   private def getParamList(params: ReqParams): List[Bson] = {
     List(
@@ -159,11 +162,16 @@ trait QuerySetup {
     and(nonEmptyElts: _*)
   }
 
-  def genQueryPipeline(matchVariable: Bson): Seq[Bson] =
-    Seq(
+  def genQueryPipeline(matchVariable: Bson, isLimited: Boolean = false, limit: Int = STREAMLIMIT): Seq[Bson] = {
+    val basePipeLine = Seq(
       Aggregates.`match`(matchVariable),
       Aggregates.group(s"$$$tconst", groupAccums: _*),
       Aggregates.project(projections),
       Aggregates.sort(sorting)
     )
+    if (isLimited)
+      basePipeLine :+ limitBson(limit)
+    else
+      basePipeLine
+  }
 }
