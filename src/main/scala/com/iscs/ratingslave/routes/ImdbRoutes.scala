@@ -96,7 +96,9 @@ object ImdbRoutes extends DecodeUtils {
           else
             Stream.empty)
           titleList <- titleStream.compile.toList
-          resp <- Ok(pureExtractRecords(titleList, dimList.head, pgs))
+          pageList = pureExtractRecords(titleList, dimList.head, pgs)
+          _ <- Sync[F].delay(L.info(s""""title counts" page=$page titleList=${titleList.size} pageList=${pageList.size}"""))
+          resp <- Ok(pageList)
         } yield resp
       case req@POST -> Root / "api" / `apiVersion` / "pathtitle" / page / rating :? WindowWidthQueryParameterMatcher(ws)
         +& WindowHeightQueryParameterMatcher(wh) +& CardWidthQueryParameterMatcher(cs)
@@ -112,7 +114,9 @@ object ImdbRoutes extends DecodeUtils {
           else
             Stream.empty)
           titleList <- titleStream.compile.toList
-          resp <- Ok(pureExtractRecords(titleList, dimList.head, pgs))
+          pageList = pureExtractRecords(titleList, dimList.head, pgs)
+          _ <- Sync[F].delay(L.info(s""""pathtitle counts" page=$page titleList=${titleList.size} pageList=${pageList.size}"""))
+          resp <- Ok(pageList)
         } yield resp
       case req@POST -> Root / "api" / `apiVersion` / "name2" / name / rating =>
         for {
@@ -139,7 +143,9 @@ object ImdbRoutes extends DecodeUtils {
           dimList = convertParams(page, ws, wh, cs, ch, offset)
           pgs = calcWithParams(dimList)
            _ <- Sync[F].delay(L.info(s""""name params" ws=$ws wh=$wh cs=$cs ch=$ch pgs=$pgs offset=$offset"""))
-          resp <- Ok(pureExtractRecords(nameList, dimList.head, pgs))
+          pageList = pureExtractRecords(nameList, dimList.head, pgs)
+          _ <- Sync[F].delay(L.info(s""""name counts" page=$page nameList=${nameList.size} wh=$wh pageList=${pageList.size}"""))
+          resp <- Ok(pageList)
         } yield resp
       case req@POST -> Root / "api" / `apiVersion` / "autoname" / name / rating =>
         for {

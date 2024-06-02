@@ -40,7 +40,7 @@ trait QuerySetup {
 
   private def inOrEqList(fieldName: String, inputList: List[String]): Bson = inputList match {
     case manyElements: List[String] if manyElements.size > 1    =>
-      in(fieldName, List(manyElements): _*)
+      in(fieldName, manyElements: _*)
     case singleElement: List[String] if singleElement.size == 1 =>
       feq(fieldName, singleElement.head)
   }
