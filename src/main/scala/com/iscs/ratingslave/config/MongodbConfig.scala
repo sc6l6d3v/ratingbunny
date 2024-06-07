@@ -1,29 +1,41 @@
 package com.iscs.ratingslave.config
 
 import com.mongodb.ReadPreference
+import org.mongodb.scala.connection.ConnectionPoolSettings
 import org.mongodb.scala.{ConnectionString, MongoClientSettings, MongoCredential}
+import scala.concurrent.duration.MILLISECONDS
 
 case class MongodbConfig(url: String, isReadOnly: Boolean = false) {
-  val connection = new ConnectionString(url)
+  private val connection = new ConnectionString(url)
 
-  val credentials: MongoCredential = connection.getCredential
+  private val credentials: MongoCredential = connection.getCredential
 
-  val useSSL: Boolean = connection.getSslEnabled != null
+  private val useSSL: Boolean = connection.getSslEnabled != null
 
   val isReplicaSet: Boolean = connection.getRequiredReplicaSetName != null
 
+  private val connectionPoolSettings: ConnectionPoolSettings = ConnectionPoolSettings.builder()
+    .minSize(128)
+    .maxSize(256)
+    .maxWaitTime(1000 * 60 * 2, MILLISECONDS) // 2 minutes
+    .maxConnectionLifeTime(1000 * 60 * 60, MILLISECONDS) // 1 hour
+    .maxConnectionIdleTime(1000 * 60 * 10, MILLISECONDS) // 10 minutes
+    .maxConnecting(10) // Increase the number of connections being established concurrently
+    .build()
+
   private val baseSettings: MongoClientSettings.Builder = MongoClientSettings.builder()
-    .applyToConnectionPoolSettings(b => b.minSize(128).maxSize(256))
+    .applyToConnectionPoolSettings(builder => builder.applySettings(connectionPoolSettings))
     .applyConnectionString(connection)
-    .readPreference(ReadPreference.secondaryPreferred)
+    .readPreference(if (isReadOnly) ReadPreference.secondaryPreferred else ReadPreference.primaryPreferred)
 
   private val withCredentials = if (credentials == null) baseSettings else baseSettings.credential(credentials)
 
-  val settings: MongoClientSettings = if (useSSL)
-    withCredentials
-      .applyToSslSettings(b => b.enabled(useSSL))
-      .build()
-  else
-    withCredentials
-      .build()
+  val settings: MongoClientSettings =
+    if (useSSL)
+      withCredentials
+        .applyToSslSettings(b => b.enabled(useSSL))
+        .build()
+    else
+      withCredentials
+        .build()
 }

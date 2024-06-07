@@ -5,7 +5,7 @@ import com.iscs.ratingslave.config.MongodbConfig
 import mongo4cats.client.MongoClient
 
 class DbClient[F[_]: Sync : Async](val config: MongodbConfig) {
-  val dbResource: Resource[F, MongoClient[F]] = MongoClient.fromConnectionString(config.url)
+  val dbResource: Resource[F, MongoClient[F]] = MongoClient.create(config.settings)
 }
 
 object DbClient {

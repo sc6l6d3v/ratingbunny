@@ -118,15 +118,23 @@ object ImdbQuery extends DecodeUtils {
       override def getByTitle(optTitle: Option[String], rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec] = {
         val queryPipeline = genQueryPipeline(genTitleFilter(optTitle, rating, params), isLimited = true, limit)
 
-        Stream.eval(Clock[F].monotonic).flatMap { start =>
-          compFx.aggregateWithCodec[TitleRec](queryPipeline).stream
-            .onFinalize { // Ensure that logging operation happens once after all stream processing is complete
+        for {
+          start <- Stream.eval(Clock[F].monotonic)
+          midRef <- Stream.eval(Ref.of[F, Long](0L))
+          resultStream <- compFx.aggregateWithCodec[TitleRec](queryPipeline).stream
+            .evalMap { result =>
+              Clock[F].monotonic.flatMap { mid =>
+                midRef.set(mid.toMillis) >> Sync[F].pure(result)
+              }
+            }
+            .onFinalize {
               for {
                 end <- Clock[F].monotonic
-                _ <- Sync[F].delay(L.info(s"getByTitle took {} ms", (end - start).toMillis))
+                mid <- midRef.get
+                _ <- Sync[F].delay(L.info(s"getByTitle took ${end.toMillis - start.toMillis} ms, aggregation took ${mid - start.toMillis} ms"))
               } yield ()
             }
-        }
+        } yield resultStream
       }
 
       /**
