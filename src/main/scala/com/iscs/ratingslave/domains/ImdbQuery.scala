@@ -20,7 +20,7 @@ import scala.language.implicitConversions
 
 trait ImdbQuery[F[_]] {
   def getByTitle(title: Option[String], rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec]
-  def getByTitlePath(title: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRecPath]
+  def getByTitlePath(title: Option[String], rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRecPath]
   def getByName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec]
   def getByEnhancedName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec]
   def getAutosuggestTitle(titlePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoTitleRec]
@@ -32,23 +32,40 @@ object ImdbQuery extends DecodeUtils {
 
   def apply[F[_]](implicit ev: ImdbQuery[F]): ImdbQuery[F] = ev
 
-  final case class AutoNameRec(firstName: String, lastName: Option[String])
+  trait AutoRecBase
 
-  final case class AutoTitleRec(primaryTitle: Option[String])
+  final case class AutoNameRec(firstName: String, lastName: Option[String]) extends AutoRecBase
+
+  final case class AutoTitleRec(primaryTitle: Option[String]) extends AutoRecBase
 
   private final case class PathRec(path: String)
+
+  trait TitleRecBase {
+    def _id: String
+    def averageRating: Option[Double]
+    def numVotes: Option[Int]
+    def titleType: String
+    def primaryTitle: String
+    def originalTitle: String
+    def isAdult: Int
+    def startYear: Int
+    def endYear: String
+    def runtimeMinutes: Option[Int]
+    def genresList: Option[List[String]]
+  }
 
   final case class TitleRec(_id: String, averageRating: Option[Double], numVotes: Option[Int],
                             titleType: String, primaryTitle: String, originalTitle: String,
                             isAdult: Int, startYear: Int, endYear: String, runtimeMinutes: Option[Int],
-                            genresList: Option[List[String]])
+                            genresList: Option[List[String]]) extends TitleRecBase
 
   final case class TitleRecPath(_id: String, averageRating: Option[Double], numVotes: Option[Int],
                             titleType: String, primaryTitle: String, originalTitle: String,
                             isAdult: Int, startYear: Int, endYear: String, runtimeMinutes: Option[Int],
-                            genresList: List[String], posterPath: Option[String])
+                            genresList: Option[List[String]], posterPath: Option[String]) extends TitleRecBase
 
   def impl[F[_]: Async](compFx: MongoCollection[F, TitleRec],
+                        tbrFx: MongoCollection[F, TitleRec],
                         imageHost: String,
                         client: Client[F]): ImdbQuery[F] =
     new ImdbQuery[F] with QuerySetup  {
@@ -72,30 +89,18 @@ object ImdbQuery extends DecodeUtils {
       }
 
       /**
-       * db.title_principals_namerating.aggregate([
+       * db.title_basics_ratings.aggregate([
        *    { $match: {
        *            primaryTitle: { $regex: "Gone " },   or primaryTitle: "Gone with the Light", if exact
        *            startYear: { "$gte": 2019, "$lte": 2023 },
        *            genresList: { "$in": ["Adventure"] },
        *            titleType: "tvEpisode",
        *            isAdult: 0,
-       *            numVotes: { "$gte": 50 },
-       *            $or: [{ "averageRating": { "$exists": false } },
-       *                  { "averageRating": { "$gte": 7.0 } }]
+       *            $or: [{ "numVotes": { "$gte": 7.0 } },
+       *                  { "numVotes": 0.0 }]
+       *            $or: [{ "averageRating": { "$gte": 7.0 } },
+       *                  { "averageRating": 0.0 }]
        *          }
-       * }, { $group: {
-       *               _id: "$tconst",
-       *               averageRating: { $first: "$averageRating" },
-       *               numVotes: { $first: "$numVotes" },
-       *               titleType: { $first: "$titleType" },
-       *               primaryTitle: { $first: "$primaryTitle" },
-       *               originalTitle: { $first: "$originalTitle" },
-       *               isAdult: { $first: "$isAdult" },
-       *               startYear: { $first: "$startYear" },
-       *               endYear: { $first: "$endYear" },
-       *               runtimeMinutes: { $first: "$runtimeMinutes" },
-       *               genresList: { $first: "$genresList" }
-       *              }
        * }, { $project: {
        *                  averageRating: { $ifNull: ["$averageRating", "$$REMOVE"]},
        *                  numVotes: { $ifNull: ["$numVotes", "$$REMOVE"]},
@@ -108,20 +113,22 @@ object ImdbQuery extends DecodeUtils {
        *                  runtimeMinutes: { $ifNull: ["$runtimeMinutes", "$$REMOVE"]},
        *                  genresList: 1,
        *               }
-       * }, { $sort: { startYear: -1}}
+       * }, { $sort: { startYear: -1, numVotes: -1, averageRating: -1,  primaryTitle: 1 }}
+       * }, { $limit: 120 }
        * ])
        * @param optTitle optional query param
        * @param rating   required numeric
        * @param params   other params
+       * @param limit    how many
        * @return
        */
       override def getByTitle(optTitle: Option[String], rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec] = {
-        val queryPipeline = genQueryPipeline(genTitleFilter(optTitle, rating, params), isLimited = true, limit)
+        val queryPipeline = genTitleQueryPipeline(genTitleFilter(optTitle, rating, params), isLimited = true, limit)
 
         for {
           start <- Stream.eval(Clock[F].monotonic)
           midRef <- Stream.eval(Ref.of[F, Long](0L))
-          resultStream <- compFx.aggregateWithCodec[TitleRec](queryPipeline).stream
+          resultStream <- tbrFx.aggregateWithCodec[TitleRec](queryPipeline).stream
             .evalMap { result =>
               Clock[F].monotonic.flatMap { mid =>
                 midRef.set(mid.toMillis) >> Sync[F].pure(result)
@@ -378,12 +385,12 @@ object ImdbQuery extends DecodeUtils {
         _ <- Sync[F].delay(L.info(s"pathStr {} imdb {} time {} ms", pathStr, imdb, pathTime.toMillis))
       } yield pathVal
 
-      override def getByTitlePath(optTitle: Option[String], rating: Double, params: ReqParams): Stream[F, TitleRecPath] = {
+      override def getByTitlePath(optTitle: Option[String], rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRecPath] = {
         Stream.eval(Clock[F].monotonic).flatMap { overallStart =>
-          val queryPipeline = genQueryPipeline(genTitleFilter(optTitle, rating, params))
+          val queryPipeline = genTitleQueryPipeline(genTitleFilter(optTitle, rating, params), isLimited = true, limit)
 
           // connect the streams
-          val titleRecPathStream = compFx.aggregateWithCodec[TitleRecPath](queryPipeline).stream
+          val titleRecPathStream = tbrFx.aggregateWithCodec[TitleRecPath](queryPipeline).stream
           val enhancedStream = getTitlePathsStream(titleRecPathStream, chunkSize)
 
           enhancedStream.onFinalize {

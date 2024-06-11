@@ -3,15 +3,19 @@ package com.iscs.ratingslave.routes
 import cats.effect._
 import cats.implicits._
 import com.iscs.ratingslave.domains.ImdbQuery
+import com.iscs.ratingslave.domains.ImdbQuery.{AutoNameRec, AutoRecBase, AutoTitleRec, TitleRec, TitleRecBase, TitleRecPath}
 import com.iscs.ratingslave.dslparams._
 import com.iscs.ratingslave.model.Requests._
 import com.iscs.ratingslave.util.DecodeUtils
 import com.typesafe.scalalogging.Logger
 import fs2.Stream
+import io.circe.Encoder
+import io.circe.syntax.EncoderOps
 import io.circe.generic.auto._
-import org.http4s.HttpRoutes
+import org.http4s.{EntityEncoder, HttpRoutes, Request, Response}
 import org.http4s.MediaType.application._
 import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder}
+import org.http4s.circe.jsonEncoderOf
 import org.http4s.dsl.Http4sDsl
 import org.http4s.headers.`Content-Type`
 
@@ -78,46 +82,66 @@ object ImdbRoutes extends DecodeUtils {
   private def showParams[F[_]: Sync](pgs: Int, ws: String, wh: String, cs: String, ch: String, offset: String): F[Unit] =
     Sync[F].delay(L.info(s""""params" ws=$ws wh=$wh cs=$cs ch=$ch pgs=$pgs offset=$offset"""))
 
+  implicit val encodeAutoRecBase: Encoder[AutoRecBase] = Encoder.instance {
+    case autoNameRec: AutoNameRec => autoNameRec.asJson
+    case autoTitleRec: AutoTitleRec => autoTitleRec.asJson
+  }
+
+  implicit val encodeTitleRecBase: Encoder[TitleRecBase] = Encoder.instance {
+    case titleRec: TitleRec => titleRec.asJson
+    case titleRecPath: TitleRecPath => titleRecPath.asJson
+  }
+
+  implicit def listTitleRecBaseEntityEncoder[F[_]: Async]: EntityEncoder[F, List[TitleRecBase]] =
+    jsonEncoderOf[F, List[TitleRecBase]]
+
   def httpRoutes[F[_]: Async](I: ImdbQuery[F]): HttpRoutes[F] = {
     val dsl = Http4sDsl[F]
     import dsl._
+
+    def handleTitleRequest(req: Request[F],
+                           page: String, rating: String, ws: String, wh: String, cs: String, ch: String, offset: String,
+                           getTitle: (Option[String], Double, ReqParams, Int) => Stream[F, TitleRecBase],
+                           logText: String): F[Response[F]] = {
+      for {
+        reqParams <- req.as[ReqParams]
+        rtng <- getRating(rating)
+        dimList = convertParams(page, ws, wh, cs, ch, offset)
+        pgs = calcWithParams(dimList)
+        _ <- showParams(pgs, ws, wh, cs, ch, offset)
+        titleStream <- Sync[F].delay(if (reqParams.year.nonEmpty)
+          getTitle(reqParams.query, rtng, reqParams, pgs << 3)
+        else
+          Stream.empty)
+        titleList <- titleStream.compile.toList
+        pageList = pureExtractRecords(titleList, dimList.head, pgs)
+        _ <- Sync[F].delay(L.info(s""""$logText counts" pageNo=$page titleList=${titleList.size} pageList=${pageList.size}"""))
+        resp <- Ok(pageList)
+      } yield resp
+    }
+
+    def handleAutoRequest(req: Request[F], name: String, rating: String,
+                          getAutoRec: (String, Double, ReqParams) => Stream[F, AutoRecBase],
+                          logType: String): F[Response[F]] = {
+      for {
+        _ <- Sync[F].delay(L.info(s""""request" $logType=$name rating=$rating"""))
+        reqParams <- req.as[ReqParams]
+        rtng <- getRating(rating)
+        stream <- Sync[F].delay(getAutoRec(name, rtng, reqParams))
+        strList <- stream.compile.toList
+        resp <- Ok(strList)
+      } yield resp
+    }
+
     val svc = HttpRoutes.of[F] {
       case req@POST -> Root / "api" / `apiVersion` / "title" / page / rating :? WindowWidthQueryParameterMatcher(ws)
         +& WindowHeightQueryParameterMatcher(wh) +& CardWidthQueryParameterMatcher(cs)
         +& CardHeightQueryParameterMatcher(ch)   +& OffsetQUeryParameterMatcher(offset) =>
-        for {
-          reqParams <- req.as[ReqParams]
-          rtng <- getRating(rating)
-          dimList = convertParams(page, ws, wh, cs, ch, offset)
-          pgs = calcWithParams(dimList)
-          _ <- showParams(pgs, ws, wh, cs, ch, offset)
-          titleStream <- Sync[F].delay(if (reqParams.year.nonEmpty)
-            I.getByTitle(reqParams.query, rtng, reqParams, pgs << 3)
-          else
-            Stream.empty)
-          titleList <- titleStream.compile.toList
-          pageList = pureExtractRecords(titleList, dimList.head, pgs)
-          _ <- Sync[F].delay(L.info(s""""title counts" page=$page titleList=${titleList.size} pageList=${pageList.size}"""))
-          resp <- Ok(pageList)
-        } yield resp
+        handleTitleRequest(req, page, rating, ws, wh, cs, ch, offset, I.getByTitle, "title")
       case req@POST -> Root / "api" / `apiVersion` / "pathtitle" / page / rating :? WindowWidthQueryParameterMatcher(ws)
         +& WindowHeightQueryParameterMatcher(wh) +& CardWidthQueryParameterMatcher(cs)
         +& CardHeightQueryParameterMatcher(ch) +& OffsetQUeryParameterMatcher(offset) =>
-        for {
-          reqParams <- req.as[ReqParams]
-          rtng <- getRating(rating)
-          dimList = convertParams(page, ws, wh, cs, ch, offset)
-          pgs = calcWithParams(dimList)
-          _ <- showParams(pgs, ws, wh, cs, ch, offset)
-          titleStream <- Sync[F].delay(if (reqParams.year.nonEmpty)
-            I.getByTitlePath(reqParams.query, rtng, reqParams)
-          else
-            Stream.empty)
-          titleList <- titleStream.compile.toList
-          pageList = pureExtractRecords(titleList, dimList.head, pgs)
-          _ <- Sync[F].delay(L.info(s""""pathtitle counts" page=$page titleList=${titleList.size} pageList=${pageList.size}"""))
-          resp <- Ok(pageList)
-        } yield resp
+        handleTitleRequest(req, page, rating, ws, wh, cs, ch, offset, I.getByTitlePath, "titlepath")
       case req@POST -> Root / "api" / `apiVersion` / "name2" / name / rating =>
         for {
           reqParams <- req.as[ReqParams]
@@ -148,23 +172,9 @@ object ImdbRoutes extends DecodeUtils {
           resp <- Ok(pageList)
         } yield resp
       case req@POST -> Root / "api" / `apiVersion` / "autoname" / name / rating =>
-        for {
-          _ <- Sync[F].delay(L.info(s""""request" autoname=$name rating=$rating"""))
-          reqParams <- req.as[ReqParams]
-          rtng <- getRating(rating)
-          nameStream <- Sync[F].delay(I.getAutosuggestName(name, rtng, reqParams))
-          nameList <- nameStream.compile.toList
-          resp <- Ok(nameList)
-        } yield resp
+        handleAutoRequest(req, name, rating, I.getAutosuggestName, "autoname")
       case req@POST -> Root / "api" / `apiVersion` / "autotitle" / title / rating =>
-        for {
-          _ <- Sync[F].delay(L.info(s""""request" autotitle=$title rating=$rating"""))
-          reqParams <- req.as[ReqParams]
-          rtng <- getRating(rating)
-          titleStream <- Sync[F].delay(I.getAutosuggestTitle(title, rtng, reqParams))
-          titleList <- titleStream.compile.toList
-          resp <- Ok(titleList)
-        } yield resp
+        handleAutoRequest(req, title, rating, I.getAutosuggestTitle, "autotitle")
     }.map(_.withContentType(`Content-Type`(`json`)))
     CORSSetup.methodConfig(svc)
   }

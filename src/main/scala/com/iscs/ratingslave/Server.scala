@@ -28,13 +28,16 @@ object Server {
   private val imageHost = sys.env.getOrElse("IMAGESOURCE", "localhost:8083")
 
   private val compositeCollection = "title_principals_namerating"
+  private val tbrCollection = "title_basics_ratings"
 
   private val emailCollection = "email_contact"
 
   private def getImdbSvc[F[_]: Async](db: MongoDatabase[F], client: Client[F]): F[ImdbQuery[F]] =  for {
     compCollCodec <- db.getCollectionWithCodec[TitleRec](compositeCollection)
+    tbrCollCodec <- db.getCollectionWithCodec[TitleRec](tbrCollection)
     imdbSvc <- Sync[F].delay(ImdbQuery.impl[F](
       compCollCodec,
+      tbrCollCodec,
       imageHost,
       client))
   } yield imdbSvc

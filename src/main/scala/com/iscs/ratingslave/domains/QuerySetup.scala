@@ -62,6 +62,12 @@ trait QuerySetup {
       gte(fieldName, dbl)
     )
 
+  private def zeroGTE[T](fieldName: String, zg: T): Bson =
+    or(
+      gte(fieldName, zg),
+      feq(fieldName, 0.0d)
+    )
+
   private def combineBson(bsonList: List[Bson], bson1: Bson, bson2: Bson): List[Bson] = bsonList ::: (bson1 :: bson2 :: Nil)
 
   private def getProjections(computes: List[String], includes: List[String], excludes: List[String]): Bson = {
@@ -73,6 +79,12 @@ trait QuerySetup {
 
   private val sorting: Bson = Sorts.descending(startYear, numVotes)
 
+  private val titleSorting: Bson =
+    Sorts.orderBy(
+      Sorts.descending(startYear, numVotes, averageRating),
+      Sorts.ascending(primaryTitle)
+    )
+
   private def limitBson(limit: Int): Bson = Aggregates.limit(limit)
 
   private def getParamList(params: ReqParams): List[Bson] = {
@@ -81,7 +93,7 @@ trait QuerySetup {
       params.genre.map(genre => inOrEqList(genresList, genre)),
       params.titleType.map(tt => inOrEqList(titleType, tt)),
       params.isAdult.map(isAdlt => feq(isAdult, isAdlt.toInt)),
-      params.votes.map(v => gte(numVotes, v))
+      params.votes.map(v => zeroGTE(numVotes, v))
     ).flatten
   }
 
@@ -155,7 +167,7 @@ trait QuerySetup {
   }
 
   def genTitleFilter(optTitle: Option[String], rating: Double, params: ReqParams): Bson = {
-    val paramWithRating = getParamList(params) :+ dblExists(averageRating, rating)
+    val paramWithRating = getParamList(params) :+ zeroGTE(averageRating, rating)
     val nonEmptyElts = getOptFilters(optTitle, params.searchType).map { titleElts =>
       paramWithRating :+ titleElts
     }.getOrElse(paramWithRating)
@@ -168,6 +180,18 @@ trait QuerySetup {
       Aggregates.group(s"$$$tconst", groupAccums: _*),
       Aggregates.project(projections),
       Aggregates.sort(sorting)
+    )
+    if (isLimited)
+      basePipeLine :+ limitBson(limit)
+    else
+      basePipeLine
+  }
+
+  def genTitleQueryPipeline(matchVariable: Bson, isLimited: Boolean = false, limit: Int = STREAMLIMIT): Seq[Bson] = {
+    val basePipeLine = Seq(
+      Aggregates.`match`(matchVariable),
+      Aggregates.project(projections),
+      Aggregates.sort(titleSorting)
     )
     if (isLimited)
       basePipeLine :+ limitBson(limit)
