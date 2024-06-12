@@ -4,8 +4,8 @@ import cats.effect.{Async, Resource, Sync}
 import cats.implicits._
 import com.comcast.ip4s._
 import com.iscs.ratingslave.domains.ImdbQuery.TitleRec
-import com.iscs.ratingslave.domains.{EmailContact, ImdbQuery, ReleaseDates}
-import com.iscs.ratingslave.routes.{EmailContactRoutes, ImdbRoutes, ReleaseRoutes}
+import com.iscs.ratingslave.domains.{ConnectionPool, EmailContact, ImdbQuery, ReleaseDates}
+import com.iscs.ratingslave.routes.{EmailContactRoutes, ImdbRoutes, PoolSvcRoutes, ReleaseRoutes}
 import com.typesafe.scalalogging.Logger
 import io.circe.generic.auto._
 import fs2.io.net.Network
@@ -42,6 +42,10 @@ object Server {
       client))
   } yield imdbSvc
 
+  private def getPoolStatsSvc[F[_]: Async](db: MongoDatabase[F]): F[ConnectionPool[F]] = for {
+    poolSvc <- Sync[F].delay(ConnectionPool.impl[F](db))
+  } yield poolSvc
+
   private def getEmailSvc[F[_]: Async](db: MongoDatabase[F]): F[EmailContact[F]] = for {
     emailColl <- db.getCollection(emailCollection)
     emailSvc <- Sync[F].delay(EmailContact.impl[F](emailColl))
@@ -52,11 +56,13 @@ object Server {
       imdbSvc <- getImdbSvc(db, client)
       emailSvc <- getEmailSvc(db)
       scrapeSvc <- Sync[F].delay(new ReleaseDates[F](defaultHost, imageHost, client))
+      poolSvc <- getPoolStatsSvc(db)
       httpApp <- Sync[F].delay(
         Router("/" ->
           (ReleaseRoutes.httpRoutes(scrapeSvc) <+>
             EmailContactRoutes.httpRoutes(emailSvc) <+>
-            ImdbRoutes.httpRoutes(imdbSvc))
+            ImdbRoutes.httpRoutes(imdbSvc) <+>
+            PoolSvcRoutes.httpRoutes(poolSvc))
         )
           .orNotFound)
       _ <- Sync[F].delay(L.info(s""""added routes for reldate"""))

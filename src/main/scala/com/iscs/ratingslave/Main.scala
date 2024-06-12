@@ -10,7 +10,7 @@ object Main extends IOApp {
   private val dbName = sys.env.getOrElse("DBNAME", "db")
 
   def run(args: List[String]): IO[ExitCode] = for {
-    dbClient <- IO.delay(new DbClient[IO](DbClient.fromUrl()))
+    dbClient <- IO.delay(new DbClient[IO](DbClient.fromUrl("MONGOURI")))
     resources <- IO.delay(for {
       dbres <- dbClient.dbResource
       clres <- EmberClientBuilder.default[IO].build

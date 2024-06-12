@@ -9,8 +9,8 @@ class DbClient[F[_]: Sync : Async](val config: MongodbConfig) {
 }
 
 object DbClient {
-  def fromUrl(): MongodbConfig = {
-    val host = sys.env.getOrElse("MONGOURI", "localhost")
+  def fromUrl(envVar: String): MongodbConfig = {
+    val host = sys.env.getOrElse(envVar, "localhost")
     val isReadOnly = sys.env.getOrElse("MONGORO", "false").toBoolean
     MongodbConfig(host, isReadOnly)
   }
