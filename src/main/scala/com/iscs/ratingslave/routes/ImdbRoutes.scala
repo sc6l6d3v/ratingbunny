@@ -12,12 +12,13 @@ import fs2.Stream
 import io.circe.Encoder
 import io.circe.syntax.EncoderOps
 import io.circe.generic.auto._
-import org.http4s.{EntityEncoder, HttpRoutes, Request, Response}
+import org.http4s.{EntityEncoder, Header, HttpRoutes, Request, Response}
 import org.http4s.MediaType.application._
 import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder}
 import org.http4s.circe.jsonEncoderOf
 import org.http4s.dsl.Http4sDsl
 import org.http4s.headers.`Content-Type`
+import org.typelevel.ci.CIString
 
 import scala.annotation.tailrec
 import scala.util.Try
@@ -79,8 +80,11 @@ object ImdbRoutes extends DecodeUtils {
   private def pureExtractRecords[T](records: List[T], pg: Int, pgs: Int): List[T] =
     records.slice((pg - 1) * pgs, (pg - 1) * pgs + pgs)
 
-  private def showParams[F[_]: Sync](pgs: Int, ws: String, wh: String, cs: String, ch: String, offset: String): F[Unit] =
-    Sync[F].delay(L.info(s""""params" ws=$ws wh=$wh cs=$cs ch=$ch pgs=$pgs offset=$offset"""))
+  private def showParams[F[_]: Sync](paramType: String, pgs: Int, ws: String, wh: String, cs: String, ch: String, offset: String): F[Unit] =
+    Sync[F].delay(L.info(s""""$paramType params" ws=$ws wh=$wh cs=$cs ch=$ch pgs=$pgs offset=$offset"""))
+
+  private def remainingCount(currentPage: Int, pageSize: Int, totalSize: Int): Int =
+    math.max(totalSize - (currentPage * pageSize), 0)
 
   implicit val encodeAutoRecBase: Encoder[AutoRecBase] = Encoder.instance {
     case autoNameRec: AutoNameRec => autoNameRec.asJson
@@ -108,7 +112,7 @@ object ImdbRoutes extends DecodeUtils {
         rtng <- getRating(rating)
         dimList = convertParams(page, ws, wh, cs, ch, offset)
         pgs = calcWithParams(dimList)
-        _ <- showParams(pgs, ws, wh, cs, ch, offset)
+        _ <- showParams("title", pgs, ws, wh, cs, ch, offset)
         titleStream <- Sync[F].delay(if (reqParams.year.nonEmpty)
           getTitle(reqParams.query, rtng, reqParams, pgs << 3)
         else
@@ -116,7 +120,8 @@ object ImdbRoutes extends DecodeUtils {
         titleList <- titleStream.compile.toList
         pageList = pureExtractRecords(titleList, dimList.head, pgs)
         _ <- Sync[F].delay(L.info(s""""$logText counts" pageNo=$page titleList=${titleList.size} pageList=${pageList.size}"""))
-        resp <- Ok(pageList)
+        elementsLeft = remainingCount(dimList.head, pgs, titleList.size)
+        resp <- Ok(pageList).map(_.putHeaders(Header.Raw(CIString("X-Remaining-Count"), elementsLeft.toString)))
       } yield resp
     }
 
@@ -159,17 +164,18 @@ object ImdbRoutes extends DecodeUtils {
         for {
           reqParams <- req.as[ReqParams]
           rtng <- getRating(rating)
+          dimList = convertParams(page, ws, wh, cs, ch, offset)
+          pgs = calcWithParams(dimList)
+          _ <- showParams("name", pgs, ws, wh, cs, ch, offset)
           imdbNameStream <- Sync[F].delay(if (reqParams.year.nonEmpty)
-            I.getByEnhancedName(reqParams.query.getOrElse("Joe Blow"), rtng, reqParams)
+            I.getByEnhancedName(reqParams.query.getOrElse("Joe Blow"), rtng, reqParams, pgs << 3)
           else
             Stream.empty)
           nameList <- imdbNameStream.compile.toList
-          dimList = convertParams(page, ws, wh, cs, ch, offset)
-          pgs = calcWithParams(dimList)
-           _ <- Sync[F].delay(L.info(s""""name params" ws=$ws wh=$wh cs=$cs ch=$ch pgs=$pgs offset=$offset"""))
           pageList = pureExtractRecords(nameList, dimList.head, pgs)
-          _ <- Sync[F].delay(L.info(s""""name counts" page=$page nameList=${nameList.size} wh=$wh pageList=${pageList.size}"""))
-          resp <- Ok(pageList)
+          _ <- Sync[F].delay(L.info(s""""name counts" page=$page nameList=${nameList.size} pageList=${pageList.size}"""))
+          elementsLeft = remainingCount(dimList.head, pgs, nameList.size)
+          resp <- Ok(pageList).map(_.putHeaders(Header.Raw(CIString("X-Remaining-Count"), elementsLeft.toString)))
         } yield resp
       case req@POST -> Root / "api" / `apiVersion` / "autoname" / name / rating =>
         handleAutoRequest(req, name, rating, I.getAutosuggestName, "autoname")

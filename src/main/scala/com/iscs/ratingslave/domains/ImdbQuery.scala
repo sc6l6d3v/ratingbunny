@@ -22,7 +22,7 @@ trait ImdbQuery[F[_]] {
   def getByTitle(title: Option[String], rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec]
   def getByTitlePath(title: Option[String], rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRecPath]
   def getByName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec]
-  def getByEnhancedName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec]
+  def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec]
   def getAutosuggestTitle(titlePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoTitleRec]
   def getAutosuggestName(titlePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoNameRec]
 }
@@ -265,8 +265,8 @@ object ImdbQuery extends DecodeUtils {
        * @param params object
        * @return stream object
        */
-      override def getByEnhancedName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec] = {
-        val queryPipeline = genQueryPipeline(genNameFilter(name, rating, params))
+      override def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec] = {
+        val queryPipeline = genQueryPipeline(genNameFilter(name, rating, params), isLimited = true, limit)
 
         Stream.eval(Clock[F].monotonic).flatMap { start =>
           compFx.aggregateWithCodec[TitleRec](queryPipeline).stream
