@@ -18,7 +18,7 @@ import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder
 import org.http4s.circe.jsonEncoderOf
 import org.http4s.dsl.Http4sDsl
 import org.http4s.headers.`Content-Type`
-import org.typelevel.ci.CIString
+import org.typelevel.ci.*
 
 import scala.annotation.tailrec
 import scala.util.Try
@@ -121,7 +121,10 @@ object ImdbRoutes extends DecodeUtils {
         pageList = pureExtractRecords(titleList, dimList.head, pgs)
         _ <- Sync[F].delay(L.info(s""""$logText counts" pageNo=$page titleList=${titleList.size} pageList=${pageList.size}"""))
         elementsLeft = remainingCount(dimList.head, pgs, titleList.size)
-        resp <- Ok(pageList).map(_.putHeaders(Header.Raw(CIString("X-Remaining-Count"), elementsLeft.toString)))
+        resp <- Ok(pageList).map(_.putHeaders(
+          Header.Raw(ci"X-Remaining-Count", elementsLeft.toString),
+          Header.Raw(ci"Access-Control-Expose-Headers", "X-Remaining-Count")
+        ))
       } yield resp
     }
 
@@ -175,7 +178,10 @@ object ImdbRoutes extends DecodeUtils {
           pageList = pureExtractRecords(nameList, dimList.head, pgs)
           _ <- Sync[F].delay(L.info(s""""name counts" page=$page nameList=${nameList.size} pageList=${pageList.size}"""))
           elementsLeft = remainingCount(dimList.head, pgs, nameList.size)
-          resp <- Ok(pageList).map(_.putHeaders(Header.Raw(CIString("X-Remaining-Count"), elementsLeft.toString)))
+          resp <- Ok(pageList).map(_.putHeaders(
+            Header.Raw(ci"X-Remaining-Count", elementsLeft.toString),
+            Header.Raw(ci"Access-Control-Expose-Headers", "X-Remaining-Count")
+          ))
         } yield resp
       case req@POST -> Root / "api" / `apiVersion` / "autoname" / name / rating =>
         handleAutoRequest(req, name, rating, I.getAutosuggestName, "autoname")

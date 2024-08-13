@@ -9,7 +9,10 @@ import mongo4cats.circe._
 import mongo4cats.collection.MongoCollection
 import org.bson.conversions.{Bson => mbson}
 import org.mongodb.scala.model._
+import org.mongodb.scala.result.UpdateResult
+
 import java.time.Instant
+import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
 import scala.util.matching.Regex
 
@@ -31,7 +34,7 @@ object EmailContact {
     ).mkString("| ")
   }
 
-  def impl[F[_] : Sync](emailFx: MongoCollection[F, Document]): EmailContact[F] =
+  def impl[F[_] : MonadCancelThrow : Sync](emailFx: MongoCollection[F, Document]): EmailContact[F] =
     new EmailContact[F] {
 
       private val namePattern = "[0-9a-zA-Z' ]+".r
@@ -71,31 +74,39 @@ object EmailContact {
         ))
       } yield updateDoc
 
-      def updateMsg(name: String, email: String, subject: String, msg: String): F[String] = for {
-        asDoc <- makeDoc(name, email, subject, msg)
-        updateDoc <- makeUpdateDoc(asDoc)
-        (updateTime, updateResult) <- Clock[F].timed(emailFx.updateOne(
-          Filters.eq(field_id, email),
-          updateDoc,
-          UpdateOptions().upsert(true)))
-        _ <- Sync[F].delay(L.info(s"update email doc in {} ms", updateTime.toMillis))
-        emailResponse <- Sync[F].delay {
-          if (updateResult.getUpsertedId == null)
-            email
-          else
-            updateResult.getUpsertedId.asString().getValue
-        }
-      } yield emailResponse
+      def updateMsg(name: String, email: String, subject: String, msg: String): F[String] = {
+        for {
+          asDoc <- makeDoc(name, email, subject, msg)
+          updateDoc <- makeUpdateDoc(asDoc)
+          result <- Clock[F].timed(emailFx.updateOne(
+            Filters.eq(field_id, email),
+            updateDoc,
+            UpdateOptions().upsert(true)
+          ))
+          (updateTime: FiniteDuration, updateResult: UpdateResult) = result
+          _ <- Sync[F].delay(L.info(s"update email doc in {} ms", updateTime.toMillis))
+          emailResponse <- Sync[F].delay {
+            Option(updateResult.getUpsertedId)
+              .map(_.asString().getValue)
+              .getOrElse(email)
+          }
+        } yield emailResponse
+      }
 
-      override def saveEmail(name: String, email: String, subject: String, msg: String): F[String] = for {
-        truncSubject <- Sync[F].delay(subject.take(maxValLen))
-        truncMsg <- Sync[F].delay(msg.take(maxMsgLen))
-        isValid <- validate(name, email)
-        (totEmailTime, emailJson) <- Clock[F].timed {
-          if (isValid) updateMsg(name, email, truncSubject, truncMsg)
-          else Sync[F].delay(s"Invalid: $email")
+      override def saveEmail(name: String, email: String, subject: String, msg: String): F[String] = {
+        val truncSubject = subject.take(maxValLen)
+        val truncMsg = msg.take(maxMsgLen)
+
+        validate(name, email).flatMap { isValid =>
+          val emailAction: F[String] =
+            if (isValid) updateMsg(name, email, truncSubject, truncMsg)
+            else Sync[F].delay(s"Invalid: $email")
+
+          Clock[F].timed(emailAction).flatMap { case (totEmailTime, emailJson) =>
+            Sync[F].delay(L.info(s"total email time {} ms", totEmailTime.toMillis)).as(emailJson)
+          }
         }
-        _ <- Sync[F].delay(L.info(s"total email time {} ms", totEmailTime.toMillis))
-      } yield emailJson
+      }
+
     }
 }

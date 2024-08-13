@@ -1,11 +1,10 @@
 import Dependencies.{test, *}
 
 ThisBuild / version := "1.0"
-ThisBuild / scalaVersion := "2.13.10"
-ThisBuild / organization := "com.iscs"
-ThisBuild / name := "ratingslave"
-ThisBuild / javacOptions     ++= Seq("--release", "17") // For Java 17
-ThisBuild / scalacOptions    ++= Seq("--release", "17")
+ThisBuild / scalaVersion := "3.4.2"
+ThisBuild / name := "ratingbunny"
+ThisBuild / organizationName := "com.iscs"
+ThisBuild / javacOptions     ++= Seq("--release", "21") // For Java 21
 
 lazy val root = (project in file("."))
   .settings(
@@ -22,23 +21,23 @@ lazy val root = (project in file("."))
       circe.circeParser,
       mongo4cats.core,
       mongo4cats.circe,
+      mongo4cats.embedded,
       mongodb.driver,
       test.scalatest,
+      scalamock.core,
       logback.classic,
       logback.logging,
       jsoup.base,
     ),
     Compile / mainClass := Some("com.iscs.ratingslave.Main"),
-    addCompilerPlugin("com.olegpy"    %% "better-monadic-for" % "0.3.1"),
     Revolver.enableDebugging(5061, suspend = true),
   )
 
 scalacOptions ++= Seq(
   "-deprecation",
   "-encoding", "UTF-8",
-  "-language:higherKinds",
-  "-language:postfixOps",
-  "-feature"
+  "-feature",
+  "--release", "21"
   //"-Xfatal-warnings",
 )
 

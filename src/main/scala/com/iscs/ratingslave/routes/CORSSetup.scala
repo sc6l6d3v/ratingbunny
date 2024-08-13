@@ -3,12 +3,12 @@ package com.iscs.ratingslave.routes
 import cats.effect.Async
 import com.iscs.ratingslave.model.RouteMessage.RouteMessage
 import com.typesafe.scalalogging.Logger
-import org.http4s._
+import org.http4s.*
 import org.http4s.headers.Origin
 import org.http4s.headers.Origin.Null
-import org.http4s.server.middleware._
-
-import scala.concurrent.duration._
+import org.http4s.server.middleware.*
+import org.typelevel.ci.*
+import scala.concurrent.duration.*
 
 object CORSSetup {
   private val L = Logger[this.type]
@@ -36,6 +36,7 @@ object CORSSetup {
     .withMaxAge(1.day)
     .withAllowMethodsIn(methods)
     .withAllowOriginHost(checkOrigin)
+    .withExposeHeadersIn(Set(ci"X-Remaining-Count"))
     .apply(svc)
 
   def RouteNotFound(badVal: String): RouteMessage =

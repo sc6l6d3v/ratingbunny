@@ -6,12 +6,12 @@
 #
 
 # Pull base image
-FROM bellsoft/liberica-openjdk-alpine:17.0.8
+FROM bellsoft/liberica-openjdk-alpine:21-cds
 
 # Env variables
-ENV SCALA_VERSION 2.13.8
-ENV SBT_VERSION   1.0.2
-ENV APP_NAME      ratingslave
+ENV SCALA_VERSION 3.4.2
+ENV SBT_VERSION   1.10.0
+ENV APP_NAME      ratingbunny
 ENV APP_VERSION   1.0
 
 # ENV variables for App
@@ -32,7 +32,7 @@ EXPOSE 8080
 EXPOSE 5050
 # Expose this port if you want to enable remote debugging: 5005
 
-COPY target/scala-2.13/${APP_NAME}-assembly-$APP_VERSION.jar $PROJECT_HOME/data/$APP_NAME.jar
+COPY target/scala-${SCALA_VERSION}/${APP_NAME}-assembly-$APP_VERSION.jar $PROJECT_HOME/data/$APP_NAME.jar
 
 # This will run at start, it points to the .sh file in the bin directory to start the play app
 ENTRYPOINT java -jar $PROJECT_HOME/data/$APP_NAME.jar -Djava.net.preferIPv4Stack=true -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5050

@@ -1,4 +1,4 @@
-import sbt._
+import sbt.*
 
 object Dependencies {
   object Versions {
@@ -8,6 +8,7 @@ object Dependencies {
     val jsoupVersion = "1.17.2"
     val LogbackVersion = "1.5.3"
     val loggingVersion = "3.9.5"
+    val scalamockVersion = "6.0.0"
     val mongo4catsVersion = "0.7.3"
     val mongoScalaVersion = "5.0.1"
     val scalaTestVersion = "3.2.18"
@@ -41,13 +42,18 @@ object Dependencies {
     val base = "org.jsoup"        %  "jsoup"               % Versions.jsoupVersion
   }
 
+  object scalamock {
+    val core = "org.scalamock" %% "scalamock" % Versions.scalamockVersion % Test
+  }
+
   object mongodb {
-    val driver = "org.mongodb.scala" %% "mongo-scala-driver" % Versions.mongoScalaVersion
+    val driver = "org.mongodb.scala" %% "mongo-scala-driver" % Versions.mongoScalaVersion cross CrossVersion.for3Use2_13
   }
 
   object mongo4cats {
     val core = "io.github.kirill5k" %% "mongo4cats-core" % Versions.mongo4catsVersion
     val circe = "io.github.kirill5k" %% "mongo4cats-circe" % Versions.mongo4catsVersion
+    val embedded = "io.github.kirill5k" %% "mongo4cats-embedded" % Versions.mongo4catsVersion % Test
   }
 
   object test {

@@ -7,7 +7,6 @@ import cats.implicits._
 import com.iscs.ratingslave.domains.ImdbQuery.{AutoNameRec, AutoTitleRec, TitleRec, TitleRecPath}
 import com.iscs.ratingslave.model.Requests.ReqParams
 import com.iscs.ratingslave.util.DecodeUtils
-import com.typesafe.scalalogging.Logger
 import fs2.Stream
 import io.circe.generic.auto._
 import mongo4cats.circe._
@@ -15,7 +14,7 @@ import mongo4cats.collection.MongoCollection
 import org.http4s.circe._
 import org.http4s.client.Client
 import org.http4s.{Method, Request, Uri}
-
+import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
 
 trait ImdbQuery[F[_]] {
@@ -28,7 +27,6 @@ trait ImdbQuery[F[_]] {
 }
 
 object ImdbQuery extends DecodeUtils {
-  private val L = Logger[this.type]
 
   def apply[F[_]](implicit ev: ImdbQuery[F]): ImdbQuery[F] = ev
 
@@ -378,12 +376,15 @@ object ImdbQuery extends DecodeUtils {
         }
       }
 
-      private def getPath(imdb: String): F[PathRec] = for {
-        pathStr <- Sync[F].delay(s"$imagePath/$imdb/S")
-        pathReq <- Sync[F].delay(Request[F](Method.GET, Uri.unsafeFromString(pathStr)))
-        (pathTime, pathVal) <- Clock[F].timed(client.expect(pathReq)(jsonOf[F, PathRec]))
-        _ <- Sync[F].delay(L.info(s"pathStr {} imdb {} time {} ms", pathStr, imdb, pathTime.toMillis))
-      } yield pathVal
+      private def getPath(imdb: String): F[PathRec] = {
+        val pathStr = s"$imagePath/$imdb/S"
+        val pathReq = Request[F](Method.GET, Uri.unsafeFromString(pathStr))
+
+        Clock[F].timed(client.expect(pathReq)(jsonOf[F, PathRec])).flatMap { case (pathTime, pathVal) =>
+          Sync[F].delay(L.info(s"pathStr {} imdb {} time {} ms", pathStr, imdb, pathTime.toMillis)).as(pathVal)
+        }
+      }
+
 
       override def getByTitlePath(optTitle: Option[String], rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRecPath] = {
         Stream.eval(Clock[F].monotonic).flatMap { overallStart =>

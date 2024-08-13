@@ -2,13 +2,14 @@ package com.iscs.ratingslave.domains
 
 import com.iscs.ratingslave.model.Requests.ReqParams
 import com.iscs.ratingslave.util.asInt
+import com.typesafe.scalalogging.Logger
 import mongo4cats.bson.Document
-import mongo4cats.bson.syntax._
+import mongo4cats.bson.syntax.*
 import org.bson.conversions.Bson
 import org.mongodb.scala.model.Projections.{computed, exclude, fields, include}
 import org.mongodb.scala.model.{Accumulators, Aggregates, BsonField, Projections, Sorts}
-import org.mongodb.scala.model.Filters._
-import org.mongodb.scala.model.Filters.{eq => feq}
+import org.mongodb.scala.model.Filters.*
+import org.mongodb.scala.model.Filters.eq as feq
 
 import scala.language.implicitConversions
 import scala.util.matching.Regex.quote
@@ -19,7 +20,7 @@ trait QuerySetup {
   private val firstName = "firstName"
   private val genresList = "genresList"
   private val lastName = "lastName"
-  val isAdult = "isAdult"
+  private val isAdult = "isAdult"
   private val numVotes = "numVotes"
   private val tconst = "tconst"
   private val primaryName = "primaryName"
@@ -32,6 +33,7 @@ trait QuerySetup {
   private val STREAMLIMIT = 96
   private val AUTOSUGGESTLIMIT = 20
   private val EXACT = "exact"
+  val L: Logger = Logger[this.type]
 
   implicit def convertBooleanToInt(b: Boolean): asInt = new asInt(b)
 
@@ -39,10 +41,14 @@ trait QuerySetup {
     and(gte(fieldName, startyear), lte(fieldName, stopyear))
 
   private def inOrEqList(fieldName: String, inputList: List[String]): Bson = inputList match {
-    case manyElements: List[String] if manyElements.size > 1    =>
-      in(fieldName, manyElements: _*)
-    case singleElement: List[String] if singleElement.size == 1 =>
-      feq(fieldName, singleElement.head)
+    case head :: Nil =>
+      feq(fieldName, head)
+    case head :: tail =>
+      in(fieldName, head :: tail*)
+    case Nil =>
+      // should never be necessary
+      L.error(s"$fieldName has no inputs")
+      Document() // or some other default
   }
 
   private def buildAccums(fields: List[String]): Seq[BsonField] = fields
@@ -72,9 +78,9 @@ trait QuerySetup {
 
   private def getProjections(computes: List[String], includes: List[String], excludes: List[String]): Bson = {
     val fields = computes.map(comp => Projections.computed(comp, Document("$ifNull" := List(s"$$$comp", "$$REMOVE")))) ++
-      List(Projections.include(includes: _*)) ++
-      List(Projections.exclude(excludes: _*))
-    Projections.fields(fields: _*)
+      List(Projections.include(includes*)) ++
+      List(Projections.exclude(excludes*))
+    Projections.fields(fields*)
   }
 
   private val sorting: Bson = Sorts.descending(startYear, numVotes)
@@ -107,7 +113,7 @@ trait QuerySetup {
   }
 
   def genAutonameFilter(namePrefix: String, rating: Double, params: ReqParams): Seq[Bson] = {
-    val names = if (namePrefix contains " ")
+    val names = if (namePrefix.contains(" "))
       namePrefix.split(" ").toList
     else
       List(namePrefix)
@@ -120,7 +126,7 @@ trait QuerySetup {
         feq(firstName, names.head))
 
     val nonEmptyElts = combineBson(getParamList(params), dblExists(averageRating, rating), lastFirstElt)
-    val matchBson = and(nonEmptyElts: _*)
+    val matchBson = and(nonEmptyElts*)
 
     val sortElt = Sorts.ascending(id, firstName)
 
@@ -143,7 +149,7 @@ trait QuerySetup {
     val titleElt = regex(primaryTitle, s"""^$titlePrefix""")
 
     val nonEmptyElts = combineBson(getParamList(params), dblExists(averageRating, rating), titleElt)
-    val matchBson = and(nonEmptyElts: _*)
+    val matchBson = and(nonEmptyElts*)
 
     val sortBson = Sorts.ascending(primaryTitle)
 
@@ -163,7 +169,7 @@ trait QuerySetup {
 
   def genNameFilter(name: String, rating: Double, params: ReqParams): Bson = {
     val nonEmptyElts = getParamList(params) ::: (dblExists(averageRating, rating) :: feq(primaryName, name) :: Nil)
-    and(nonEmptyElts: _*)
+    and(nonEmptyElts*)
   }
 
   def genTitleFilter(optTitle: Option[String], rating: Double, params: ReqParams): Bson = {
@@ -171,13 +177,13 @@ trait QuerySetup {
     val nonEmptyElts = getOptFilters(optTitle, params.searchType).map { titleElts =>
       paramWithRating :+ titleElts
     }.getOrElse(paramWithRating)
-    and(nonEmptyElts: _*)
+    and(nonEmptyElts*)
   }
 
   def genQueryPipeline(matchVariable: Bson, isLimited: Boolean = false, limit: Int = STREAMLIMIT): Seq[Bson] = {
     val basePipeLine = Seq(
       Aggregates.`match`(matchVariable),
-      Aggregates.group(s"$$$tconst", groupAccums: _*),
+      Aggregates.group(s"$$$tconst", groupAccums*),
       Aggregates.project(projections),
       Aggregates.sort(sorting)
     )
