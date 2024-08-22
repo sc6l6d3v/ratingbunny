@@ -1,10 +1,9 @@
 package com.iscs.ratingslave.routes
 
-import cats.effect._
-import cats.implicits._
-import com.iscs.ratingslave.domains.EmailContact
-import com.iscs.ratingslave.domains.EmailContact.Email
-import io.circe.generic.auto._
+import cats.effect.*
+import cats.implicits.*
+import com.iscs.ratingslave.domains.{Email, EmailContact}
+import io.circe.generic.auto.*
 import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder}
 import com.typesafe.scalalogging.Logger
 import org.http4s.HttpRoutes

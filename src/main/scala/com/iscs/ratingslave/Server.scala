@@ -1,21 +1,21 @@
 package com.iscs.ratingslave
 
+import cats.Parallel
 import cats.effect.{Async, Resource, Sync}
-import cats.implicits._
-import com.comcast.ip4s._
-import com.iscs.ratingslave.domains.ImdbQuery.TitleRec
-import com.iscs.ratingslave.domains.{ConnectionPool, EmailContact, ImdbQuery, ReleaseDates}
+import cats.implicits.*
+import com.comcast.ip4s.*
+import com.iscs.ratingslave.domains.{ConnectionPool, EmailContact, EmailContactImpl, ImdbQuery, ImdbQueryImpl, ReleaseDates, TitleRec}
 import com.iscs.ratingslave.routes.{EmailContactRoutes, ImdbRoutes, PoolSvcRoutes, ReleaseRoutes}
 import com.typesafe.scalalogging.Logger
-import io.circe.generic.auto._
+import io.circe.generic.auto.*
 import fs2.io.net.Network
-import mongo4cats.circe._
+import mongo4cats.circe.*
 import mongo4cats.database.MongoDatabase
 import org.http4s.HttpApp
 import org.http4s.client.Client
-import org.http4s.ember.server._
-import org.http4s.implicits._
-import org.http4s.server.middleware.{Logger => hpLogger}
+import org.http4s.ember.server.*
+import org.http4s.implicits.*
+import org.http4s.server.middleware.Logger as hpLogger
 import org.http4s.server.{Router, Server}
 
 object Server {
@@ -32,10 +32,10 @@ object Server {
 
   private val emailCollection = "email_contact"
 
-  private def getImdbSvc[F[_]: Async](db: MongoDatabase[F], client: Client[F]): F[ImdbQuery[F]] =  for {
+  private def getImdbSvc[F[_]: Async: Parallel](db: MongoDatabase[F], client: Client[F]): F[ImdbQuery[F]] =  for {
     compCollCodec <- db.getCollectionWithCodec[TitleRec](compositeCollection)
     tbrCollCodec <- db.getCollectionWithCodec[TitleRec](tbrCollection)
-    imdbSvc <- Sync[F].delay(ImdbQuery.impl[F](
+    imdbSvc <- Sync[F].delay(new ImdbQueryImpl[F](
       compCollCodec,
       tbrCollCodec,
       imageHost,
@@ -48,10 +48,10 @@ object Server {
 
   private def getEmailSvc[F[_]: Async](db: MongoDatabase[F]): F[EmailContact[F]] = for {
     emailColl <- db.getCollection(emailCollection)
-    emailSvc <- Sync[F].delay(EmailContact.impl[F](emailColl))
+    emailSvc <- Sync[F].delay(new EmailContactImpl[F](emailColl))
   } yield emailSvc
 
-  def getServices[F[_]: Async](db: MongoDatabase[F], client: Client[F]): F[HttpApp[F]] = {
+  def getServices[F[_]: Async: Parallel](db: MongoDatabase[F], client: Client[F]): F[HttpApp[F]] = {
     for {
       imdbSvc <- getImdbSvc(db, client)
       emailSvc <- getEmailSvc(db)

@@ -1,19 +1,18 @@
 package com.iscs.ratingslave.routes
 
-import cats.effect._
-import cats.implicits._
-import com.iscs.ratingslave.domains.ImdbQuery
-import com.iscs.ratingslave.domains.ImdbQuery.{AutoNameRec, AutoRecBase, AutoTitleRec, TitleRec, TitleRecBase, TitleRecPath}
-import com.iscs.ratingslave.dslparams._
-import com.iscs.ratingslave.model.Requests._
+import cats.effect.*
+import cats.implicits.*
+import com.iscs.ratingslave.domains.{AutoNameRec, AutoRecBase, AutoTitleRec, ImdbQuery, TitleRec, TitleRecBase, TitleRecPath}
+import com.iscs.ratingslave.dslparams.*
+import com.iscs.ratingslave.model.Requests.*
 import com.iscs.ratingslave.util.DecodeUtils
 import com.typesafe.scalalogging.Logger
 import fs2.Stream
 import io.circe.Encoder
 import io.circe.syntax.EncoderOps
-import io.circe.generic.auto._
+import io.circe.generic.auto.*
 import org.http4s.{EntityEncoder, Header, HttpRoutes, Request, Response}
-import org.http4s.MediaType.application._
+import org.http4s.MediaType.application.*
 import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder}
 import org.http4s.circe.jsonEncoderOf
 import org.http4s.dsl.Http4sDsl
