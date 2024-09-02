@@ -1,10 +1,10 @@
 import Dependencies.{test, *}
 
-ThisBuild / version := "1.0"
-ThisBuild / scalaVersion := "3.4.2"
-ThisBuild / name := "ratingbunny"
+ThisBuild / version          := "1.0"
+ThisBuild / scalaVersion     := "3.4.2"
+ThisBuild / name             := "ratingbunny"
 ThisBuild / organizationName := "com.iscs"
-ThisBuild / javacOptions     ++= Seq("--release", "21") // For Java 21
+ThisBuild / javacOptions ++= Seq("--release", "21") // For Java 21
 
 lazy val root = (project in file("."))
   .settings(
@@ -24,27 +24,45 @@ lazy val root = (project in file("."))
       mongo4cats.embedded,
       mongodb.driver,
       test.scalatest,
+      munit.catseffect,
       scalamock.core,
       logback.classic,
       logback.logging,
-      jsoup.base,
+      jsoup.base
     ),
     Compile / mainClass := Some("com.iscs.ratingslave.Main"),
-    Revolver.enableDebugging(5061, suspend = true),
+    Revolver.enableDebugging(5061, suspend = true)
   )
 
 scalacOptions ++= Seq(
   "-deprecation",
-  "-encoding", "UTF-8",
+  "-encoding",
+  "UTF-8",
   "-feature",
-  "--release", "21"
-  //"-Xfatal-warnings",
+  "--release",
+  "21"
+  // "-Xfatal-warnings",
+)
+
+addCommandAlias(
+  "format",
+  "scalafmt; scalafmtSbt; Test / scalafmt"
+)
+
+addCommandAlias(
+  "formatCheck",
+  "scalafmtCheck; scalafmtSbtCheck; Test  / scalafmtCheck"
+)
+
+addCommandAlias(
+  "validate",
+  "formatCheck; coverage; test; coverageReport; coverageAggregate; coverageOff"
 )
 
 assembly / assemblyMergeStrategy := {
   case PathList("META-INF", "services", xs @ _*) => MergeStrategy.concat
-  case PathList("META-INF", xs @ _*) => MergeStrategy.discard
-  case "io.netty.versions.properties" => MergeStrategy.discard
-  case "reference.conf" => MergeStrategy.concat
-  case x => MergeStrategy.first
+  case PathList("META-INF", xs @ _*)             => MergeStrategy.discard
+  case "io.netty.versions.properties"            => MergeStrategy.discard
+  case "reference.conf"                          => MergeStrategy.concat
+  case x                                         => MergeStrategy.first
 }

@@ -1,75 +1,87 @@
 package com.iscs.ratingslave.domains
 
-/*
 import cats.effect.IO
-import cats.effect.unsafe.implicits.global
-import com.iscs.ratingslave.domains.EmailContact
-import mongo4cats.collection.MongoCollection
+import cats.effect.unsafe.IORuntime
 import mongo4cats.bson.Document
-import org.bson.conversions.Bson
+import mongo4cats.client.MongoClient
+import mongo4cats.collection.MongoCollection
+import mongo4cats.database.MongoDatabase
+import mongo4cats.embedded.EmbeddedMongo
 import mongo4cats.models.collection.UpdateOptions
-import org.mongodb.scala.result.UpdateResult
-import org.scalamock.scalatest.MockFactory
-import org.scalatest.BeforeAndAfterEach
-import org.scalatest.funsuite.AnyFunSuite
+import org.mongodb.scala.model.*
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.wordspec.AsyncWordSpec
 
-import scala.compiletime.uninitialized
+import scala.concurrent.Future
 
-class EmailContactSpec extends AnyFunSuite with Matchers with MockFactory with BeforeAndAfterEach {
+class EmailContactSpec extends AsyncWordSpec with Matchers with EmbeddedMongo {
 
-  var mockCollection: MongoCollection[IO, Document] = uninitialized
+  override val mongoPort: Int = 12348
+  private val field_id        = "_id"
 
-  override def beforeEach(): Unit = {
-    mockCollection = mock[MongoCollection[IO, Document]]
+  "embedded MongoDB" when {
+    "sending email" should {
+      "saveEmail should return email when validation succeeds and update is successful" in withEmbeddedMongoClient { client =>
+        for {
+          db      <- setupTestDatabase("test", client)
+          emailFx <- setupTestCollection(db, "mock")
+          emailContact = new EmailContactImpl[IO](emailFx)
+          name         = "John Doe"
+          email        = "john.doe@example.com"
+          subject      = "Test Subject"
+          msg          = "This is a test message."
+          result    <- emailContact.saveEmail(name, email, subject, msg)
+          asDoc     <- emailContact.makeDoc(name, email, subject, msg)
+          updateDoc <- emailContact.makeUpdateDoc(asDoc)
+          emailUpdateResult <- emailFx.updateOne(
+            Filters.eq(field_id, email),
+            updateDoc,
+            UpdateOptions().upsert(true)
+          )
+        } yield {
+          emailUpdateResult.getModifiedCount shouldBe 1L
+          result shouldBe email
+        }
+      }
+
+      "saveEmail should return 'Invalid' message when validation fails" in withEmbeddedMongoClient { client =>
+        for {
+          db             <- setupTestDatabase("test", client)
+          mockCollection <- setupTestCollection(db, "mock")
+          emailContact = new EmailContactImpl[IO](mockCollection)
+          name         = "John Doe"
+          invalidEmail = "john.doe@"
+          subject      = "Test Subject"
+          msg          = "This is a test message."
+          result <- emailContact.saveEmail(name, invalidEmail, subject, msg)
+        } yield result shouldBe s"Invalid: $invalidEmail"
+      }
+
+      "updateMsg should correctly update and return the email address" in withEmbeddedMongoClient { client =>
+        for {
+          db             <- setupTestDatabase("test", client)
+          mockCollection <- setupTestCollection(db, "mock")
+          emailContact = new EmailContactImpl[IO](mockCollection)
+          name         = "Jane Doe"
+          email        = "jane.doe@example.com"
+          subject      = "Another Test"
+          msg          = "This is another test message."
+          result <- emailContact.saveEmail(name, email, subject, msg)
+        } yield result shouldBe email
+      }
+    }
   }
 
-  test("saveEmail should return email when validation succeeds and update is successful") {
-    val emailContact = new EmailContactImpl[IO](mockCollection)
-    val name = "John Doe"
-    val email = "john.doe@example.com"
-    val subject = "Test Subject"
-    val msg = "This is a test message."
+  def setupTestDatabase(name: String, client: MongoClient[IO]): IO[MongoDatabase[IO]] =
+    client.getDatabase(name)
 
-    val updateResult = stub[UpdateResult]
-    (() => updateResult.getUpsertedId).when().returns(null)
+  def setupTestCollection(db: MongoDatabase[IO], name: String): IO[MongoCollection[IO, Document]] =
+    db.getCollection(name)
 
-    (mockCollection.updateOne(_: Bson, _: Bson, _: UpdateOptions))
-      .expects(*, *, *).returns(IO.pure(updateResult))
-
-    val result = emailContact.saveEmail(name, email, subject, msg).unsafeRunSync()
-
-    result shouldBe email
-  }
-
-  test("saveEmail should return 'Invalid' message when validation fails") {
-    val emailContact = new EmailContactImpl[IO](mockCollection)
-    val name = "John Doe"
-    val invalidEmail = "john.doe@"
-    val subject = "Test Subject"
-    val msg = "This is a test message."
-
-    val result = emailContact.saveEmail(name, invalidEmail, subject, msg).unsafeRunSync()
-
-    result shouldBe s"Invalid: $invalidEmail"
-  }
-
-  test("updateMsg should correctly update and return the email address") {
-    val emailContact = new EmailContactImpl[IO](mockCollection)
-    val name = "Jane Doe"
-    val email = "jane.doe@example.com"
-    val subject = "Another Test"
-    val msg = "This is another test message."
-
-    val updateResult = stub[UpdateResult]
-    (() => updateResult.getUpsertedId).when().returns(null)
-
-    (mockCollection.updateOne(_: Bson, _: Bson, _: UpdateOptions))
-      .expects(*, *, *).returns(IO.pure(updateResult))
-
-    val result = emailContact.saveEmail(name, email, subject, msg).unsafeRunSync()
-
-    result `shouldBe` email
-  }
+  def withEmbeddedMongoClient[A](test: MongoClient[IO] => IO[A]): Future[A] =
+    withRunningEmbeddedMongo {
+      MongoClient
+        .fromConnectionString[IO](s"mongodb://localhost:$mongoPort")
+        .use(test)
+    }.unsafeToFuture()(IORuntime.global)
 }
-*/

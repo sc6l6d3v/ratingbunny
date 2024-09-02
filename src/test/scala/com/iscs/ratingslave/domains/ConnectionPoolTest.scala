@@ -11,7 +11,9 @@ import mongo4cats.embedded.EmbeddedMongo
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
 import mongo4cats.bson.syntax.*
+import mongo4cats.client
 import org.mongodb.scala.bson.BsonDocument
+
 import scala.concurrent.Future
 
 class ConnectionPoolTest extends AsyncWordSpec with Matchers with EmbeddedMongo {
@@ -21,17 +23,16 @@ class ConnectionPoolTest extends AsyncWordSpec with Matchers with EmbeddedMongo 
   "embedded MongoDB" when {
     "invoking getCPStats" should {
       "return connection pool stats as JSON" in withEmbeddedMongoClient { client =>
-          for {
-            db <- client.getDatabase("test")
-            _ <- setupTestDatabase(db)
-            connectionPool = ConnectionPool.impl[IO](db)
-            jsonResult <- connectionPool.getCPStats
-          } yield  {
-            jsonResult.hcursor.get[Int]("current").getOrElse(0) should be >= 0
-            jsonResult.hcursor.get[Int]("available").getOrElse(0) should be >= 0
-            jsonResult.hcursor.get[Int]("totalCreated").getOrElse(0) should be >= 0
-          }
+        for {
+          db <- setupTestDatabase("test", client)
+          connectionPool = ConnectionPool.impl[IO](db)
+          jsonResult <- connectionPool.getCPStats
+        } yield {
+          jsonResult.hcursor.get[Int]("current").getOrElse(0) should be >= 0
+          jsonResult.hcursor.get[Int]("available").getOrElse(0) should be >= 0
+          jsonResult.hcursor.get[Int]("totalCreated").getOrElse(0) should be >= 0
         }
+      }
 
       "handle missing connection fields gracefully" in withEmbeddedMongoClient { client =>
         for {
@@ -48,11 +49,8 @@ class ConnectionPoolTest extends AsyncWordSpec with Matchers with EmbeddedMongo 
     }
   }
 
-  def setupTestDatabase(db: MongoDatabase[IO]): IO[Unit] = {
-    // This is where you would set up any initial state required for your tests
-    // e.g., inserting documents or running specific MongoDB commands
-    IO.unit
-  }
+  def setupTestDatabase(name: String, client: MongoClient[IO]): IO[MongoDatabase[IO]] =
+    client.getDatabase(name)
 
   def withEmbeddedMongoClient[A](test: MongoClient[IO] => IO[A]): Future[A] =
     withRunningEmbeddedMongo {

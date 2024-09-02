@@ -14,48 +14,51 @@ import org.http4s.dsl.Http4sDsl
 import org.http4s.headers.`Content-Type`
 
 object ReleaseRoutes extends DecodeUtils {
-  private val L = Logger[this.type]
+  private val L          = Logger[this.type]
   private val apiVersion = "v3"
 
-  def httpRoutes[F[_] : Async](R: ReleaseDates[F]): HttpRoutes[F] = {
+  def httpRoutes[F[_]: Async](R: ReleaseDates[F]): HttpRoutes[F] = {
     val dsl = Http4sDsl[F]
     import dsl._
-    val imgSvc = HttpRoutes.of[F] {
-      case _@GET -> Root / "api" / `apiVersion` / "image" / imdbId =>
+    val imgSvc = HttpRoutes
+      .of[F] { case _ @GET -> Root / "api" / `apiVersion` / "image" / imdbId =>
         for {
-          _ <- Sync[F].delay(L.info(s""""request" image=$imdbId"""))
+          _    <- Sync[F].delay(L.info(s""""request" image=$imdbId"""))
           resp <- Ok(R.getImage(imdbId))
         } yield resp
-    }.map(_.withContentType(`Content-Type`(`jpeg`)))
-    val metaSvc = HttpRoutes.of[F] {
-      case _ @ GET -> Root / "api" / `apiVersion` / "reldate" / year / month / rating =>
-        for {
-          _ <- Sync[F].delay(L.info(s""""request" date=$year/$month rating=$rating"""))
-          ratingVal <- getRating(rating)
-          relStream <- Sync[F].delay(R.findReleases("rel", year, month, ratingVal))
-          relList <- relStream.compile.toList
-          resp <- Ok(relList)
-        } yield resp
-       case _ @ GET -> Root / "api" / `apiVersion` / "top" / year / rating =>
-        for {
-          _ <- Sync[F].delay(L.info(s""""request" date=$year rating=$rating"""))
-          ratingVal <- getRating(rating)
-          topStream <- Sync[F].delay(R.findMovies("top", year, ratingVal))
-          topList <- topStream.compile.toList
-          resp <- Ok(topList)
-        } yield resp
-      case _ @ GET -> Root / "api" / `apiVersion` / "new" / year / rating =>
-        for {
-          _ <- Sync[F].delay(L.info(s""""request" date=$year rating=$rating"""))
-          ratingVal <- getRating(rating)
-          newStream <- Sync[F].delay(R.findMovies("new", year, ratingVal))
-          newList <- newStream.compile.toList
-          resp <- Ok(newList)
-        } yield resp
-/*      case default =>
+      }
+      .map(_.withContentType(`Content-Type`(`jpeg`)))
+    val metaSvc = HttpRoutes
+      .of[F] {
+        case _ @GET -> Root / "api" / `apiVersion` / "reldate" / year / month / rating =>
+          for {
+            _         <- Sync[F].delay(L.info(s""""request" date=$year/$month rating=$rating"""))
+            ratingVal <- getRating(rating)
+            relStream <- Sync[F].delay(R.findReleases("rel", year, month, ratingVal))
+            relList   <- relStream.compile.toList
+            resp      <- Ok(relList)
+          } yield resp
+        case _ @GET -> Root / "api" / `apiVersion` / "top" / year / rating =>
+          for {
+            _         <- Sync[F].delay(L.info(s""""request" date=$year rating=$rating"""))
+            ratingVal <- getRating(rating)
+            topStream <- Sync[F].delay(R.findMovies("top", year, ratingVal))
+            topList   <- topStream.compile.toList
+            resp      <- Ok(topList)
+          } yield resp
+        case _ @GET -> Root / "api" / `apiVersion` / "new" / year / rating =>
+          for {
+            _         <- Sync[F].delay(L.info(s""""request" date=$year rating=$rating"""))
+            ratingVal <- getRating(rating)
+            newStream <- Sync[F].delay(R.findMovies("new", year, ratingVal))
+            newList   <- newStream.compile.toList
+            resp      <- Ok(newList)
+          } yield resp
+        /*      case default =>
         L.error(s"got bad request: ${default.pathInfo} ")
         Ok(RouteNotFound(default.pathInfo.toString))*/
-    }.map(_.withContentType(`Content-Type`(`json`)))
+      }
+      .map(_.withContentType(`Content-Type`(`json`)))
     CORSSetup.methodConfig(imgSvc <+> metaSvc)
   }
 }

@@ -15,25 +15,25 @@ import scala.language.implicitConversions
 import scala.util.matching.Regex.quote
 
 trait QuerySetup {
-  val id = "_id"
-  private val averageRating = "averageRating"
-  private val firstName = "firstName"
-  private val genresList = "genresList"
-  private val lastName = "lastName"
-  private val isAdult = "isAdult"
-  private val numVotes = "numVotes"
-  private val tconst = "tconst"
-  private val primaryName = "primaryName"
-  private val originalTitle = "originalTitle"
-  private val primaryTitle = "primaryTitle"
-  private val startYear = "startYear"
-  private val endYear = "endYear"
-  private val runtimeMinutes = "runtimeMinutes"
-  val titleType = "titleType"
-  private val STREAMLIMIT = 96
+  val id                       = "_id"
+  private val averageRating    = "averageRating"
+  private val firstName        = "firstName"
+  private val genresList       = "genresList"
+  private val lastName         = "lastName"
+  private val isAdult          = "isAdult"
+  private val numVotes         = "numVotes"
+  private val tconst           = "tconst"
+  private val primaryName      = "primaryName"
+  private val originalTitle    = "originalTitle"
+  private val primaryTitle     = "primaryTitle"
+  private val startYear        = "startYear"
+  private val endYear          = "endYear"
+  private val runtimeMinutes   = "runtimeMinutes"
+  val titleType                = "titleType"
+  private val STREAMLIMIT      = 96
   private val AUTOSUGGESTLIMIT = 20
-  private val EXACT = "exact"
-  val L: Logger = Logger[this.type]
+  private val EXACT            = "exact"
+  val L: Logger                = Logger[this.type]
 
   implicit def convertBooleanToInt(b: Boolean): asInt = new asInt(b)
 
@@ -54,13 +54,15 @@ trait QuerySetup {
   private def buildAccums(fields: List[String]): Seq[BsonField] = fields
     .map(field => Accumulators.first(field, s"$$$field"))
 
-  private val groupAccums: Seq[BsonField] = buildAccums(List(averageRating, numVotes, titleType, primaryTitle, originalTitle,
-    isAdult, startYear, endYear, runtimeMinutes, genresList))
+  private val groupAccums: Seq[BsonField] = buildAccums(
+    List(averageRating, numVotes, titleType, primaryTitle, originalTitle, isAdult, startYear, endYear, runtimeMinutes, genresList)
+  )
 
   private val projections: Bson = getProjections(
     computes = List(averageRating, originalTitle, numVotes, runtimeMinutes),
     includes = List(titleType, primaryTitle, isAdult, startYear, endYear, genresList),
-    excludes = List.empty[String])
+    excludes = List.empty[String]
+  )
 
   private def dblExists(fieldName: String, dbl: Double): Bson =
     or(
@@ -93,7 +95,7 @@ trait QuerySetup {
 
   private def limitBson(limit: Int): Bson = Aggregates.limit(limit)
 
-  private def getParamList(params: ReqParams): List[Bson] = {
+  private def getParamList(params: ReqParams): List[Bson] =
     List(
       params.year.map(yr => between(startYear, yr.head, yr.last)),
       params.genre.map(genre => inOrEqList(genresList, genre)),
@@ -101,32 +103,30 @@ trait QuerySetup {
       params.isAdult.map(isAdlt => feq(isAdult, isAdlt.toInt)),
       params.votes.map(v => zeroGTE(numVotes, v))
     ).flatten
-  }
 
-  private def getOptFilters(optTitle: Option[String], searchType: Option[String]): Option[Bson] = {
+  private def getOptFilters(optTitle: Option[String], searchType: Option[String]): Option[Bson] =
     optTitle.map { title =>
       searchType match {
         case Some(EXACT) => feq(primaryTitle, title)
         case _           => regex(primaryTitle, "^" + quote(title))
       }
     }
-  }
 
   def genAutonameFilter(namePrefix: String, rating: Double, params: ReqParams): Seq[Bson] = {
-    val names = if (namePrefix.contains(" "))
-      namePrefix.split(" ").toList
-    else
-      List(namePrefix)
+    val names =
+      if (namePrefix.contains(" "))
+        namePrefix.split(" ").toList
+      else
+        List(namePrefix)
 
-    val lastFirstElt = if (names.size == 1)
-      regex(lastName, s"""^${names.head}""")
-    else
-      and(
-        regex(lastName, s"""^${names.last}"""),
-        feq(firstName, names.head))
+    val lastFirstElt =
+      if (names.size == 1)
+        regex(lastName, s"""^${names.head}""")
+      else
+        and(regex(lastName, s"""^${names.last}"""), feq(firstName, names.head))
 
     val nonEmptyElts = combineBson(getParamList(params), dblExists(averageRating, rating), lastFirstElt)
-    val matchBson = and(nonEmptyElts*)
+    val matchBson    = and(nonEmptyElts*)
 
     val sortElt = Sorts.ascending(id, firstName)
 
@@ -149,7 +149,7 @@ trait QuerySetup {
     val titleElt = regex(primaryTitle, s"""^$titlePrefix""")
 
     val nonEmptyElts = combineBson(getParamList(params), dblExists(averageRating, rating), titleElt)
-    val matchBson = and(nonEmptyElts*)
+    val matchBson    = and(nonEmptyElts*)
 
     val sortBson = Sorts.ascending(primaryTitle)
 
@@ -174,9 +174,11 @@ trait QuerySetup {
 
   def genTitleFilter(optTitle: Option[String], rating: Double, params: ReqParams): Bson = {
     val paramWithRating = getParamList(params) :+ zeroGTE(averageRating, rating)
-    val nonEmptyElts = getOptFilters(optTitle, params.searchType).map { titleElts =>
-      paramWithRating :+ titleElts
-    }.getOrElse(paramWithRating)
+    val nonEmptyElts = getOptFilters(optTitle, params.searchType)
+      .map { titleElts =>
+        paramWithRating :+ titleElts
+      }
+      .getOrElse(paramWithRating)
     and(nonEmptyElts*)
   }
 

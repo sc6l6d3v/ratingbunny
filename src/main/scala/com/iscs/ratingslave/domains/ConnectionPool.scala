@@ -16,28 +16,28 @@ trait ConnectionPool[F[_]] {
 }
 
 object ConnectionPool {
-  private val dbcmd = BsonDocument("serverStatus" -> 1)
+  private val dbcmd  = BsonDocument("serverStatus" -> 1)
   private val attrib = "connections"
 
   def apply[F[_]](implicit ev: ConnectionPool[F]): ConnectionPool[F] = ev
 
   private case class Connections(
-                          current: Option[Int] = None,
-                          available: Option[Int] = None,
-                          totalCreated: Option[Int] = None,
-                          active: Option[Int] = None,
-                          threaded: Option[Int] = None,
-                          exhaustIsMaster: Option[Int] = None,
-                          exhaustHello: Option[Int] = None,
-                          awaitingTopologyChanges: Option[Int] = None
-                        )
+      current: Option[Int] = None,
+      available: Option[Int] = None,
+      totalCreated: Option[Int] = None,
+      active: Option[Int] = None,
+      threaded: Option[Int] = None,
+      exhaustIsMaster: Option[Int] = None,
+      exhaustHello: Option[Int] = None,
+      awaitingTopologyChanges: Option[Int] = None
+  )
 
-  def impl[F[_] : Sync](db: MongoDatabase[F]): ConnectionPool[F] = {
+  def impl[F[_]: Sync](db: MongoDatabase[F]): ConnectionPool[F] = {
 
     def getStats(statDoc: Document): Json = {
       val connectionsDoc = statDoc.get(attrib).map(_.asDocument.getOrElse(Document()))
       val connections = Connections(
-        current = connectionsDoc.get("current").map{_.asInt.get},
+        current = connectionsDoc.get("current").map(_.asInt.get),
         available = connectionsDoc.get("available").map(_.asInt.get),
         totalCreated = connectionsDoc.get("totalCreated").map(_.asInt.get),
         active = connectionsDoc.get("active").map(_.asInt.get),
