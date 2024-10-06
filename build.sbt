@@ -8,7 +8,7 @@ ThisBuild / javacOptions ++= Seq("--release", "21") // For Java 21
 
 lazy val root = (project in file("."))
   .settings(
-    name := "ratingslave",
+    name := "ratingbunny",
     libraryDependencies ++= Seq(
       http4s.client,
       http4s.server,
