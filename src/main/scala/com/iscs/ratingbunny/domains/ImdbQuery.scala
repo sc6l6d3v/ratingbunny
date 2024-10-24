@@ -8,10 +8,10 @@ import cats.implicits.*
 import com.iscs.ratingbunny.model.Requests.ReqParams
 import com.iscs.ratingbunny.util.DecodeUtils
 import fs2.Stream
-import io.circe.generic.auto._
-import mongo4cats.circe._
+import io.circe.generic.auto.*
+import mongo4cats.circe.*
 import mongo4cats.collection.MongoCollection
-import org.http4s.circe._
+import org.http4s.circe.*
 import org.http4s.client.Client
 import org.http4s.{Method, Request, Uri}
 import scala.concurrent.duration.FiniteDuration

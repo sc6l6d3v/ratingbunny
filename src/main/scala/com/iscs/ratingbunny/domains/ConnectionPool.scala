@@ -1,40 +1,38 @@
 package com.iscs.ratingbunny.domains
 
-import cats.effect._
-import cats.implicits._
+import cats.Parallel
+import cats.effect.*
+import cats.implicits.*
 import io.circe.Json
-import io.circe.generic.auto._
-import io.circe.syntax._
+import io.circe.generic.auto.*
+import io.circe.syntax.*
 import mongo4cats.bson.Document
 import mongo4cats.database.MongoDatabase
 import org.mongodb.scala.bson.BsonDocument
-
 import scala.language.implicitConversions
 
 trait ConnectionPool[F[_]] {
   def getCPStats: F[Json]
 }
 
-object ConnectionPool {
+class ConnectionPoolImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
+                                                                               db: MongoDatabase[F]
+                                                                             ) extends ConnectionPool[F] {
   private val dbcmd  = BsonDocument("serverStatus" -> 1)
   private val attrib = "connections"
 
-  def apply[F[_]](implicit ev: ConnectionPool[F]): ConnectionPool[F] = ev
-
-  private case class Connections(
-      current: Option[Int] = None,
-      available: Option[Int] = None,
-      totalCreated: Option[Int] = None,
-      active: Option[Int] = None,
-      threaded: Option[Int] = None,
-      exhaustIsMaster: Option[Int] = None,
-      exhaustHello: Option[Int] = None,
-      awaitingTopologyChanges: Option[Int] = None
-  )
-
-  def impl[F[_]: Sync](db: MongoDatabase[F]): ConnectionPool[F] = {
-
-    def getStats(statDoc: Document): Json = {
+  private final case class Connections(
+                                        current: Option[Int] = None,
+                                        available: Option[Int] = None,
+                                        totalCreated: Option[Int] = None,
+                                        active: Option[Int] = None,
+                                        threaded: Option[Int] = None,
+                                        exhaustIsMaster: Option[Int] = None,
+                                        exhaustHello: Option[Int] = None,
+                                        awaitingTopologyChanges: Option[Int] = None
+                                      )
+  
+  private def getStats(statDoc: Document): Json = {
       val connectionsDoc = statDoc.get(attrib).map(_.asDocument.getOrElse(Document()))
       val connections = Connections(
         current = connectionsDoc.get("current").map(_.asInt.get),
@@ -49,10 +47,7 @@ object ConnectionPool {
       connections.asJson
     }
 
-    new ConnectionPool[F] {
-      override def getCPStats: F[Json] = for {
-        doc <- db.runCommand(dbcmd)
-      } yield getStats(doc)
-    }
-  }
+  override def getCPStats: F[Json] = for {
+    doc <- db.runCommand(dbcmd)
+  } yield getStats(doc)
 }

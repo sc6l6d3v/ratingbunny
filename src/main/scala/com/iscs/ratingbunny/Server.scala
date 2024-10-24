@@ -4,7 +4,7 @@ import cats.Parallel
 import cats.effect.{Async, Resource, Sync}
 import cats.implicits.*
 import com.comcast.ip4s.*
-import com.iscs.ratingbunny.domains.{ConnectionPool, EmailContact, EmailContactImpl, ImdbQuery, ImdbQueryImpl, ReleaseDates, TitleRec}
+import com.iscs.ratingbunny.domains.{ConnectionPool, ConnectionPoolImpl, EmailContact, EmailContactImpl, ImdbQuery, ImdbQueryImpl, ReleaseDates, TitleRec}
 import com.iscs.ratingbunny.routes.{EmailContactRoutes, ImdbRoutes, PoolSvcRoutes, ReleaseRoutes}
 import com.typesafe.scalalogging.Logger
 import io.circe.generic.auto.*
@@ -38,8 +38,8 @@ object Server {
     imdbSvc       <- Sync[F].delay(new ImdbQueryImpl[F](compCollCodec, tbrCollCodec, imageHost, Some(client)))
   } yield imdbSvc
 
-  private def getPoolStatsSvc[F[_]: Async](db: MongoDatabase[F]): F[ConnectionPool[F]] = for {
-    poolSvc <- Sync[F].delay(ConnectionPool.impl[F](db))
+  private def getPoolStatsSvc[F[_]: Async: Parallel](db: MongoDatabase[F]): F[ConnectionPool[F]] = for {
+    poolSvc <- Sync[F].delay(new ConnectionPoolImpl[F](db))
   } yield poolSvc
 
   private def getEmailSvc[F[_]: Async](db: MongoDatabase[F]): F[EmailContact[F]] = for {
