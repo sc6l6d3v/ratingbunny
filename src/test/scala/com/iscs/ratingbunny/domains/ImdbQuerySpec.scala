@@ -50,9 +50,9 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo {
             IO(L.info(s"succeeded inserts ${titleRecs.mkString}"))
         }
         imdbQuery    = new ImdbQueryImpl[IO](compFx, compFx, "localhost", mockHttpClient)
-        params       = ReqParams( /* parameters setup here */ )
         title        = Some("The Shawshank Redemption")
-        resultStream = imdbQuery.getByTitle(title, 8.0, params, limit = 10)
+        params       = ReqParams(query = title)
+        resultStream = imdbQuery.getByTitle(8.0, params, limit = 10)
         results <- resultStream.compile.toList
       } yield {
         assert(results.nonEmpty)
@@ -85,9 +85,9 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo {
             IO(L.info(s"succeeded inserts ${titlePathRecs.mkString}"))
         }
         imdbQuery    = new ImdbQueryImpl[IO](compFx, compFx, "localhost", Some(mockHttpClient))
-        params       = ReqParams( /* parameters setup here */ )
         title        = Some("The Matrix")
-        resultStream = imdbQuery.getByTitlePath(title, 7.5, params, limit = 10)
+        params       = ReqParams(query = title)
+        resultStream = imdbQuery.getByTitlePath(7.5, params, limit = 10)
         results <- resultStream.compile.toList
       } yield {
         assert(results.nonEmpty)

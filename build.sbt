@@ -30,7 +30,7 @@ lazy val root = (project in file("."))
       logback.logging,
       jsoup.base
     ),
-    Compile / mainClass := Some("com.iscs.ratingslave.Main"),
+    Compile / mainClass := Some("com.iscs.ratingbunny.Main"),
     Revolver.enableDebugging(5061, suspend = true)
   )
 

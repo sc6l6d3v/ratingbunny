@@ -107,7 +107,7 @@ object ImdbRoutes extends DecodeUtils {
         cs: String,
         ch: String,
         offset: String,
-        getTitle: (Option[String], Double, ReqParams, Int) => Stream[F, TitleRecBase],
+        getTitle: (Double, ReqParams, Int) => Stream[F, TitleRecBase],
         logText: String
     ): F[Response[F]] =
       for {
@@ -118,7 +118,7 @@ object ImdbRoutes extends DecodeUtils {
         _ <- showParams("title", pgs, ws, wh, cs, ch, offset)
         titleStream <- Sync[F].delay(
           if (reqParams.year.nonEmpty)
-            getTitle(reqParams.query, rtng, reqParams, pgs << 3)
+            getTitle(rtng, reqParams, pgs << 3)
           else
             Stream.empty
         )

@@ -18,8 +18,8 @@ import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
 
 trait ImdbQuery[F[_]] {
-  def getByTitle(title: Option[String], rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec]
-  def getByTitlePath(title: Option[String], rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRecPath]
+  def getByTitle(rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec]
+  def getByTitlePath(rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRecPath]
   def getByName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec]
   def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec]
   def getAutosuggestTitle(titlePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoTitleRec]
@@ -55,7 +55,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
 
   /** db.title_basics_ratings.aggregate([ { $match: { primaryTitle: { $regex: "Gone " }, or primaryTitle: "Gone with the Light", if exact
     * startYear: { "$gte": 2019, "$lte": 2023 }, genresList: { "$in": ["Adventure"] }, titleType: "tvEpisode", isAdult: 0, $or: [{
-    * "numVotes": { "$gte": 7.0 } }, { "numVotes": 0.0 }] $or: [{ "averageRating": { "$gte": 7.0 } }, { "averageRating": 0.0 }] } }, {
+    * "numVotes": { "$gte": 7.0 } }, { "numVotes": 0.0 }], $or: [{ "averageRating": { "$gte": 7.0 } }, { "averageRating": 0.0 }] } }, {
     * $project: { averageRating: { $ifNull: ["$averageRating", "$$REMOVE"]}, numVotes: { $ifNull: ["$numVotes", "$$REMOVE"]}, titleType: 1,
     * primaryTitle: 1, originalTitle: { $ifNull: ["$originalTitle", "$$REMOVE"]}, isAdult: 1, startYear: 1, endYear: 1, runtimeMinutes: {
     * $ifNull: ["$runtimeMinutes", "$$REMOVE"]}, genresList: 1, } }, { $sort: { startYear: -1, numVotes: -1, averageRating: -1,
@@ -71,8 +71,8 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     *   how many
     * @return
     */
-  override def getByTitle(optTitle: Option[String], rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec] = {
-    val queryPipeline = genTitleQueryPipeline(genTitleFilter(optTitle, rating, params), isLimited = true, limit)
+  override def getByTitle(rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec] = {
+    val queryPipeline = genTitleQueryPipeline(genTitleFilter(params, rating), isLimited = true, limit)
 
     for {
       start  <- Stream.eval(Clock[F].monotonic)
@@ -230,9 +230,9 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     } yield pathVal
   }
 
-  override def getByTitlePath(optTitle: Option[String], rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRecPath] =
+  override def getByTitlePath(rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRecPath] =
     Stream.eval(Clock[F].monotonic).flatMap { overallStart =>
-      val queryPipeline = genTitleQueryPipeline(genTitleFilter(optTitle, rating, params), isLimited = true, limit)
+      val queryPipeline = genTitleQueryPipeline(genTitleFilter(params, rating), isLimited = true, limit)
 
       // connect the streams
       val titleRecPathStream = tbrFx.aggregateWithCodec[TitleRecPath](queryPipeline).stream
