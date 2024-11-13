@@ -10,7 +10,7 @@ trait DecodeUtils {
 
   def protoc(imageHost: String): String =
     if (
-      List("tmdbimg", "localhost", "192.168.4")
+      List("tmdbimg", "localhost", "192.168.4", "172")
         .exists(host => imageHost.startsWith(host))
     )
       "http"

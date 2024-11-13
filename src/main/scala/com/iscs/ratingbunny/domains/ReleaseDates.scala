@@ -91,19 +91,27 @@ class ReleaseDates[F[_]: Async](defaultHost: String, imageHost: String, client: 
   def getImage(imdb: String): Stream[F, Byte] = for {
     imgStr <- Stream.eval(Sync[F].delay(s"""$metaImage/$imdb/S"""))
     imgReq <- Stream.eval(Sync[F].delay(Request[F](Method.GET, Uri.unsafeFromString(imgStr))))
-    (imgTime, imgBytes) <- Stream.eval(
-      Clock[F].timed(
-        client
-          .run(imgReq)
-          .use(resp =>
-            resp.body.compile
-              .to(ByteVector)
-              .map(_.toArray)
-          )
-      )
+    result <- Stream.eval(
+      Clock[F]
+        .timed(
+          client
+            .run(imgReq)
+            .use(resp =>
+              resp.body.compile
+                .to(ByteVector)
+                .map(_.toArray)
+            )
+        )
+        .attempt
     )
-    _ <- Stream.eval(Sync[F].delay(L.info(s"imgStr {} image id {} size {} time {} ms", imgStr, imdb, imgBytes.length, imgTime.toMillis)))
-    imgStream <- Stream.emits(imgBytes)
+    imgStream <- result match {
+      case Right((imgTime, imgBytes)) =>
+        Stream.eval(Sync[F].delay(L.info(s"imgStr {} image id {} size {} time {} ms", imgStr, imdb, imgBytes.length, imgTime.toMillis))) >>
+          Stream.emits(imgBytes)
+      case Left(error) =>
+        Stream.eval(Sync[F].delay(L.error(s"Error fetching image for imdb $imdb from $imgStr: ${error.getMessage}", error))) >>
+          Stream.empty
+    }
   } yield imgStream
 
   def findReleases(urlType: String, year: String, month: String, minRating: Double): Stream[F, Scrape] = for {
