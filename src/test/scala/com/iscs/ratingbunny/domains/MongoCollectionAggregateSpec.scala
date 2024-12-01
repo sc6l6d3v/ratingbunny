@@ -15,7 +15,7 @@ import org.scalatest.wordspec.AsyncWordSpec
 import scala.concurrent.Future
 class MongoCollectionAggregateSpec extends AsyncWordSpec with Matchers with EmbeddedMongo {
   override val mongoPort = 12350
-  
+
   "A MongoCollection" when {
     "aggregate" should {
       "join data from 2 collections" in withEmbeddedMongoDatabase { db =>

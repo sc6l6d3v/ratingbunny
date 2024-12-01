@@ -4,8 +4,17 @@ import cats.Parallel
 import cats.effect.{Async, Resource, Sync}
 import cats.implicits.*
 import com.comcast.ip4s.*
-import com.iscs.ratingbunny.domains.{ConnectionPool, ConnectionPoolImpl, EmailContact, EmailContactImpl, ImdbQuery, ImdbQueryImpl, ReleaseDates, TitleRec}
-import com.iscs.ratingbunny.routes.{EmailContactRoutes, ImdbRoutes, PoolSvcRoutes, ReleaseRoutes}
+import com.iscs.ratingbunny.domains.{
+  ConnectionPool,
+  ConnectionPoolImpl,
+  EmailContact,
+  EmailContactImpl,
+  FetchImage,
+  ImdbQuery,
+  ImdbQueryImpl,
+  TitleRec
+}
+import com.iscs.ratingbunny.routes.{EmailContactRoutes, FetchImageRoutes, ImdbRoutes, PoolSvcRoutes}
 import com.typesafe.scalalogging.Logger
 import io.circe.generic.auto.*
 import fs2.io.net.Network
@@ -51,12 +60,12 @@ object Server {
     for {
       imdbSvc   <- getImdbSvc(db, client)
       emailSvc  <- getEmailSvc(db)
-      scrapeSvc <- Sync[F].delay(new ReleaseDates[F](defaultHost, imageHost, client))
+      scrapeSvc <- Sync[F].delay(new FetchImage[F](defaultHost, imageHost, client))
       poolSvc   <- getPoolStatsSvc(db)
       httpApp <- Sync[F].delay(
         Router(
           "/" ->
-            (ReleaseRoutes.httpRoutes(scrapeSvc) <+>
+            (FetchImageRoutes.httpRoutes(scrapeSvc) <+>
               EmailContactRoutes.httpRoutes(emailSvc) <+>
               ImdbRoutes.httpRoutes(imdbSvc) <+>
               PoolSvcRoutes.httpRoutes(poolSvc))

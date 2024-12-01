@@ -1,10 +1,8 @@
 package com.iscs.ratingbunny.domains
 
-import org.jsoup.Jsoup
 import org.scalatest.wordspec.AnyWordSpec
-import scala.jdk.CollectionConverters._
 
-class ReleaseDatesSpec extends AnyWordSpec {
+class FetchImageSpec extends AnyWordSpec {
   private val fieldDoc = "table.fieldtable-inner td.dvdcell"
   private val name     = "new-dvd-releases-december-2020.html"
 //  private val htmlPath = os.resource() / name
