@@ -1,11 +1,15 @@
 package com.iscs.ratingbunny.config
 
+import com.iscs.ratingbunny.util.ConnectionPoolConfig
 import com.mongodb.ReadPreference
+import com.typesafe.scalalogging.Logger
 import org.mongodb.scala.connection.ConnectionPoolSettings
 import org.mongodb.scala.{ConnectionString, MongoClientSettings, MongoCredential}
 import scala.concurrent.duration.MILLISECONDS
 
-case class MongodbConfig(url: String, isReadOnly: Boolean = false) {
+case class MongodbConfig(url: String, isReadOnly: Boolean = false, cpConfig: ConnectionPoolConfig) {
+  import cpConfig.*
+  private val L          = Logger[this.type]
   private val connection = new ConnectionString(url)
 
   private val credentials: MongoCredential = connection.getCredential
@@ -14,14 +18,20 @@ case class MongodbConfig(url: String, isReadOnly: Boolean = false) {
 
   val isReplicaSet: Boolean = connection.getRequiredReplicaSetName != null
 
+  L.info(
+    "connection pool, minPoolSize: " + minPoolSize + ", maxPoolSize: " + maxPoolSize + ", maxWaitTimeMS: "
+      + maxWaitTimeMS + ", maxConnectionLifeTimeMS: " + maxConnectionLifeTimeMS + ", maxConnectionIdleTimeMS: " +
+      maxConnectionIdleTimeMS + ", maxConnecting: " + maxConnecting
+  )
+
   private val connectionPoolSettings: ConnectionPoolSettings = ConnectionPoolSettings
     .builder()
-    .minSize(128)
-    .maxSize(256)
-    .maxWaitTime(1000 * 60 * 2, MILLISECONDS)            // 2 minutes
-    .maxConnectionLifeTime(1000 * 60 * 60, MILLISECONDS) // 1 hour
-    .maxConnectionIdleTime(1000 * 60 * 10, MILLISECONDS) // 10 minutes
-    .maxConnecting(10)                                   // Increase the number of connections being established concurrently
+    .minSize(minPoolSize)
+    .maxSize(maxPoolSize)
+    .maxWaitTime(maxWaitTimeMS, MILLISECONDS)                     // 2 minutes
+    .maxConnectionLifeTime(maxConnectionLifeTimeMS, MILLISECONDS) // 1 hour
+    .maxConnectionIdleTime(maxConnectionIdleTimeMS, MILLISECONDS) // 10 minutes
+    .maxConnecting(maxConnecting)                                 // Increase the number of connections being established concurrently
     .build()
 
   private val baseSettings: MongoClientSettings.Builder = MongoClientSettings
