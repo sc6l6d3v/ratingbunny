@@ -19,7 +19,7 @@ object ImdbQueryData {
       originalTitle = "The Matrix Reloaded",
       isAdult = 0,
       startYear = 2003,
-      endYear = "",
+      endYear = 2005,
       runtimeMinutes = Some(138),
       genresList = Some(List("Action", "Sci-Fi"))
 //        posterPath = Some("/9TGHDvWrqKBzwDxDodHYXEmOE6J.jpg")
@@ -33,7 +33,7 @@ object ImdbQueryData {
       originalTitle = "The Matrix Revolutions",
       isAdult = 0,
       startYear = 2003,
-      endYear = "",
+      endYear = 2005,
       runtimeMinutes = Some(129),
       genresList = Some(List("Action", "Sci-Fi"))
 //      posterPath = Some("/t1wm4PgOQ8e4z1C6tk1yDNrps4T.jpg")
@@ -47,7 +47,7 @@ object ImdbQueryData {
       originalTitle = "The Matrix",
       isAdult = 0,
       startYear = 1999,
-      endYear = "",
+      endYear = 2005,
       runtimeMinutes = Some(136),
       genresList = Some(List("Action", "Sci-Fi"))
 //      posterPath = Some("/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg")
@@ -64,7 +64,7 @@ object ImdbQueryData {
       originalTitle = "The Shawshank Redemption",
       isAdult = 0,
       startYear = 1994,
-      endYear = "",
+      endYear = 2005,
       runtimeMinutes = Some(142),
       genresList = Some(List("Drama"))
     ),
@@ -77,7 +77,7 @@ object ImdbQueryData {
       originalTitle = "The Godfather",
       isAdult = 0,
       startYear = 1972,
-      endYear = "",
+      endYear = 2005,
       runtimeMinutes = Some(175),
       genresList = Some(List("Crime", "Drama"))
     )
@@ -92,7 +92,7 @@ object ImdbQueryData {
       originalTitle = "Alpha",
       isAdult = 0,
       startYear = 2018,
-      endYear = "",
+      endYear = 2005,
       runtimeMinutes = Some(96),
       genresList = Some(
         List(
@@ -111,7 +111,7 @@ object ImdbQueryData {
       originalTitle = "The Nutcracker and the Four Realms",
       isAdult = 0,
       startYear = 2018,
-      endYear = "",
+      endYear = 2005,
       runtimeMinutes = Some(99),
       genresList = Some(
         List(
@@ -130,7 +130,7 @@ object ImdbQueryData {
       originalTitle = "L'empereur",
       isAdult = 0,
       startYear = 2017,
-      endYear = "",
+      endYear = 2005,
       runtimeMinutes = Some(76),
       genresList = Some(
         List(
@@ -149,7 +149,7 @@ object ImdbQueryData {
       originalTitle = "Now You See Me 2",
       isAdult = 0,
       startYear = 2016,
-      endYear = "",
+      endYear = 2005,
       runtimeMinutes = Some(129),
       genresList = Some(
         List(
@@ -168,7 +168,7 @@ object ImdbQueryData {
       originalTitle = "Ben-Hur",
       isAdult = 0,
       startYear = 2016,
-      endYear = "",
+      endYear = 2005,
       runtimeMinutes = Some(123),
       genresList = Some(
         List(
@@ -187,7 +187,7 @@ object ImdbQueryData {
       originalTitle = "Oblivion",
       isAdult = 0,
       startYear = 2013,
-      endYear = "",
+      endYear = 2005,
       runtimeMinutes = Some(124),
       genresList = Some(
         List(

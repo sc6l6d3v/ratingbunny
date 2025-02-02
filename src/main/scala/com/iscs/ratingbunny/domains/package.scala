@@ -19,7 +19,7 @@ package object domains {
     val originalTitle: String
     val isAdult: Int
     val startYear: Int
-    val endYear: String
+    val endYear: Int
     val runtimeMinutes: Option[Int]
     val genresList: Option[List[String]]
   }
@@ -33,7 +33,7 @@ package object domains {
       originalTitle: String,
       isAdult: Int,
       startYear: Int,
-      endYear: String,
+      endYear: Int,
       runtimeMinutes: Option[Int],
       genresList: Option[List[String]]
   ) extends TitleRecBase
@@ -47,7 +47,7 @@ package object domains {
       originalTitle: String,
       isAdult: Int,
       startYear: Int,
-      endYear: String,
+      endYear: Int,
       runtimeMinutes: Option[Int],
       genresList: Option[List[String]],
       posterPath: Option[String]
