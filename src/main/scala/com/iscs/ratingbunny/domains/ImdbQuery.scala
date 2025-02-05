@@ -45,7 +45,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
       .flatMap { chunk =>
         // Convert the chunk to a list, process each element in parallel, and flatten back into the stream
         Stream
-          .eval(chunk.toList.parTraverse { titleRec => // Evaluate parallel traversal for the chunk
+          .eval(chunk.toList.parTraverseN(64) { titleRec => // Evaluate parallel traversal for the chunk
             for {
               pathRec <- getPath(titleRec._id) // Assume getPath returns F[PathRec] with a 'path' member
             } yield titleRec.copy(posterPath = Some(pathRec.path))
