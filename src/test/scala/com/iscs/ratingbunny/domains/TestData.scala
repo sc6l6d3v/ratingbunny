@@ -39,4 +39,3 @@ object TestData {
       seq(rnd.nextInt(seq.size))
   }
 }
-

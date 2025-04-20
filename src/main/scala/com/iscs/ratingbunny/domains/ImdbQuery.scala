@@ -18,10 +18,10 @@ import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
 
 trait ImdbQuery[F[_]] {
-  def getByTitle(rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec]
-  def getByTitlePath(rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRecPath]
-  def getByName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec]
-  def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec]
+  def getByTitle(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec]
+  def getByTitlePath(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRecPath]
+  def getByName(name: String, rating: Double, params: ReqParams, sortField: SortField): Stream[F, TitleRec]
+  def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec]
   def getAutosuggestTitle(titlePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoTitleRec]
   def getAutosuggestName(titlePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoNameRec]
 }
@@ -61,18 +61,18 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     * $ifNull: ["$runtimeMinutes", "$$REMOVE"]}, genresList: 1, } }, { $sort: { startYear: -1, numVotes: -1, averageRating: -1,
     * primaryTitle: 1 } } }, { $limit: 120 } ])
     *
-    * @param optTitle
-    *   optional query param
     * @param rating
     *   required numeric
     * @param params
     *   other params
     * @param limit
     *   how many
+    * @param sortField
+    *   how to order
     * @return
     */
-  override def getByTitle(rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec] = {
-    val queryPipeline = genTitleQueryPipeline(genTitleFilter(params, rating), isLimited = true, limit)
+  override def getByTitle(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec] = {
+    val queryPipeline = genTitleQueryPipeline(genTitleFilter(params, rating), isLimited = true, limit, sortField)
 
     for {
       start  <- Stream.eval(Clock[F].monotonic)
@@ -111,11 +111,13 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     *   IMDB
     * @param params
     *   object
+    * @param sortField
+    *   how to order
     * @return
     *   stream of object
     */
-  override def getByName(name: String, rating: Double, params: ReqParams): Stream[F, TitleRec] = {
-    val queryPipeline = genQueryPipeline(genNameFilter(name, rating, params))
+  override def getByName(name: String, rating: Double, params: ReqParams, sortField: SortField): Stream[F, TitleRec] = {
+    val queryPipeline = genQueryPipeline(genNameFilter(name, rating, params), sortField = sortField)
 
     Stream.eval(Clock[F].monotonic).flatMap { start =>
       compFx
@@ -147,11 +149,13 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     *   IMDB
     * @param params
     *   object
+    * @param sortField
+    *   how to order
     * @return
     *   stream object
     */
-  override def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRec] = {
-    val queryPipeline = genQueryPipeline(genNameFilter(name, rating, params), isLimited = true, limit)
+  override def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec] = {
+    val queryPipeline = genQueryPipeline(genNameFilter(name, rating, params), isLimited = true, limit, sortField = sortField)
 
     Stream.eval(Clock[F].monotonic).flatMap { start =>
       compFx
@@ -230,9 +234,9 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     } yield pathVal
   }
 
-  override def getByTitlePath(rating: Double, params: ReqParams, limit: Int): Stream[F, TitleRecPath] =
+  override def getByTitlePath(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRecPath] =
     Stream.eval(Clock[F].monotonic).flatMap { overallStart =>
-      val queryPipeline = genTitleQueryPipeline(genTitleFilter(params, rating), isLimited = true, limit)
+      val queryPipeline = genTitleQueryPipeline(genTitleFilter(params, rating), isLimited = true, limit, sortField)
 
       // connect the streams
       val titleRecPathStream = tbrFx.aggregateWithCodec[TitleRecPath](queryPipeline).stream

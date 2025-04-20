@@ -8,7 +8,8 @@ object Requests {
       genre: Option[List[String]] = None,
       titleType: Option[List[String]] = None,
       isAdult: Option[Boolean] = None,
-      searchType: Option[String] = None
+      searchType: Option[String] = None,
+      sortType: Option[String] = None
   ) {
     override def toString: String = List(
       query.map(q => s"query=$q"),
@@ -17,7 +18,8 @@ object Requests {
       genre.map(g => s"genre=${g.mkString(",")}"),
       titleType.map(t => s"titleType=${t.mkString(",")}"),
       isAdult.map(a => s"isAdult=>$a"),
-      searchType.map(s => s"searchType=>$s")
+      searchType.map(s => s"searchType=>$s"),
+      sortType.map(s => s"sortType=>$s")
     ).flatten
       .mkString(", ")
   }

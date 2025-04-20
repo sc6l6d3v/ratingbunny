@@ -3,7 +3,6 @@ package com.iscs.ratingbunny.routes
 import cats.effect.{Async, Sync}
 import cats.implicits.*
 import com.iscs.ratingbunny.domains.FetchImage
-import com.iscs.ratingbunny.util.DecodeUtils
 import com.typesafe.scalalogging.Logger
 import org.http4s.*
 import org.http4s.MediaType.image.*

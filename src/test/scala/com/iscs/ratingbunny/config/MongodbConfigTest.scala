@@ -15,7 +15,7 @@ class MongodbConfigTest extends AnyFunSuite with Matchers {
   val maxConnectionLifeTimeMS: Long = sys.env.getOrElse("MONGO_MAX_CONN_LIFE_TIME_MS", "3600000").toLong // 1 hour
   val maxConnectionIdleTimeMS: Long = sys.env.getOrElse("MONGO_MAX_CONN_IDLE_TIME_MS", "1800000").toLong // 30 minutes
   val maxConnecting: Int            = sys.env.getOrElse("MONGO_MAX_CONNECTING", "10").toInt
-  val cpConfig =
+  private val cpConfig =
     ConnectionPoolConfig(minPoolSize, maxPoolSize, maxWaitTimeMS, maxConnectionLifeTimeMS, maxConnectionIdleTimeMS, maxConnecting)
 
   test("MongodbConfig should parse the URL correctly") {
@@ -63,11 +63,11 @@ class MongodbConfigTest extends AnyFunSuite with Matchers {
     val config = MongodbConfig(url, cpConfig = cpConfig)
 
     val connectionPoolSettings = config.settings.getConnectionPoolSettings
-    connectionPoolSettings.getMinSize shouldEqual 128
-    connectionPoolSettings.getMaxSize shouldEqual 256
+    connectionPoolSettings.getMinSize shouldEqual 5
+    connectionPoolSettings.getMaxSize shouldEqual 50
     connectionPoolSettings.getMaxWaitTime(MILLISECONDS) shouldEqual 120000            // 2 minutes
     connectionPoolSettings.getMaxConnectionLifeTime(MILLISECONDS) shouldEqual 3600000 // 1 hour
-    connectionPoolSettings.getMaxConnectionIdleTime(MILLISECONDS) shouldEqual 600000  // 10 minutes
+    connectionPoolSettings.getMaxConnectionIdleTime(MILLISECONDS) shouldEqual 1800000 // 30 minutes
     connectionPoolSettings.getMaxConnecting shouldEqual 10
   }
 }

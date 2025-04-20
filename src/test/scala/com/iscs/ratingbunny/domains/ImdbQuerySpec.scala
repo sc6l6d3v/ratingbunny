@@ -51,8 +51,8 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo {
         }
         imdbQuery    = new ImdbQueryImpl[IO](compFx, compFx, "localhost", mockHttpClient)
         title        = Some("The Shawshank Redemption")
-        params       = ReqParams(query = title)
-        resultStream = imdbQuery.getByTitle(8.0, params, limit = 10)
+        params       = ReqParams(query = title, sortType = Some("rating"))
+        resultStream = imdbQuery.getByTitle(8.0, params, limit = 10, SortField.from(params.sortType))
         results <- resultStream.compile.toList
       } yield {
         assert(results.nonEmpty)
@@ -86,8 +86,8 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo {
         }
         imdbQuery    = new ImdbQueryImpl[IO](compFx, compFx, "localhost", Some(mockHttpClient))
         title        = Some("The Matrix")
-        params       = ReqParams(query = title)
-        resultStream = imdbQuery.getByTitlePath(7.5, params, limit = 10)
+        params       = ReqParams(query = title, sortType = Some("rating"))
+        resultStream = imdbQuery.getByTitlePath(7.5, params, limit = 10, SortField.from(params.sortType))
         results <- resultStream.compile.toList
       } yield {
         assert(results.nonEmpty)
@@ -118,9 +118,9 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo {
         }
 
         imdbQuery    = new ImdbQueryImpl[IO](compFx, tbrFx, "localhost", mockHttpClient)
-        params       = ReqParams( /* parameters setup here */ )
+        params       = ReqParams(sortType = Some("rating"))
         name         = "Morgan Freeman"
-        resultStream = imdbQuery.getByName(name, 6.5, params)
+        resultStream = imdbQuery.getByName(name, 6.5, params, SortField.from(params.sortType))
         results <- resultStream.compile.toList
       } yield {
         assert(results.nonEmpty)
@@ -143,9 +143,9 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo {
         compFx <- setupTestCollection(db, "title_principals_namerating")
         tbrFx  <- setupTestCollection(db, "enhancedNameRecords")
         imdbQuery    = new ImdbQueryImpl[IO](compFx, tbrFx, "localhost", mockHttpClient)
-        params       = ReqParams( /* parameters setup here */ )
+        params       = ReqParams(sortType = Some("rating"))
         name         = "Leonardo DiCaprio"
-        resultStream = imdbQuery.getByEnhancedName(name, 6.5, params, limit = 5)
+        resultStream = imdbQuery.getByEnhancedName(name, 6.5, params, limit = 5, SortField.from(params.sortType))
         results <- resultStream.compile.toList
       } yield {
         assert(results.nonEmpty)

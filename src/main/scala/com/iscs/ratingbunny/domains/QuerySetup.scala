@@ -71,11 +71,32 @@ trait QuerySetup {
     Projections.fields(fields*)
   }
 
-  private val ratingSort: Bson =
-    Sorts.orderBy(
-      Sorts.descending(averageRating, startYear, numVotes),
-      Sorts.ascending(primaryTitle)
-    )
+  /** Produce a sort Bson based on the enum choice. */
+  private def buildSort(sortField: SortField): Bson = sortField match
+    case SortField.ByRating =>
+      // Original logic: rating desc, year desc, votes desc, then title asc
+      Sorts.orderBy(
+        Sorts.descending(averageRating, startYear, numVotes),
+        Sorts.ascending(primaryTitle)
+      )
+    case SortField.ByYear =>
+      // Put year first, then rating, votes, etc.
+      Sorts.orderBy(
+        Sorts.descending(startYear, averageRating, numVotes),
+        Sorts.ascending(primaryTitle)
+      )
+    case SortField.ByTitle =>
+      // Put title first ascending, then rating/yr/votes descending, for instance
+      Sorts.orderBy(
+        Sorts.ascending(primaryTitle),
+        Sorts.descending(startYear, averageRating, numVotes)
+      )
+    case SortField.ByVotes =>
+      // Put votes first, then rating/year, then title
+      Sorts.orderBy(
+        Sorts.descending(numVotes, averageRating, startYear),
+        Sorts.ascending(primaryTitle)
+      )
 
   private def limitBson(limit: Int): Bson = Aggregates.limit(limit)
 
@@ -118,11 +139,8 @@ trait QuerySetup {
       else
         regx(lastName, s"""^${names.last}""").merge(feq(firstName, names.head))
 
-    val emptyQuery            = params.copy(query = None) // force to skip primaryTitle
-    val combinedOrFilter      = combineVotesWithRating(params, rating)
-    val (firstTwo, remaining) = splitTwoRest(emptyQuery)
-    val nonEmptyElts          = firstTwo ::: List(combinedOrFilter) ::: remaining ::: List(lastFirstRegex)
-    val matchBson             = nonEmptyElts.reduce(_ merge _)
+    val emptyQuery          = params.copy(query = None) // force to skip primaryTitle
+    val matchBson: Document = computeBson(rating, params, lastFirstRegex, emptyQuery)
 
     val sortElt = Sorts.ascending(id, firstName)
 
@@ -141,14 +159,19 @@ trait QuerySetup {
     )
   }
 
+  private def computeBson(rating: Double, params: ReqParams, lastFirstRegex: Document, emptyQuery: ReqParams): Document = {
+    val combinedOrFilter      = combineVotesWithRating(params, rating)
+    val (firstTwo, remaining) = splitTwoRest(emptyQuery)
+    val nonEmptyElts          = firstTwo ::: List(combinedOrFilter) ::: remaining ::: List(lastFirstRegex)
+    val matchBson             = nonEmptyElts.reduce(_ merge _)
+    matchBson
+  }
+
   def genAutotitleFilter(titlePrefix: String, rating: Double, params: ReqParams): Seq[Bson] = {
     val fuzzyParams = params.copy(query = None) // force to not parse primaryTitle
     val titleElt    = regx(primaryTitle, s"""^$titlePrefix""")
 
-    val combinedOrFilter      = combineVotesWithRating(params, rating)
-    val (firstTwo, remaining) = splitTwoRest(fuzzyParams)
-    val nonEmptyElts          = firstTwo ::: List(combinedOrFilter) ::: remaining ::: List(titleElt)
-    val matchBson             = nonEmptyElts.reduce(_ merge _)
+    val matchBson: Document = computeBson(rating, params, titleElt, fuzzyParams)
 
     val sortBson = Sorts.ascending(primaryTitle)
 
@@ -198,12 +221,17 @@ trait QuerySetup {
         )
     }
 
-  def genQueryPipeline(matchVariable: Bson, isLimited: Boolean = false, limit: Int = STREAMLIMIT): Seq[Bson] = {
+  def genQueryPipeline(
+      matchVariable: Bson,
+      isLimited: Boolean = false,
+      limit: Int = STREAMLIMIT,
+      sortField: SortField = SortField.ByRating
+  ): Seq[Bson] = {
     val basePipeLine = Seq(
       Aggregates.`match`(matchVariable),
       Aggregates.group(s"$$$tconst", groupAccums*),
       Aggregates.project(projections),
-      Aggregates.sort(ratingSort)
+      Aggregates.sort(buildSort(sortField))
     )
     if (isLimited)
       basePipeLine :+ limitBson(limit)
@@ -211,11 +239,16 @@ trait QuerySetup {
       basePipeLine
   }
 
-  def genTitleQueryPipeline(matchVariable: Bson, isLimited: Boolean = false, limit: Int = STREAMLIMIT): Seq[Bson] = {
+  def genTitleQueryPipeline(
+      matchVariable: Bson,
+      isLimited: Boolean = false,
+      limit: Int = STREAMLIMIT,
+      sortField: SortField = SortField.ByRating
+  ): Seq[Bson] = {
     val basePipeLine = Seq(
       Aggregates.`match`(matchVariable),
       Aggregates.project(projections),
-      Aggregates.sort(ratingSort)
+      Aggregates.sort(buildSort(sortField))
     )
     if (isLimited)
       basePipeLine :+ limitBson(limit)

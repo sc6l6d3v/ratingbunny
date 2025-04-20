@@ -212,7 +212,7 @@ object ImdbQueryData {
       "firstName"   := "Morgan",
       "lastName"    := "Freeman",
       "startYear"   := 2015,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Crime",
@@ -238,7 +238,7 @@ object ImdbQueryData {
       "firstName"   := "Morgan",
       "lastName"    := "Freeman",
       "startYear"   := 2018,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Adventure",
@@ -264,7 +264,7 @@ object ImdbQueryData {
       "firstName"   := "Morgan",
       "lastName"    := "Freeman",
       "startYear"   := 2015,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Drama",
@@ -290,7 +290,7 @@ object ImdbQueryData {
       "firstName"   := "Morgan",
       "lastName"    := "Freeman",
       "startYear"   := 2016,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Thriller"
@@ -315,7 +315,7 @@ object ImdbQueryData {
       "firstName"   := "Morgan",
       "lastName"    := "Freeman",
       "startYear"   := 2014,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Drama",
@@ -341,7 +341,7 @@ object ImdbQueryData {
       "firstName"   := "Morgan",
       "lastName"    := "Freeman",
       "startYear"   := 2012,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Drama",
@@ -367,7 +367,7 @@ object ImdbQueryData {
       "firstName"   := "Morgan",
       "lastName"    := "Freeman",
       "startYear"   := 2010,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Comedy",
@@ -393,7 +393,7 @@ object ImdbQueryData {
       "firstName"   := "Morgan",
       "lastName"    := "Freeman",
       "startYear"   := 2016,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Adventure",
@@ -419,7 +419,7 @@ object ImdbQueryData {
       "firstName"   := "Morgan",
       "lastName"    := "Freeman",
       "startYear"   := 2016,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Adventure",
@@ -445,7 +445,7 @@ object ImdbQueryData {
       "firstName"   := "Morgan",
       "lastName"    := "Freeman",
       "startYear"   := 2013,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Thriller"
@@ -470,7 +470,7 @@ object ImdbQueryData {
       "firstName"   := "Morgan",
       "lastName"    := "Freeman",
       "startYear"   := 2013,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Adventure",
@@ -496,7 +496,7 @@ object ImdbQueryData {
       "firstName"   := "Morgan",
       "lastName"    := "Freeman",
       "startYear"   := 2014,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Sci-Fi",
@@ -522,7 +522,7 @@ object ImdbQueryData {
       "firstName"   := "Morgan",
       "lastName"    := "Freeman",
       "startYear"   := 2019,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Thriller"
@@ -550,7 +550,7 @@ object ImdbQueryData {
       "firstName"   := "Leonardo",
       "lastName"    := "DiCaprio",
       "startYear"   := 2016,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Crime",
@@ -576,7 +576,7 @@ object ImdbQueryData {
       "firstName"   := "Leonardo",
       "lastName"    := "DiCaprio",
       "startYear"   := 2015,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Adventure",
@@ -602,7 +602,7 @@ object ImdbQueryData {
       "firstName"   := "Leonardo",
       "lastName"    := "DiCaprio",
       "startYear"   := 2018,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Action",
         "Adventure",
@@ -631,7 +631,7 @@ object ImdbQueryData {
       "firstName"   := "Zhaomei",
       "lastName"    := "Ge",
       "startYear"   := 2023,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Drama",
         "Family"
@@ -656,7 +656,7 @@ object ImdbQueryData {
       "firstName"   := "Dan",
       "lastName"    := "Liu",
       "startYear"   := 2023,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Drama",
         "Family"
@@ -681,7 +681,7 @@ object ImdbQueryData {
       "firstName"   := "Zhoukai",
       "lastName"    := "Wu",
       "startYear"   := 2023,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Drama",
         "Family"
@@ -709,7 +709,7 @@ object ImdbQueryData {
       "firstName"   := "John",
       "lastName"    := "Crane",
       "startYear"   := 2019,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Documentary"
       ),
@@ -733,7 +733,7 @@ object ImdbQueryData {
       "firstName"   := "John",
       "lastName"    := "Crane",
       "startYear"   := 2015,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Biography",
         "Documentary",
@@ -759,7 +759,7 @@ object ImdbQueryData {
       "firstName"   := "John",
       "lastName"    := "Crawford",
       "startYear"   := 2000,
-      "endYear"     := "",
+      "endYear"     := 0,
       "genresList" := List(
         "Comedy",
         "Romance"

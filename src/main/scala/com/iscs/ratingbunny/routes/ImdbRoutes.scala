@@ -2,7 +2,7 @@ package com.iscs.ratingbunny.routes
 
 import cats.effect.*
 import cats.implicits.*
-import com.iscs.ratingbunny.domains.{AutoNameRec, AutoRecBase, AutoTitleRec, ImdbQuery, TitleRec, TitleRecBase, TitleRecPath}
+import com.iscs.ratingbunny.domains.{AutoNameRec, AutoRecBase, AutoTitleRec, ImdbQuery, SortField, TitleRec, TitleRecBase, TitleRecPath}
 import com.iscs.ratingbunny.dslparams.*
 import com.iscs.ratingbunny.model.Requests.*
 import com.iscs.ratingbunny.util.DecodeUtils
@@ -107,7 +107,7 @@ object ImdbRoutes extends DecodeUtils {
         cs: String,
         ch: String,
         offset: String,
-        getTitle: (Double, ReqParams, Int) => Stream[F, TitleRecBase],
+        getTitle: (Double, ReqParams, Int, SortField) => Stream[F, TitleRecBase],
         logText: String
     ): F[Response[F]] =
       for {
@@ -118,7 +118,7 @@ object ImdbRoutes extends DecodeUtils {
         _ <- showParams("title", pgs, ws, wh, cs, ch, offset)
         titleStream <- Sync[F].delay(
           if (reqParams.year.nonEmpty)
-            getTitle(rtng, reqParams, pgs << 3)
+            getTitle(rtng, reqParams, pgs << 3, SortField.from(reqParams.sortType))
           else
             Stream.empty
         )
@@ -166,7 +166,7 @@ object ImdbRoutes extends DecodeUtils {
             rtng      <- getRating(rating)
             imdbNameStream <- Sync[F].delay(
               if (reqParams.year.nonEmpty)
-                I.getByName(name, rtng, reqParams)
+                I.getByName(name, rtng, reqParams, SortField.from(reqParams.sortType))
               else
                 Stream.empty
             )
@@ -184,7 +184,7 @@ object ImdbRoutes extends DecodeUtils {
             _ <- showParams("name", pgs, ws, wh, cs, ch, offset)
             imdbNameStream <- Sync[F].delay(
               if (reqParams.year.nonEmpty)
-                I.getByEnhancedName(reqParams.query.getOrElse("Joe Blow"), rtng, reqParams, pgs << 3)
+                I.getByEnhancedName(reqParams.query.getOrElse("Joe Blow"), rtng, reqParams, pgs << 3, SortField.from(reqParams.sortType))
               else
                 Stream.empty
             )
