@@ -15,7 +15,7 @@ object EmailContactRoutes {
 
   def httpRoutes[F[_]: Async](E: EmailContact[F]): HttpRoutes[F] = {
     val dsl = Http4sDsl[F]
-    import dsl._
+    import dsl.*
     val svc = HttpRoutes.of[F] { case req @ POST -> Root / "api" / `apiVersion` / "addMsg" =>
       for {
         email   <- req.as[Email]

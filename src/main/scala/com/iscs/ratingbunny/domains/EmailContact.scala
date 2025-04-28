@@ -1,13 +1,13 @@
 package com.iscs.ratingbunny.domains
 
-import cats.effect._
-import cats.implicits._
+import cats.effect.*
+import cats.implicits.*
 import com.typesafe.scalalogging.Logger
-import mongo4cats.bson.syntax._
+import mongo4cats.bson.syntax.*
 import mongo4cats.bson.{BsonValue, Document}
 import mongo4cats.collection.MongoCollection
 import org.bson.conversions.{Bson => mbson}
-import org.mongodb.scala.model._
+import org.mongodb.scala.model.*
 import org.mongodb.scala.result.UpdateResult
 import java.time.Instant
 import scala.concurrent.duration.FiniteDuration

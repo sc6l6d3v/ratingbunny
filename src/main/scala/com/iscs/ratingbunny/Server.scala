@@ -14,6 +14,7 @@ import com.iscs.ratingbunny.domains.{
   ImdbQueryImpl,
   TitleRec
 }
+import com.iscs.ratingbunny.repos.HistoryRepo
 import com.iscs.ratingbunny.routes.{EmailContactRoutes, FetchImageRoutes, ImdbRoutes, PoolSvcRoutes}
 import com.typesafe.scalalogging.Logger
 import io.circe.generic.auto.*
@@ -58,16 +59,17 @@ object Server {
 
   def getServices[F[_]: Async: Parallel](db: MongoDatabase[F], client: Client[F]): F[HttpApp[F]] =
     for {
-      imdbSvc   <- getImdbSvc(db, client)
-      emailSvc  <- getEmailSvc(db)
-      scrapeSvc <- Sync[F].delay(new FetchImage[F](defaultHost, imageHost, client))
-      poolSvc   <- getPoolStatsSvc(db)
+      historyRepo <- HistoryRepo.make(db)
+      imdbSvc     <- getImdbSvc(db, client)
+      emailSvc    <- getEmailSvc(db)
+      scrapeSvc   <- Sync[F].delay(new FetchImage[F](defaultHost, imageHost, client))
+      poolSvc     <- getPoolStatsSvc(db)
       httpApp <- Sync[F].delay(
         Router(
           "/" ->
             (FetchImageRoutes.httpRoutes(scrapeSvc) <+>
               EmailContactRoutes.httpRoutes(emailSvc) <+>
-              ImdbRoutes.httpRoutes(imdbSvc) <+>
+              ImdbRoutes.httpRoutes(imdbSvc, historyRepo) <+>
               PoolSvcRoutes.httpRoutes(poolSvc))
         ).orNotFound
       )

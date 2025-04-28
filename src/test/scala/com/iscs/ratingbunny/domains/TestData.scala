@@ -1,7 +1,7 @@
 package com.iscs.ratingbunny.domains
 
 import mongo4cats.bson.{Document, ObjectId}
-import mongo4cats.bson.syntax._
+import mongo4cats.bson.syntax.*
 
 import java.time.Instant
 import scala.util.Random

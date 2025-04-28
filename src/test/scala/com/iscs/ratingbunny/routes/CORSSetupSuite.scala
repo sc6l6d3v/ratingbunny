@@ -2,9 +2,9 @@ package com.iscs.ratingbunny.routes
 
 import cats.effect.IO
 import munit.CatsEffectSuite
-import org.http4s._
-import org.http4s.dsl.io._
-import org.http4s.implicits._
+import org.http4s.*
+import org.http4s.dsl.io.*
+import org.http4s.implicits.*
 import org.typelevel.ci.CIString
 
 class CORSSetupSuite extends CatsEffectSuite {

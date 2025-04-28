@@ -1,7 +1,7 @@
 package com.iscs.ratingbunny.routes
 
-import cats.effect._
-import cats.implicits._
+import cats.effect.*
+import cats.implicits.*
 import com.iscs.ratingbunny.domains.ConnectionPool
 import com.typesafe.scalalogging.Logger
 import org.http4s.HttpRoutes
@@ -14,7 +14,7 @@ object PoolSvcRoutes {
 
   def httpRoutes[F[_]: Async](E: ConnectionPool[F]): HttpRoutes[F] = {
     val dsl = Http4sDsl[F]
-    import dsl._
+    import dsl.*
     val svc = HttpRoutes.of[F] { case GET -> Root / "api" / `apiVersion` / "poolStats" =>
       for {
         poolStats <- E.getCPStats

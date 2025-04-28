@@ -2,9 +2,9 @@ package com.iscs.ratingbunny.routes
 
 import cats.effect.IO
 import munit.CatsEffectSuite
-import org.http4s._
-import org.http4s.implicits._
-import org.http4s.circe.CirceEntityCodec._
+import org.http4s.*
+import org.http4s.implicits.*
+import org.http4s.circe.CirceEntityCodec.*
 import org.typelevel.ci.CIString
 import io.circe.Json
 

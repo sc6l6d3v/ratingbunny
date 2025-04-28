@@ -1,10 +1,12 @@
 package com.iscs.ratingbunny.routes
 
 import cats.effect.*
+import cats.effect.implicits.genSpawnOps
 import cats.implicits.*
 import com.iscs.ratingbunny.domains.{AutoNameRec, AutoRecBase, AutoTitleRec, ImdbQuery, SortField, TitleRec, TitleRecBase, TitleRecPath}
 import com.iscs.ratingbunny.dslparams.*
 import com.iscs.ratingbunny.model.Requests.*
+import com.iscs.ratingbunny.repos.HistoryRepo
 import com.iscs.ratingbunny.util.DecodeUtils
 import com.typesafe.scalalogging.Logger
 import fs2.Stream
@@ -94,9 +96,9 @@ object ImdbRoutes extends DecodeUtils {
   implicit def listTitleRecBaseEntityEncoder[F[_]: Async]: EntityEncoder[F, List[TitleRecBase]] =
     jsonEncoderOf[F, List[TitleRecBase]]
 
-  def httpRoutes[F[_]: Async](I: ImdbQuery[F]): HttpRoutes[F] = {
+  def httpRoutes[F[_]: Async](I: ImdbQuery[F], hxRepo: HistoryRepo[F]): HttpRoutes[F] = {
     val dsl = Http4sDsl[F]
-    import dsl._
+    import dsl.*
 
     def handleTitleRequest(
         req: Request[F],
@@ -126,6 +128,7 @@ object ImdbRoutes extends DecodeUtils {
         pageList = pureExtractRecords(titleList, dimList.head, pgs)
         _ <- Sync[F].delay(L.info(s""""$logText counts" pageNo=$page titleList=${titleList.size} pageList=${pageList.size}"""))
         elementsLeft = remainingCount(dimList.head, pgs, titleList.size)
+        _ <- hxRepo.log("fakeUserId", reqParams).start
         resp <- Ok(pageList).map(
           _.putHeaders(
             Header.Raw(ci"X-Remaining-Count", elementsLeft.toString),
@@ -147,6 +150,7 @@ object ImdbRoutes extends DecodeUtils {
         rtng      <- getRating(rating)
         stream    <- Sync[F].delay(getAutoRec(name, rtng, reqParams))
         strList   <- stream.compile.toList
+        _         <- hxRepo.log("fakeUserId", reqParams).start
         resp      <- Ok(strList)
       } yield resp
 
@@ -171,6 +175,7 @@ object ImdbRoutes extends DecodeUtils {
                 Stream.empty
             )
             nameList <- imdbNameStream.compile.toList
+            _        <- hxRepo.log("fakeUserId", reqParams).start
             resp     <- Ok(nameList)
           } yield resp
         case req @ POST -> Root / "api" / `apiVersion` / "name" / page / rating :? WindowWidthQueryParameterMatcher(ws)
@@ -192,6 +197,7 @@ object ImdbRoutes extends DecodeUtils {
             pageList = pureExtractRecords(nameList, dimList.head, pgs)
             _ <- Sync[F].delay(L.info(s""""name counts" page=$page nameList=${nameList.size} pageList=${pageList.size}"""))
             elementsLeft = remainingCount(dimList.head, pgs, nameList.size)
+            _ <- hxRepo.log("fakeUserId", reqParams).start
             resp <- Ok(pageList).map(
               _.putHeaders(
                 Header.Raw(ci"X-Remaining-Count", elementsLeft.toString),
