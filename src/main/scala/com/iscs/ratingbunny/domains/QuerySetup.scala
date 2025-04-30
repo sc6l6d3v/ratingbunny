@@ -44,7 +44,7 @@ trait QuerySetup {
   given BsonValueEncoder[Double] = BsonValueEncoder.doubleEncoder
 
   private def gte[A](fieldName: String, a: A)(using encoder: BsonValueEncoder[A]) = Document(fieldName := Document(GTE := a))
-  private def feq[A](fieldName: String, a: A)(using encoder: BsonValueEncoder[A]) = Document(fieldName := a)
+  def feq[A](fieldName: String, a: A)(using encoder: BsonValueEncoder[A])         = Document(fieldName := a)
   private def regx[A](fieldName: String, pattern: String)                         = Document(fieldName := Document(REGX := pattern))
   private def or(docs: List[Document])                                            = Document(OR := docs)
 

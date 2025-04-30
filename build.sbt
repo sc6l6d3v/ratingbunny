@@ -32,7 +32,7 @@ lazy val root = (project in file("."))
     ),
     Compile / mainClass      := Some("com.iscs.ratingbunny.Main"),
     coverageExcludedPackages := "com\\.iscs\\.ratingbunny\\.(dslparams|model).*",
-    Revolver.enableDebugging(5061, suspend = true)
+    Revolver.enableDebugging(5061, suspend = false)
   )
 
 scalacOptions ++= Seq(

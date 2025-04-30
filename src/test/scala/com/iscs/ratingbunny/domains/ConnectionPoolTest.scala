@@ -1,18 +1,12 @@
 package com.iscs.ratingbunny.domains
 
-import cats.effect.{IO, Resource}
+import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import cats.effect.unsafe.implicits.global
-import io.circe.Json
-import mongo4cats.bson.Document
 import mongo4cats.client.MongoClient
-import mongo4cats.database.MongoDatabase
 import mongo4cats.embedded.EmbeddedMongo
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
-import mongo4cats.bson.syntax.*
 import mongo4cats.client
-import org.mongodb.scala.bson.BsonDocument
 import scala.concurrent.Future
 
 class ConnectionPoolTest extends AsyncWordSpec with Matchers with EmbeddedMongo {

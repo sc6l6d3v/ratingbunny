@@ -1,5 +1,7 @@
 package com.iscs.ratingbunny
 
+import com.iscs.ratingbunny.model.Requests.ReqParams
+
 package object domains {
 
   final private case class PathRec(path: String)
@@ -53,4 +55,12 @@ package object domains {
       posterPath: Option[String]
   ) extends TitleRecBase
 
+  final case class UserHistory(
+      _id: String,
+      userId: String,
+//      createdAt:
+      params: ReqParams,
+      sig: String,
+      hits: Int
+  )
 }

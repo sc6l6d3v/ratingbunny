@@ -2,15 +2,20 @@ package com.iscs.ratingbunny.repos
 
 import cats.effect.*
 import cats.syntax.all.*
+import com.iscs.ratingbunny.domains.QuerySetup
 import com.iscs.ratingbunny.model.Requests.ReqParams
 import com.typesafe.scalalogging.Logger
+import fs2.Stream
 import io.circe.Encoder
 import io.circe.syntax.*
 import io.circe.generic.auto.*
 import mongo4cats.bson.Document
 import mongo4cats.bson.syntax.*
 import mongo4cats.collection.MongoCollection
-import org.mongodb.scala.model.{Filters => JFilters, IndexOptions, Indexes, UpdateOptions, Updates => JUpdates}
+import mongo4cats.models.collection.{IndexOptions, UpdateOptions}
+import mongo4cats.operations.Index
+import org.mongodb.scala.model.{Filters as JFilters, Updates as JUpdates}
+
 import java.security.MessageDigest
 import java.time.Instant
 
@@ -26,8 +31,12 @@ final case class HistoryDoc(
 /** Repository that persists/distills every search request sent from the React front‑end. It works with a plain `MongoCollection[F,
   * Document]` so you don’t need an explicit codec.
   */
-final class HistoryRepo[F[_]: Async](private val coll: MongoCollection[F, Document]) {
-  private val L = Logger[this.type]
+final class HistoryRepo[F[_]: Async](private[repos] val coll: MongoCollection[F, Document]) extends QuerySetup {
+  private val L              = Logger[this.type]
+  private val idxUserDate    = "uid_date_idx"          // desired explicit name
+  private val idxUserDateDef = "userId_1_createdAt_-1" // driver default name
+  private val idxSigUnq      = "sig_unique_idx"
+  private val idxSigUnqDef   = "sig_1"
 
   // ---------- helpers -------------------------------------------------------
   private def now: F[Instant] = Clock[F].realTimeInstant
@@ -66,19 +75,42 @@ final class HistoryRepo[F[_]: Async](private val coll: MongoCollection[F, Docume
   }
 
   /** Latest *n* records for a user (default 10). */
-  /*  def latest(userId: String, limit: Int = 10): fs2.Stream[F, Document] =
-    coll.find(JFilters.equal("userId", userId)).sort(Document("createdAt" := -1)).limit(limit)*/
+  def latest(userId: String, limit: Int = 10): Stream[F, Document] =
+    coll.find(feq("userId", userId)).sort(Document("createdAt" := -1)).limit(limit).stream
 
   /** Fetch an entry by its signature. */
-  /*  def bySig(userId: String, sig: String): F[Option[Document]] =
-    coll.find(JFilters.and(JFilters.equal("userId", userId), JFilters.equal("sig", sig))).first.map(Option(_))*/
-
-  // ---------- collection bootstrap -----------------------------------------
-  def ensureIndexes: F[Unit] = {
-    val userDate  = coll.createIndex(Indexes.ascending("userId", "createdAt"), IndexOptions().background(true))
-    val sigUnique = coll.createIndex(Indexes.ascending("sig"), IndexOptions().unique(true).background(true))
-    (userDate, sigUnique).mapN((_, _) => ())
+  def bySig(userId: String, sig: String): F[Option[Document]] = {
+    val query = feq("userId", userId).add(("sig", sig))
+    coll.find(query).first
   }
+
+  /** Create both indexes if they don’t already exist. Safe to call on every start‑up.
+    */
+  def ensureIndexes: F[Unit] =
+    for {
+      idxDocs <- coll.listIndexes // F[Iterable[Document]]
+      existing = idxDocs.flatMap(_.getString("name").toList).toSet
+      // userId + createdAt compound index -----------------------------
+      _ <-
+        if (existing(idxUserDate) || existing(idxUserDateDef)) Async[F].unit
+        else
+          coll
+            .createIndex(
+              Index.ascending("userId").descending("createdAt"),
+              IndexOptions(background = true).name(idxUserDate)
+            )
+            .void
+      // unique sig index ----------------------------------------------
+      _ <-
+        if (existing(idxSigUnq) || existing(idxSigUnqDef)) Async[F].unit
+        else
+          coll
+            .createIndex(
+              Index.ascending("sig"),
+              IndexOptions(background = true, unique = true).name(idxSigUnq)
+            )
+            .void
+    } yield ()
 }
 
 object HistoryRepo {
