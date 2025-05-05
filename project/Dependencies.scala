@@ -2,6 +2,7 @@ import sbt.*
 
 object Dependencies {
   object Versions {
+    val bcryptVersion     = "4.3.0"
     val circeVersion      = "0.14.6"
     val fs2Version        = "3.10.2"
     val Http4sVersion     = "0.23.26"
@@ -26,6 +27,10 @@ object Dependencies {
   object fs2 {
     val core = "co.fs2" %% "fs2-core" % Versions.fs2Version
     val io   = "co.fs2" %% "fs2-io"   % Versions.fs2Version
+  }
+
+  object bcrypt {
+    val core = "com.github.t3hnar" % "scala-bcrypt_2.13" % Versions.bcryptVersion
   }
 
   object circe {

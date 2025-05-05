@@ -16,6 +16,7 @@ lazy val root = (project in file("."))
       http4s.circe,
       fs2.core,
       fs2.io,
+      bcrypt.core,
       circe.circeCore,
       circe.circeGeneric,
       circe.circeParser,

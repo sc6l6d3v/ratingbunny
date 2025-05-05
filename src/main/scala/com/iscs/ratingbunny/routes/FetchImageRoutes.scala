@@ -13,30 +13,28 @@ import org.http4s.headers.{`Cache-Control`, `Content-Type`}
 import scala.concurrent.duration.*
 import scala.language.postfixOps
 
-object FetchImageRoutes {
+object FetchImageRoutes:
   private val L          = Logger[this.type]
   private val apiVersion = "v3"
 
-  def httpRoutes[F[_]: Async](R: FetchImage[F]): HttpRoutes[F] = {
+  def httpRoutes[F[_]: Async](R: FetchImage[F]): HttpRoutes[F] =
     val dsl = Http4sDsl[F]
     import dsl.*
     val imgSvc = HttpRoutes
-      .of[F] { case _ @GET -> Root / "api" / `apiVersion` / "image" / imdbId =>
-        for {
-          _ <- Sync[F].delay(L.info(s""""request" image=$imdbId"""))
-          resp <- Ok(R.getImage(imdbId))
-            .map(
-              _.putHeaders(
-                `Content-Type`(MediaType.image.jpeg),
-                `Cache-Control`(
-                  CacheDirective.`public`,
-                  CacheDirective.`max-age`(86400 seconds) // 1 day in seconds
+      .of[F]:
+        case _ @GET -> Root / "api" / `apiVersion` / "image" / imdbId =>
+          for
+            _ <- Sync[F].delay(L.info(s""""request" image=$imdbId"""))
+            resp <- Ok(R.getImage(imdbId))
+              .map(
+                _.putHeaders(
+                  `Content-Type`(MediaType.image.jpeg),
+                  `Cache-Control`(
+                    CacheDirective.`public`,
+                    CacheDirective.`max-age`(86400 seconds) // 1 day in seconds
+                  )
                 )
               )
-            )
-        } yield resp
-      }
+          yield resp
       .map(_.withContentType(`Content-Type`(`jpeg`)))
     CORSSetup.methodConfig(imgSvc)
-  }
-}

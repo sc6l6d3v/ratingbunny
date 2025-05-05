@@ -1,8 +1,11 @@
 package com.iscs.ratingbunny
 
 import com.iscs.ratingbunny.model.Requests.ReqParams
+import mongo4cats.bson.ObjectId
 
-package object domains {
+import java.time.Instant
+
+package object domains:
 
   final private case class PathRec(path: String)
 
@@ -12,7 +15,7 @@ package object domains {
 
   final case class AutoTitleRec(primaryTitle: Option[String]) extends AutoRecBase
 
-  trait TitleRecBase {
+  trait TitleRecBase:
     val _id: String
     val averageRating: Option[Double]
     val numVotes: Option[Int]
@@ -24,7 +27,6 @@ package object domains {
     val endYear: Int
     val runtimeMinutes: Option[Int]
     val genresList: Option[List[String]]
-  }
 
   final case class TitleRec(
       _id: String,
@@ -58,9 +60,36 @@ package object domains {
   final case class UserHistory(
       _id: String,
       userId: String,
-//      createdAt:
+      createdAt: Instant,
       params: ReqParams,
       sig: String,
       hits: Int
   )
-}
+
+  /** -- incoming payload */
+  final case class SignupRequest(
+      email: String,
+      password: String,
+      displayName: Option[String],
+      plan: Plan
+  )
+
+  /** --- persisted docs --- */
+  final case class UserDoc(
+      _id: ObjectId = new ObjectId(),
+      email: String,
+      passwordHash: String,
+      userid: String,
+      plan: Plan,
+      status: SubscriptionStatus,
+      displayName: Option[String],
+      prefs: List[String] = Nil,
+      createdAt: Instant = Instant.now()
+  )
+
+  final case class UserProfileDoc(
+      userid: String,
+      avatarUrl: Option[String] = None,
+      favGenres: List[String] = Nil,
+      locale: Option[String] = Some("en-US")
+  )
