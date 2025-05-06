@@ -38,6 +38,7 @@ object AuthRoutes:
                 out <- result match
                   case Right(uid)         => Created(Json.obj("userid" -> uid.asJson))
                   case Left(EmailExists)  => Conflict("email exists")
+                  case Left(InvalidEmail) => BadRequest("invalid email")
                   case Left(UserIdExists) => Conflict("userid exists")
                   case Left(BadPassword)  => BadRequest("weak password")
                   case Left(BadEmail)     => BadRequest("Bad email")

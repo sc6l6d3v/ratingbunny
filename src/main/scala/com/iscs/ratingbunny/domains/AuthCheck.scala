@@ -1,24 +1,15 @@
 package com.iscs.ratingbunny.domains
 
-import cats.Parallel
 import cats.data.EitherT
 import cats.effect.*
 import cats.effect.implicits.*
-import cats.effect.kernel.Clock
 import cats.implicits.*
-import com.iscs.ratingbunny.model.Requests.ReqParams
-import com.iscs.ratingbunny.util.{DecodeUtils, PasswordHasher}
-import com.mongodb.MongoWriteException
+import com.iscs.ratingbunny.util.PasswordHasher
 import com.mongodb.ErrorCategory.DUPLICATE_KEY
-import fs2.Stream
-import io.circe.generic.auto.*
+import com.mongodb.{ErrorCategory, MongoWriteException}
 import mongo4cats.circe.*
 import mongo4cats.collection.MongoCollection
-import org.http4s.circe.*
-import org.http4s.client.Client
-import org.http4s.{Method, Request, Uri}
 
-import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
 
 trait AuthCheck[F[_]]:
@@ -26,6 +17,7 @@ trait AuthCheck[F[_]]:
 
 enum SignupError:
   case EmailExists
+  case InvalidEmail
   case UserIdExists
   case BadPassword
   case BadEmail
@@ -40,6 +32,16 @@ final class AuthCheckImpl[F[_]: Async](
     userProfileCol: MongoCollection[F, UserProfileDoc],
     hasher: PasswordHasher[F] // see §4.3
 ) extends AuthCheck[F] with QuerySetup:
+  private val docFail   = 121
+  private val MINPWDLEN = 8
+
+  private def validatePw(pw: String): Either[SignupError, Unit] =
+    val ok =
+      pw.length >= MINPWDLEN &&
+        pw.exists(_.isLower) &&
+        pw.exists(_.isUpper) &&
+        pw.exists(_.isDigit)
+    if ok then Right(()) else Left(SignupError.BadPassword)
 
   private def genUserId(base: String): F[String] =
     val seed = base.takeWhile(_ != '@')
@@ -55,6 +57,8 @@ final class AuthCheckImpl[F[_]: Async](
   override def signup(req: SignupRequest): F[Either[SignupError, String]] =
     (for
       // EitherT gives you an Either along the way
+      _ <- EitherT.fromEither[F](validatePw(req.password))
+
       _ <- EitherT {
         usersCol.count(feq("email", req.email)).map {
           case 0 => Right(())
@@ -78,6 +82,10 @@ final class AuthCheckImpl[F[_]: Async](
       .handleError {
         case mw: MongoWriteException if mw.getError.getCategory == DUPLICATE_KEY =>
           Left(SignupError.UserIdExists)
+        case mw: MongoWriteException
+            if mw.getError.getCode == docFail ||
+              mw.getError.getMessage.startsWith("Document failed validation") =>
+          Left(SignupError.InvalidEmail)
         case _ =>
           Left(SignupError.BadPassword) // or a generic failure
       }

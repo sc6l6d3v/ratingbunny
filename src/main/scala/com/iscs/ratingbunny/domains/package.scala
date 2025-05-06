@@ -91,5 +91,5 @@ package object domains:
       userid: String,
       avatarUrl: Option[String] = None,
       favGenres: List[String] = Nil,
-      locale: Option[String] = Some("en-US")
+      locale: Option[String] = Some("en_US")
   )
