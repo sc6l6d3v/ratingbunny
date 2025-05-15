@@ -93,3 +93,7 @@ package object domains:
       favGenres: List[String] = Nil,
       locale: Option[String] = Some("en_US")
   )
+
+  // ---------- request / response ----------
+  final case class LoginRequest(email: String, password: String)
+  final case class LoginOK(userid: String /* , token: String */ )

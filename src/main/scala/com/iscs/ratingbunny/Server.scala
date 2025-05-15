@@ -4,20 +4,7 @@ import cats.Parallel
 import cats.effect.{Async, Resource, Sync}
 import cats.implicits.*
 import com.comcast.ip4s.*
-import com.iscs.ratingbunny.domains.{
-  AuthCheck,
-  AuthCheckImpl,
-  ConnectionPool,
-  ConnectionPoolImpl,
-  EmailContact,
-  EmailContactImpl,
-  FetchImage,
-  ImdbQuery,
-  ImdbQueryImpl,
-  TitleRec,
-  UserDoc,
-  UserProfileDoc
-}
+import com.iscs.ratingbunny.domains.{AuthCheck, AuthCheckImpl, AuthLogin, AuthLoginImpl, ConnectionPool, ConnectionPoolImpl, EmailContact, EmailContactImpl, FetchImage, ImdbQuery, ImdbQueryImpl, TitleRec, UserDoc, UserProfileDoc}
 import com.iscs.ratingbunny.repos.HistoryRepo
 import com.iscs.ratingbunny.routes.{AuthRoutes, EmailContactRoutes, FetchImageRoutes, ImdbRoutes, PoolSvcRoutes}
 import com.iscs.ratingbunny.util.BcryptHasher
@@ -56,6 +43,13 @@ object Server:
       val hasher = BcryptHasher.make[F](cost = 12)
       new AuthCheckImpl(userCollCodec, userProfCollCodec, hasher)
 
+  private def getLoginSvc[F[_]: Async](db: MongoDatabase[F]): F[AuthLogin[F]] =
+    for
+      userCollCodec     <- db.getCollectionWithCodec[UserDoc](usersCollection)
+    yield
+      val hasher = BcryptHasher.make[F](cost = 12)
+      new AuthLoginImpl(userCollCodec, hasher)
+
   private def getImdbSvc[F[_]: Async: Parallel](db: MongoDatabase[F], client: Client[F]): F[ImdbQuery[F]] =
     for
       compCollCodec <- db.getCollectionWithCodec[TitleRec](compositeCollection)
@@ -72,6 +66,7 @@ object Server:
   def getServices[F[_]: Async: Parallel](db: MongoDatabase[F], client: Client[F]): F[HttpApp[F]] =
     for
       authSvc     <- getAuthSvc(db)
+      loginSvc     <- getLoginSvc(db)
       emailSvc    <- getEmailSvc(db)
       fetchSvc    <- Sync[F].delay(new FetchImage[F](defaultHost, imageHost, client))
       historyRepo <- HistoryRepo.make(db)
@@ -84,7 +79,7 @@ object Server:
               EmailContactRoutes.httpRoutes(emailSvc) <+>
               ImdbRoutes.httpRoutes(imdbSvc, historyRepo) <+>
               PoolSvcRoutes.httpRoutes(poolSvc) <+>
-              AuthRoutes.httpRoutes(authSvc))
+              AuthRoutes.httpRoutes(authSvc, loginSvc))
         ).orNotFound
       )
       _            <- Sync[F].delay(L.info(s""""added routes for auth, email, hx, imdb, pool, """))
