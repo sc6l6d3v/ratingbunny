@@ -10,7 +10,7 @@ object Dependencies {
     val LogbackVersion    = "1.5.3"
     val loggingVersion    = "3.9.5"
     val scalamockVersion  = "6.0.0"
-    val mongo4catsVersion = "0.7.9"
+    val mongo4catsVersion = "0.7.12"
     val mongoScalaVersion = "5.4.0"
     val munitVersion      = "2.0.0"
     val scalaTestVersion  = "3.2.18"
