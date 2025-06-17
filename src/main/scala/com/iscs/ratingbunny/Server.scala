@@ -4,11 +4,31 @@ import cats.Parallel
 import cats.effect.{Async, Resource, Sync}
 import cats.implicits.*
 import com.comcast.ip4s.*
-import com.iscs.ratingbunny.domains.{AuthCheck, AuthCheckImpl, AuthLogin, AuthLoginImpl, ConnectionPool, ConnectionPoolImpl, EmailContact, EmailContactImpl, FetchImage, ImdbQuery, ImdbQueryImpl, TitleRec, UserDoc, UserProfileDoc}
+import com.iscs.ratingbunny.domains.{
+  AuthCheck,
+  AuthCheckImpl,
+  AuthLogin,
+  AuthLoginImpl,
+  ConnectionPool,
+  ConnectionPoolImpl,
+  EmailContact,
+  EmailContactImpl,
+  FetchImage,
+  ImdbQuery,
+  ImdbQueryImpl,
+  TitleRec,
+  TokenIssuer,
+  TokenIssuerImpl,
+  UserDoc,
+  UserProfileDoc,
+  UserRepo,
+  UserRepoImpl
+}
 import com.iscs.ratingbunny.repos.HistoryRepo
 import com.iscs.ratingbunny.routes.{AuthRoutes, EmailContactRoutes, FetchImageRoutes, ImdbRoutes, PoolSvcRoutes}
 import com.iscs.ratingbunny.util.BcryptHasher
 import com.typesafe.scalalogging.Logger
+import dev.profunktor.redis4cats.RedisCommands
 import io.circe.generic.auto.*
 import fs2.io.net.Network
 import mongo4cats.circe.*
@@ -19,6 +39,7 @@ import org.http4s.ember.server.*
 import org.http4s.implicits.*
 import org.http4s.server.middleware.Logger as hpLogger
 import org.http4s.server.{Router, Server}
+import tsec.mac.jca.HMACSHA256
 
 object Server:
   private val L = Logger[this.type]
@@ -35,6 +56,9 @@ object Server:
   private val usersCollection       = "users"
   private val userProfileCollection = "user_profile"
 
+  private val jwtSecretKey =
+    sys.env.getOrElse("JWT_SECRET_KEY", throw new RuntimeException("JWT_SECRET_KEY environment variable must be set"))
+
   private def getAuthSvc[F[_]: Async](db: MongoDatabase[F]): F[AuthCheck[F]] =
     for
       userCollCodec     <- db.getCollectionWithCodec[UserDoc](usersCollection)
@@ -44,11 +68,24 @@ object Server:
       new AuthCheckImpl(userCollCodec, userProfCollCodec, hasher)
 
   private def getLoginSvc[F[_]: Async](db: MongoDatabase[F]): F[AuthLogin[F]] =
-    for
-      userCollCodec     <- db.getCollectionWithCodec[UserDoc](usersCollection)
+    for userCollCodec <- db.getCollectionWithCodec[UserDoc](usersCollection)
     yield
       val hasher = BcryptHasher.make[F](cost = 12)
       new AuthLoginImpl(userCollCodec, hasher)
+
+  private def getUserRepoSvc[F[_]: Async](db: MongoDatabase[F]): F[UserRepo[F]] =
+    for userCollCodec <- db.getCollectionWithCodec[UserDoc](usersCollection)
+    yield new UserRepoImpl(userCollCodec)
+
+  private def getTokenIssuerSvc[F[_]: Async](
+      redis: RedisCommands[F, String, String],
+      db: MongoDatabase[F],
+      secretKey: String
+  ): F[TokenIssuer[F]] =
+    for
+      userRepo <- getUserRepoSvc(db)
+      key      <- HMACSHA256.buildKey[F](secretKey.getBytes)
+    yield new TokenIssuerImpl[F](redis, userRepo, HMACSHA256, key)
 
   private def getImdbSvc[F[_]: Async: Parallel](db: MongoDatabase[F], client: Client[F]): F[ImdbQuery[F]] =
     for
@@ -63,11 +100,13 @@ object Server:
     for emailColl <- db.getCollection(emailCollection)
     yield new EmailContactImpl[F](emailColl)
 
-  def getServices[F[_]: Async: Parallel](db: MongoDatabase[F], client: Client[F]): F[HttpApp[F]] =
+  def getServices[F[_]: Async: Parallel](redis: RedisCommands[F, String, String], db: MongoDatabase[F], client: Client[F]): F[HttpApp[F]] =
     for
       authSvc     <- getAuthSvc(db)
-      loginSvc     <- getLoginSvc(db)
+      loginSvc    <- getLoginSvc(db)
       emailSvc    <- getEmailSvc(db)
+      userRepo    <- getUserRepoSvc(db)
+      token       <- getTokenIssuerSvc(redis, db, jwtSecretKey)
       fetchSvc    <- Sync[F].delay(new FetchImage[F](defaultHost, imageHost, client))
       historyRepo <- HistoryRepo.make(db)
       imdbSvc     <- getImdbSvc(db, client)
@@ -79,7 +118,7 @@ object Server:
               EmailContactRoutes.httpRoutes(emailSvc) <+>
               ImdbRoutes.httpRoutes(imdbSvc, historyRepo) <+>
               PoolSvcRoutes.httpRoutes(poolSvc) <+>
-              AuthRoutes.httpRoutes(authSvc, loginSvc))
+              AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token))
         ).orNotFound
       )
       _            <- Sync[F].delay(L.info(s""""added routes for auth, email, hx, imdb, pool, """))

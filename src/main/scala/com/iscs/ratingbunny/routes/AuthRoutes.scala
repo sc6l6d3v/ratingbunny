@@ -3,22 +3,40 @@ package com.iscs.ratingbunny.routes
 import cats.effect.{Async, Sync}
 import cats.implicits.*
 import com.iscs.ratingbunny.domains.SignupError.*
-import com.iscs.ratingbunny.domains.{AuthCheck, AuthLogin, LoginError, LoginRequest, SignupRequest}
+import com.iscs.ratingbunny.domains.*
 import com.typesafe.scalalogging.Logger
-import io.circe.{DecodingFailure, Json}
 import io.circe.generic.auto.*
 import io.circe.syntax.*
+import io.circe.{DecodingFailure, Json}
 import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder}
+import org.http4s.circe.{jsonEncoderOf, jsonOf}
 import org.http4s.dsl.Http4sDsl
-import org.http4s.{HttpRoutes, InvalidMessageBodyFailure, Response}
+import org.http4s.{headers, AuthScheme, Credentials, EntityDecoder, EntityEncoder, HttpRoutes, InvalidMessageBodyFailure, Request, Response}
+import tsec.passwordhashers.PasswordHash
+import tsec.passwordhashers.jca.*
 
 object AuthRoutes:
   private val L          = Logger[this.type]
   private val apiVersion = "v3"
 
-  def httpRoutes[F[_]: Async](A: AuthCheck[F], Login: AuthLogin[F]): HttpRoutes[F] =
+  def httpRoutes[F[_]: Async](A: AuthCheck[F], Login: AuthLogin[F], userRepo: UserRepo[F], token: TokenIssuer[F]): HttpRoutes[F] =
     val dsl = Http4sDsl[F]
     import dsl.*
+
+    given EntityDecoder[F, RegisterReq] = jsonOf
+    given EntityDecoder[F, LoginReq]    = jsonOf
+    given EntityEncoder[F, TokenPair]   = jsonEncoderOf
+
+    def verifyPassword(plain: String, hashed: String): F[Boolean] =
+      BCrypt.checkpwBool[F](plain, PasswordHash[BCrypt](hashed))
+
+    def hashPassword(plain: String): F[String] =
+      BCrypt.hashpw[F](plain).map(identity)
+
+    def bearer(req: Request[F]): Option[String] =
+      req.headers.get[headers.Authorization].collect { case headers.Authorization(Credentials.Token(AuthScheme.Bearer, v)) =>
+        v
+      }
 
     val svc = HttpRoutes.of[F]:
       case req @ POST -> Root / "api" / `apiVersion` / "auth" / "signup" =>
@@ -49,22 +67,37 @@ object AuthRoutes:
                   case Left(BadTimezone)  => BadRequest("Invalid time zone")
               yield out
         yield resp
-      case req @ POST -> Root / "api" / apiVersion / "auth" / "login"  =>
+      case req @ POST -> Root / "api" / apiVersion / "auth" / "login" =>
         for
           decoded <- req.attemptAs[LoginRequest].value
-          resp    <- decoded match
+          resp <- decoded match
             case Left(df) => BadRequest(Json.obj("error" -> Json.fromString(df.getMessage)))
             case Right(lr) =>
-              Login.login(lr).flatMap:
-                case Right(uid)                             =>
-                  Ok(Json.obj("userid" -> uid.asJson))
-                case Left(LoginError.UserNotFound) =>
-                  Sync[F].delay(Response(Unauthorized)                              // empty 401 response
-                    .withEntity(Json.obj("error" -> Json.fromString("user not found"))))
-                case Left(LoginError.BadPassword)  =>
-                  Sync[F].delay(Response(Unauthorized)
-                    .withEntity(Json.obj("error" -> Json.fromString("wrong password"))))
-                case Left(LoginError.Inactive)              =>
-                  Forbidden(Json.obj("error" -> Json.fromString("account inactive")))
+              Login
+                .login(lr)
+                .flatMap:
+                  case Right(uid) =>
+                    Ok(Json.obj("userid" -> uid.asJson))
+                  case Left(LoginError.UserNotFound) =>
+                    Sync[F].delay(
+                      Response(Unauthorized) // empty 401 response
+                        .withEntity(Json.obj("error" -> Json.fromString("user not found")))
+                    )
+                  case Left(LoginError.BadPassword) =>
+                    Sync[F].delay(
+                      Response(Unauthorized)
+                        .withEntity(Json.obj("error" -> Json.fromString("wrong password")))
+                    )
+                  case Left(LoginError.Inactive) =>
+                    Forbidden(Json.obj("error" -> Json.fromString("account inactive")))
         yield resp
+      case req @ POST -> Root / "api" / apiVersion / "auth" / "refresh" =>
+        bearer(req).fold(Forbidden()) { tok =>
+          token.rotate(tok).flatMap {
+            case None    => Forbidden()
+            case Some(p) => Ok(p)
+          }
+        }
+      case req @ POST -> Root / "api" / apiVersion / "auth" / "logout" =>
+        bearer(req).fold(Forbidden())(tok => token.revoke(tok) *> NoContent())
     CORSSetup.methodConfig(svc)

@@ -13,8 +13,10 @@ object Dependencies {
     val mongo4catsVersion = "0.7.12"
     val mongoScalaVersion = "5.4.0"
     val munitVersion      = "2.0.0"
+    val redis4catsVersion = "2.0.0-1-0f092da-SNAPSHOT"
     val scalaTestVersion  = "3.2.18"
     val scalacheckVersion = "1.17.0"
+    val tsecJWTVersion    = "0.5.0"
   }
 
   object http4s {
@@ -48,6 +50,12 @@ object Dependencies {
     val base = "org.jsoup" % "jsoup" % Versions.jsoupVersion
   }
 
+  object redis4cats {
+    val core     = "dev.profunktor" %% "redis4cats-effects"  % Versions.redis4catsVersion
+    val stream   = "dev.profunktor" %% "redis4cats-streams"  % Versions.redis4catsVersion
+    val log4cats = "dev.profunktor" %% "redis4cats-log4cats" % Versions.redis4catsVersion
+  }
+
   object scalamock {
     val core = "org.scalamock" %% "scalamock" % Versions.scalamockVersion % Test
   }
@@ -69,5 +77,11 @@ object Dependencies {
   object test {
     val scalatest  = "org.scalatest"  %% "scalatest"  % Versions.scalaTestVersion  % Test
     val scalacheck = "org.scalacheck" %% "scalacheck" % Versions.scalacheckVersion % Test
+  }
+
+  object tsec {
+    val jwt = "io.github.jmcardon" %% "tsec-jwt-mac"  % Versions.tsecJWTVersion
+    val mac = "io.github.jmcardon" %% "tsec-mac"      % Versions.tsecJWTVersion
+    val pwd = "io.github.jmcardon" %% "tsec-password" % Versions.tsecJWTVersion
   }
 }
