@@ -13,7 +13,7 @@ import mongo4cats.collection.MongoCollection
 import scala.language.implicitConversions
 
 trait AuthCheck[F[_]]:
-  def signup(req: SignupRequest): F[Either[SignupError, String]] // returns userid
+  def signup(req: SignupRequest): F[Either[SignupError, SignupOK]] // returns userid
 
 enum SignupError:
   case EmailExists
@@ -30,7 +30,8 @@ enum SignupError:
 final class AuthCheckImpl[F[_]: Async](
     usersCol: MongoCollection[F, UserDoc],
     userProfileCol: MongoCollection[F, UserProfileDoc],
-    hasher: PasswordHasher[F] // see §4.3
+    hasher: PasswordHasher[F],
+    tokenIssuer: TokenIssuer[F]
 ) extends AuthCheck[F] with QuerySetup:
   private val docFail   = 121
   private val MINPWDLEN = 8
@@ -54,7 +55,7 @@ final class AuthCheckImpl[F[_]: Async](
     }
     loop(0)
 
-  override def signup(req: SignupRequest): F[Either[SignupError, String]] =
+  override def signup(req: SignupRequest): F[Either[SignupError, SignupOK]] =
     (for
       // EitherT gives you an Either along the way
       _ <- EitherT.fromEither[F](validatePw(req.password))
@@ -75,10 +76,10 @@ final class AuthCheckImpl[F[_]: Async](
         status = SubscriptionStatus.Active,
         displayName = req.displayName
       )
-      prof = UserProfileDoc(uid)
-      _ <- EitherT.liftF(usersCol.insertOne(user))
-      _ <- EitherT.liftF(userProfileCol.insertOne(prof))
-    yield uid).value // F[Either[SignupError, String]]
+      _  <- EitherT.liftF(usersCol.insertOne(user))
+      _  <- EitherT.liftF(userProfileCol.insertOne(UserProfileDoc(uid)))
+      tp <- EitherT.liftF(tokenIssuer.issue(user))
+    yield SignupOK(uid, tp)).value
       .handleError {
         case mw: MongoWriteException if mw.getError.getCategory == DUPLICATE_KEY =>
           Left(SignupError.UserIdExists)

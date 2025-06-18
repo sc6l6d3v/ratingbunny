@@ -96,7 +96,8 @@ package object domains:
 
   // ---------- request / response ----------
   final case class LoginRequest(email: String, password: String)
-  final case class LoginOK(userid: String /* , token: String */ )
+  final case class LoginOK(userid: String, tokens: TokenPair)
+  final case class SignupOK(userid: String, tokens: TokenPair)
 
   // ===== Requests / responses ===================================================
   final case class RegisterReq(email: String, password: String)

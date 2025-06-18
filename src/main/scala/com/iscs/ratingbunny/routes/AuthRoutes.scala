@@ -51,10 +51,17 @@ object AuthRoutes:
 
             case Right(sr) =>
               for
-                _      <- Sync[F].delay(L.info(s""""request" signup=$sr"""))
-                result <- A.signup(sr)
-                out <- result match
-                  case Right(uid)         => Created(Json.obj("userid" -> uid.asJson))
+                _              <- Sync[F].delay(L.info(s""""request" signup=$sr"""))
+                eitherSignupOk <- A.signup(sr)
+                out <- eitherSignupOk match
+                  case Right(ok) =>
+                    Created(
+                      Json.obj(
+                        "userid"  -> ok.userid.asJson,
+                        "userid"  -> ok.userid.asJson,
+                        "refresh" -> ok.tokens.refresh.asJson
+                      )
+                    )
                   case Left(EmailExists)  => Conflict("email exists")
                   case Left(InvalidEmail) => BadRequest("invalid email")
                   case Left(UserIdExists) => Conflict("userid exists")
@@ -76,8 +83,14 @@ object AuthRoutes:
               Login
                 .login(lr)
                 .flatMap:
-                  case Right(uid) =>
-                    Ok(Json.obj("userid" -> uid.asJson))
+                  case Right(ok) =>
+                    Ok(
+                      Json.obj(
+                        "userid"  -> ok.userid.asJson,
+                        "access"  -> ok.tokens.access.asJson,
+                        "refresh" -> ok.tokens.refresh.asJson
+                      )
+                    )
                   case Left(LoginError.UserNotFound) =>
                     Sync[F].delay(
                       Response(Unauthorized) // empty 401 response

@@ -14,7 +14,8 @@ trait AuthLogin[F[_]]:
 
 final class AuthLoginImpl[F[_]: Async](
     usersCol: MongoCollection[F, UserDoc],
-    hasher: PasswordHasher[F]
+    hasher: PasswordHasher[F],
+    tokenIssuer: TokenIssuer[F]
 ) extends AuthLogin[F] with QuerySetup:
 
   override def login(req: LoginRequest): F[Either[LoginError, LoginOK]] =
@@ -33,7 +34,7 @@ final class AuthLoginImpl[F[_]: Async](
         case Some(u) =>
           hasher
             .verify(req.password, u.passwordHash)
-            .map:
-              case true  => LoginOK(u.userid).asRight
-              case false => LoginError.BadPassword.asLeft
+            .flatMap:
+              case true  => tokenIssuer.issue(u).map(tp => LoginOK(u.userid, tp).asRight)
+              case false => LoginError.BadPassword.asLeft.pure[F]
     yield result

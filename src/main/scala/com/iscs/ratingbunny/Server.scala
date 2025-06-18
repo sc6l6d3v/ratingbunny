@@ -59,19 +59,19 @@ object Server:
   private val jwtSecretKey =
     sys.env.getOrElse("JWT_SECRET_KEY", throw new RuntimeException("JWT_SECRET_KEY environment variable must be set"))
 
-  private def getAuthSvc[F[_]: Async](db: MongoDatabase[F]): F[AuthCheck[F]] =
+  private def getAuthSvc[F[_]: Async](db: MongoDatabase[F], token: TokenIssuer[F]): F[AuthCheck[F]] =
     for
       userCollCodec     <- db.getCollectionWithCodec[UserDoc](usersCollection)
       userProfCollCodec <- db.getCollectionWithCodec[UserProfileDoc](userProfileCollection)
     yield
       val hasher = BcryptHasher.make[F](cost = 12)
-      new AuthCheckImpl(userCollCodec, userProfCollCodec, hasher)
+      new AuthCheckImpl(userCollCodec, userProfCollCodec, hasher, token)
 
-  private def getLoginSvc[F[_]: Async](db: MongoDatabase[F]): F[AuthLogin[F]] =
+  private def getLoginSvc[F[_]: Async](db: MongoDatabase[F], token: TokenIssuer[F]): F[AuthLogin[F]] =
     for userCollCodec <- db.getCollectionWithCodec[UserDoc](usersCollection)
     yield
       val hasher = BcryptHasher.make[F](cost = 12)
-      new AuthLoginImpl(userCollCodec, hasher)
+      new AuthLoginImpl(userCollCodec, hasher, token)
 
   private def getUserRepoSvc[F[_]: Async](db: MongoDatabase[F]): F[UserRepo[F]] =
     for userCollCodec <- db.getCollectionWithCodec[UserDoc](usersCollection)
@@ -102,11 +102,11 @@ object Server:
 
   def getServices[F[_]: Async: Parallel](redis: RedisCommands[F, String, String], db: MongoDatabase[F], client: Client[F]): F[HttpApp[F]] =
     for
-      authSvc     <- getAuthSvc(db)
-      loginSvc    <- getLoginSvc(db)
+      token       <- getTokenIssuerSvc(redis, db, jwtSecretKey)
+      authSvc     <- getAuthSvc(db, token)
+      loginSvc    <- getLoginSvc(db, token)
       emailSvc    <- getEmailSvc(db)
       userRepo    <- getUserRepoSvc(db)
-      token       <- getTokenIssuerSvc(redis, db, jwtSecretKey)
       fetchSvc    <- Sync[F].delay(new FetchImage[F](defaultHost, imageHost, client))
       historyRepo <- HistoryRepo.make(db)
       imdbSvc     <- getImdbSvc(db, client)
