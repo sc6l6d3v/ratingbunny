@@ -1,5 +1,6 @@
 import Dependencies.{test, *}
 
+ThisBuild / fork             := true
 ThisBuild / version          := "1.0"
 ThisBuild / scalaVersion     := "3.4.2"
 ThisBuild / name             := "ratingbunny"
@@ -16,9 +17,7 @@ lazy val root = (project in file("."))
       http4s.circe,
       fs2.core,
       fs2.io,
-      tsec.jwt,
-      tsec.mac,
-      tsec.pwd,
+      jwt.circe,
       bcrypt.core,
       circe.circeCore,
       circe.circeGeneric,

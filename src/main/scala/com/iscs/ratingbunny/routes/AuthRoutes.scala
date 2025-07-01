@@ -4,6 +4,7 @@ import cats.effect.{Async, Sync}
 import cats.implicits.*
 import com.iscs.ratingbunny.domains.SignupError.*
 import com.iscs.ratingbunny.domains.*
+import com.iscs.ratingbunny.util.BcryptHasher
 import com.typesafe.scalalogging.Logger
 import io.circe.generic.auto.*
 import io.circe.syntax.*
@@ -12,12 +13,9 @@ import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder
 import org.http4s.circe.{jsonEncoderOf, jsonOf}
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{headers, AuthScheme, Credentials, EntityDecoder, EntityEncoder, HttpRoutes, InvalidMessageBodyFailure, Request, Response}
-import tsec.passwordhashers.PasswordHash
-import tsec.passwordhashers.jca.*
 
 object AuthRoutes:
-  private val L          = Logger[this.type]
-  private val apiVersion = "v3"
+  private val L = Logger[this.type]
 
   def httpRoutes[F[_]: Async](A: AuthCheck[F], Login: AuthLogin[F], userRepo: UserRepo[F], token: TokenIssuer[F]): HttpRoutes[F] =
     val dsl = Http4sDsl[F]
@@ -27,11 +25,11 @@ object AuthRoutes:
     given EntityDecoder[F, LoginReq]    = jsonOf
     given EntityEncoder[F, TokenPair]   = jsonEncoderOf
 
-    def verifyPassword(plain: String, hashed: String): F[Boolean] =
-      BCrypt.checkpwBool[F](plain, PasswordHash[BCrypt](hashed))
+    val hasher = BcryptHasher.make[F](cost = 12)
 
-    def hashPassword(plain: String): F[String] =
-      BCrypt.hashpw[F](plain).map(identity)
+    def verifyPassword(plain: String, hashed: String): F[Boolean] = hasher.verify(plain, hashed)
+
+    def hashPassword(plain: String): F[String] = hasher.hash(plain)
 
     def bearer(req: Request[F]): Option[String] =
       req.headers.get[headers.Authorization].collect { case headers.Authorization(Credentials.Token(AuthScheme.Bearer, v)) =>
@@ -39,7 +37,7 @@ object AuthRoutes:
       }
 
     val svc = HttpRoutes.of[F]:
-      case req @ POST -> Root / "api" / `apiVersion` / "auth" / "signup" =>
+      case req @ POST -> Root / "auth" / "signup" =>
         for
           decoded <- req.attemptAs[SignupRequest].value
           resp <- decoded match
@@ -57,8 +55,7 @@ object AuthRoutes:
                   case Right(ok) =>
                     Created(
                       Json.obj(
-                        "userid"  -> ok.userid.asJson,
-                        "userid"  -> ok.userid.asJson,
+                        "access"  -> ok.tokens.access.asJson,
                         "refresh" -> ok.tokens.refresh.asJson
                       )
                     )
@@ -74,7 +71,7 @@ object AuthRoutes:
                   case Left(BadTimezone)  => BadRequest("Invalid time zone")
               yield out
         yield resp
-      case req @ POST -> Root / "api" / apiVersion / "auth" / "login" =>
+      case req @ POST -> Root / "auth" / "login" =>
         for
           decoded <- req.attemptAs[LoginRequest].value
           resp <- decoded match
@@ -86,7 +83,6 @@ object AuthRoutes:
                   case Right(ok) =>
                     Ok(
                       Json.obj(
-                        "userid"  -> ok.userid.asJson,
                         "access"  -> ok.tokens.access.asJson,
                         "refresh" -> ok.tokens.refresh.asJson
                       )
@@ -104,13 +100,13 @@ object AuthRoutes:
                   case Left(LoginError.Inactive) =>
                     Forbidden(Json.obj("error" -> Json.fromString("account inactive")))
         yield resp
-      case req @ POST -> Root / "api" / apiVersion / "auth" / "refresh" =>
+      case req @ POST -> Root / "auth" / "refresh" =>
         bearer(req).fold(Forbidden()) { tok =>
           token.rotate(tok).flatMap {
             case None    => Forbidden()
             case Some(p) => Ok(p)
           }
         }
-      case req @ POST -> Root / "api" / apiVersion / "auth" / "logout" =>
+      case req @ POST -> Root / "auth" / "logout" =>
         bearer(req).fold(Forbidden())(tok => token.revoke(tok) *> NoContent())
     CORSSetup.methodConfig(svc)

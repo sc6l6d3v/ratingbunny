@@ -36,7 +36,8 @@ case class MongodbConfig(url: String, isReadOnly: Boolean = false, cpConfig: Con
 
   private val baseSettings: MongoClientSettings.Builder = MongoClientSettings
     .builder()
-    .applyToConnectionPoolSettings(builder => builder.applySettings(connectionPoolSettings))
+    .applyToLoggerSettings(_.maxDocumentLength(5000))
+    .applyToConnectionPoolSettings(_.applySettings(connectionPoolSettings))
     .applyConnectionString(connection)
     .readPreference(if (isReadOnly) ReadPreference.secondaryPreferred else ReadPreference.primaryPreferred)
 

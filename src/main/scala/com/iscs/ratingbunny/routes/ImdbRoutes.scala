@@ -3,7 +3,7 @@ package com.iscs.ratingbunny.routes
 import cats.effect.*
 import cats.effect.implicits.genSpawnOps
 import cats.implicits.*
-import com.iscs.ratingbunny.domains.{AutoNameRec, AutoRecBase, AutoTitleRec, ImdbQuery, SortField, TitleRec, TitleRecBase, TitleRecPath}
+import com.iscs.ratingbunny.domains.*
 import com.iscs.ratingbunny.dslparams.*
 import com.iscs.ratingbunny.model.Requests.*
 import com.iscs.ratingbunny.repos.HistoryRepo
@@ -13,75 +13,50 @@ import fs2.Stream
 import io.circe.Encoder
 import io.circe.syntax.EncoderOps
 import io.circe.generic.auto.*
-import org.http4s.{EntityEncoder, Header, HttpRoutes, Request, Response}
-import org.http4s.MediaType.application.*
+import org.http4s.*
 import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder}
-import org.http4s.circe.jsonEncoderOf
-import org.http4s.dsl.Http4sDsl
+import org.http4s.circe.*
+import org.http4s.dsl.*
 import org.http4s.headers.`Content-Type`
 import org.typelevel.ci.*
 
 import scala.annotation.tailrec
 import scala.util.Try
 
-object ImdbRoutes extends DecodeUtils {
+object ImdbRoutes extends DecodeUtils:
+
   private val L            = Logger[this.type]
   private val rowSpacer    = 64
   private val columnSpacer = 64
   private val apiVersion   = "v3"
 
-  private def rowsPerPage(height: Int, spacer: Int, cardHeight: Int): Int = {
+  // ---------- helpers (unchanged) ------------------------------------------------
+  private def rowsPerPage(height: Int, spacer: Int, cardHeight: Int): Int =
     @tailrec
-    def rowsPerPageTR(remainingHeight: Int, count: Int): Int =
-      if (remainingHeight < 0) count
-      else rowsPerPageTR(remainingHeight - spacer - cardHeight, count + 1)
+    def rowsPerPageTR(rem: Int, c: Int): Int =
+      if rem < 0 then c else rowsPerPageTR(rem - spacer - cardHeight, c + 1)
     rowsPerPageTR(height, 0)
-  }
-  private def cardsPerRow(width: Int, spacer: Int, offset: Int, cardWidth: Int): Int = {
+
+  private def cardsPerRow(width: Int, spacer: Int, offset: Int, cardWidth: Int): Int =
     @tailrec
-    def cardsPerRowTR(remainingWidth: Int, count: Int): Int =
-      if (remainingWidth < 0) count
-      else cardsPerRowTR(remainingWidth - spacer - cardWidth, count + 1)
+    def cardsPerRowTR(rem: Int, c: Int): Int =
+      if rem < 0 then c else cardsPerRowTR(rem - spacer - cardWidth, c + 1)
     cardsPerRowTR(width - offset, 0)
-  }
 
-  private def pageSize(width: Int, cardWidth: Int, height: Int, cardHeight: Int, offset: Int): Int =
-    cardsPerRow(width, columnSpacer, offset, cardWidth) * rowsPerPage(height, rowSpacer, cardHeight)
+  private def pageSize(w: Int, cw: Int, h: Int, ch: Int, off: Int): Int =
+    cardsPerRow(w, columnSpacer, off, cw) * rowsPerPage(h, rowSpacer, ch)
 
-  private def dimsFromString(strPairs: List[(String, Int)]): List[Int] =
-    strPairs.map { case (strVal, defInt) =>
-      Try(strVal.toInt).toOption.getOrElse(defInt)
-    }
+  private def dims(strPairs: List[(String, Int)]): List[Int] =
+    strPairs.map { case (s, d) => Try(s.toInt).toOption.getOrElse(d) }
 
-  private def convertParams(page: String, ws: String, wh: String, cs: String, ch: String, offset: String): List[Int] =
-    dimsFromString(
-      List(
-        (page, 1),
-        (ws, 600),
-        (wh, 900),
-        (cs, 160),
-        (ch, 238),
-        (offset, 0)
-      )
-    )
+  private def conv(page: String, ws: String, wh: String, cs: String, ch: String, off: String): List[Int] =
+    dims(List((page, 1), (ws, 600), (wh, 900), (cs, 160), (ch, 238), (off, 0)))
 
-  private def calcWithParams(params: List[Int]): Int = {
-    val wsInt     = params(1)
-    val whInt     = params(2)
-    val csInt     = params(3)
-    val chInt     = params(4)
-    val offsetInt = params(5)
-    pageSize(wsInt, csInt, whInt, chInt, offsetInt)
-  }
+  private def pureExtract[T](recs: List[T], pg: Int, pgs: Int): List[T] =
+    recs.slice((pg - 1) * pgs, (pg - 1) * pgs + pgs)
 
-  private def pureExtractRecords[T](records: List[T], pg: Int, pgs: Int): List[T] =
-    records.slice((pg - 1) * pgs, (pg - 1) * pgs + pgs)
-
-  private def showParams[F[_]: Sync](paramType: String, pgs: Int, ws: String, wh: String, cs: String, ch: String, offset: String): F[Unit] =
-    Sync[F].delay(L.info(s""""$paramType params" ws=$ws wh=$wh cs=$cs ch=$ch pgs=$pgs offset=$offset"""))
-
-  private def remainingCount(currentPage: Int, pageSize: Int, totalSize: Int): Int =
-    math.max(totalSize - (currentPage * pageSize), 0)
+  private def remain(pg: Int, pgs: Int, total: Int): Int =
+    math.max(total - (pg * pgs), 0)
 
   implicit val encodeAutoRecBase: Encoder[AutoRecBase] = Encoder.instance {
     case autoNameRec: AutoNameRec   => autoNameRec.asJson
@@ -93,14 +68,11 @@ object ImdbRoutes extends DecodeUtils {
     case titleRecPath: TitleRecPath => titleRecPath.asJson
   }
 
-  implicit def listTitleRecBaseEntityEncoder[F[_]: Async]: EntityEncoder[F, List[TitleRecBase]] =
-    jsonEncoderOf[F, List[TitleRecBase]]
+  // ---------- public TITLE routes -----------------------------------------------
+  def publicRoutes[F[_]: Async](I: ImdbQuery[F], hx: HistoryRepo[F]): HttpRoutes[F] =
+    val dsl = Http4sDsl[F]; import dsl.*
 
-  def httpRoutes[F[_]: Async](I: ImdbQuery[F], hxRepo: HistoryRepo[F]): HttpRoutes[F] = {
-    val dsl = Http4sDsl[F]
-    import dsl.*
-
-    def handleTitleRequest(
+    def commonTitle(
         req: Request[F],
         page: String,
         rating: String,
@@ -108,109 +80,106 @@ object ImdbRoutes extends DecodeUtils {
         wh: String,
         cs: String,
         ch: String,
-        offset: String,
-        getTitle: (Double, ReqParams, Int, SortField) => Stream[F, TitleRecBase],
+        off: String,
+        fetch: (Double, ReqParams, Int, SortField) => Stream[F, TitleRecBase],
         logText: String
     ): F[Response[F]] =
-      for {
-        reqParams <- req.as[ReqParams]
-        rtng      <- getRating(rating)
-        dimList = convertParams(page, ws, wh, cs, ch, offset)
-        pgs     = calcWithParams(dimList)
-        _ <- showParams("title", pgs, ws, wh, cs, ch, offset)
-        titleStream <- Sync[F].delay(
-          if (reqParams.year.nonEmpty)
-            getTitle(rtng, reqParams, pgs << 3, SortField.from(reqParams.sortType))
-          else
-            Stream.empty
-        )
-        titleList <- titleStream.compile.toList
-        pageList = pureExtractRecords(titleList, dimList.head, pgs)
-        _ <- Sync[F].delay(L.info(s""""$logText counts" pageNo=$page titleList=${titleList.size} pageList=${pageList.size}"""))
-        elementsLeft = remainingCount(dimList.head, pgs, titleList.size)
-        _ <- hxRepo.log("fakeUserId", reqParams).start
+      for
+        params <- req.as[ReqParams]
+        rtg    <- getRating(rating)
+        dimsL = conv(page, ws, wh, cs, ch, off)
+        pgs   = pageSize(dimsL(1), dimsL(3), dimsL(2), dimsL(4), dimsL(5))
+        results <- Sync[F]
+          .delay(
+            if params.year.nonEmpty then fetch(rtg, params, pgs << 3, SortField.from(params.sortType))
+            else Stream.empty
+          )
+          .flatMap(_.compile.toList)
+        pageList = pureExtract(results, dimsL.head, pgs)
+        left     = remain(dimsL.head, pgs, results.size)
+        _ <- hx.log("guest", params).start
         resp <- Ok(pageList).map(
           _.putHeaders(
-            Header.Raw(ci"X-Remaining-Count", elementsLeft.toString),
+            Header.Raw(ci"X-Remaining-Count", left.toString),
             Header.Raw(ci"Access-Control-Expose-Headers", "X-Remaining-Count")
           )
         )
-      } yield resp
+      yield resp
 
-    def handleAutoRequest(
-        req: Request[F],
-        name: String,
-        rating: String,
-        getAutoRec: (String, Double, ReqParams) => Stream[F, AutoRecBase],
-        logType: String
-    ): F[Response[F]] =
-      for {
-        _         <- Sync[F].delay(L.info(s""""request" $logType=$name rating=$rating"""))
-        reqParams <- req.as[ReqParams]
-        rtng      <- getRating(rating)
-        stream    <- Sync[F].delay(getAutoRec(name, rtng, reqParams))
-        strList   <- stream.compile.toList
-        _         <- hxRepo.log("fakeUserId", reqParams).start
-        resp      <- Ok(strList)
-      } yield resp
-
-    val svc = HttpRoutes
+    HttpRoutes
       .of[F] {
-        case req @ POST -> Root / "api" / `apiVersion` / "title" / page / rating :? WindowWidthQueryParameterMatcher(ws)
-            +& WindowHeightQueryParameterMatcher(wh) +& CardWidthQueryParameterMatcher(cs)
-            +& CardHeightQueryParameterMatcher(ch) +& OffsetQUeryParameterMatcher(offset) =>
-          handleTitleRequest(req, page, rating, ws, wh, cs, ch, offset, I.getByTitle, "title")
-        case req @ POST -> Root / "api" / `apiVersion` / "pathtitle" / page / rating :? WindowWidthQueryParameterMatcher(ws)
-            +& WindowHeightQueryParameterMatcher(wh) +& CardWidthQueryParameterMatcher(cs)
-            +& CardHeightQueryParameterMatcher(ch) +& OffsetQUeryParameterMatcher(offset) =>
-          handleTitleRequest(req, page, rating, ws, wh, cs, ch, offset, I.getByTitlePath, "titlepath")
-        case req @ POST -> Root / "api" / `apiVersion` / "name2" / name / rating =>
-          for {
-            reqParams <- req.as[ReqParams]
-            rtng      <- getRating(rating)
-            imdbNameStream <- Sync[F].delay(
-              if (reqParams.year.nonEmpty)
-                I.getByName(name, rtng, reqParams, SortField.from(reqParams.sortType))
-              else
-                Stream.empty
-            )
-            nameList <- imdbNameStream.compile.toList
-            _        <- hxRepo.log("fakeUserId", reqParams).start
-            resp     <- Ok(nameList)
-          } yield resp
-        case req @ POST -> Root / "api" / `apiVersion` / "name" / page / rating :? WindowWidthQueryParameterMatcher(ws)
-            +& WindowHeightQueryParameterMatcher(wh) +& CardWidthQueryParameterMatcher(cs)
-            +& CardHeightQueryParameterMatcher(ch) +& OffsetQUeryParameterMatcher(offset) =>
-          for {
-            reqParams <- req.as[ReqParams]
-            rtng      <- getRating(rating)
-            dimList = convertParams(page, ws, wh, cs, ch, offset)
-            pgs     = calcWithParams(dimList)
-            _ <- showParams("name", pgs, ws, wh, cs, ch, offset)
-            imdbNameStream <- Sync[F].delay(
-              if (reqParams.year.nonEmpty)
-                I.getByEnhancedName(reqParams.query.getOrElse("Joe Blow"), rtng, reqParams, pgs << 3, SortField.from(reqParams.sortType))
-              else
-                Stream.empty
-            )
-            nameList <- imdbNameStream.compile.toList
-            pageList = pureExtractRecords(nameList, dimList.head, pgs)
-            _ <- Sync[F].delay(L.info(s""""name counts" page=$page nameList=${nameList.size} pageList=${pageList.size}"""))
-            elementsLeft = remainingCount(dimList.head, pgs, nameList.size)
-            _ <- hxRepo.log("fakeUserId", reqParams).start
-            resp <- Ok(pageList).map(
-              _.putHeaders(
-                Header.Raw(ci"X-Remaining-Count", elementsLeft.toString),
-                Header.Raw(ci"Access-Control-Expose-Headers", "X-Remaining-Count")
-              )
-            )
-          } yield resp
-        case req @ POST -> Root / "api" / `apiVersion` / "autoname" / name / rating =>
-          handleAutoRequest(req, name, rating, I.getAutosuggestName, "autoname")
-        case req @ POST -> Root / "api" / `apiVersion` / "autotitle" / title / rating =>
-          handleAutoRequest(req, title, rating, I.getAutosuggestTitle, "autotitle")
+        case req @ POST -> Root / "title" / page / rating
+            :? WindowWidthQueryParameterMatcher(ws)
+            +& WindowHeightQueryParameterMatcher(wh)
+            +& CardWidthQueryParameterMatcher(cs)
+            +& CardHeightQueryParameterMatcher(ch)
+            +& OffsetQUeryParameterMatcher(off) =>
+          commonTitle(req, page, rating, ws, wh, cs, ch, off, I.getByTitle, "title")
+
+        case req @ POST -> Root / "pathtitle" / page / rating
+            :? WindowWidthQueryParameterMatcher(ws)
+            +& WindowHeightQueryParameterMatcher(wh)
+            +& CardWidthQueryParameterMatcher(cs)
+            +& CardHeightQueryParameterMatcher(ch)
+            +& OffsetQUeryParameterMatcher(off) =>
+          commonTitle(req, page, rating, ws, wh, cs, ch, off, I.getByTitlePath, "pathtitle")
+
+        case req @ POST -> Root / "autotitle" / title / rating =>
+          for
+            p   <- req.as[ReqParams]
+            rtg <- getRating(rating)
+            lst <- I.getAutosuggestTitle(title, rtg, p).compile.toList
+            _   <- hx.log("guest", p).start
+            res <- Ok(lst)
+          yield res
       }
-      .map(_.withContentType(`Content-Type`(`json`)))
-    CORSSetup.methodConfig(svc)
-  }
-}
+      .map(_.withContentType(`Content-Type`(org.http4s.MediaType.application.json)))
+
+  // ---------- AUTHED NAME routes --------------------------------------------------
+  def authedRoutes[F[_]: Async](I: ImdbQuery[F], hx: HistoryRepo[F]): AuthedRoutes[String, F] =
+    val dsl = Http4sDsl[F]; import dsl.*
+
+    AuthedRoutes.of[String, F] {
+      case authreq @ POST -> Root / "name2" / name / rating as user =>
+        for
+          p   <- authreq.req.as[ReqParams]
+          rtg <- getRating(rating)
+          lst <- I.getByName(name, rtg, p, SortField.from(p.sortType)).compile.toList
+          _   <- hx.log("user", p).start
+          res <- Ok(lst)
+        yield res
+
+      case authreq @ POST -> Root / "name" / page / rating
+          :? WindowWidthQueryParameterMatcher(ws)
+          +& WindowHeightQueryParameterMatcher(wh)
+          +& CardWidthQueryParameterMatcher(cs)
+          +& CardHeightQueryParameterMatcher(ch)
+          +& OffsetQUeryParameterMatcher(off) as user =>
+        val dimsL = conv(page, ws, wh, cs, ch, off)
+        val pgs   = pageSize(dimsL(1), dimsL(3), dimsL(2), dimsL(4), dimsL(5))
+        for
+          p   <- authreq.req.as[ReqParams]
+          _   <- Sync[F].delay(L.info(s"got reqParams: $p"))
+          rtg <- getRating(rating)
+          lst <- I.getByEnhancedName(p.query.getOrElse(""), rtg, p, pgs << 3, SortField.from(p.sortType)).compile.toList
+          _   <- Sync[F].delay(L.info(s"got list: $lst"))
+          pageLst = pureExtract(lst, dimsL.head, pgs)
+          left    = remain(dimsL.head, pgs, lst.size)
+          _ <- hx.log("user", p).start
+          res <- Ok(pageLst).map(
+            _.putHeaders(
+              Header.Raw(ci"X-Remaining-Count", left.toString),
+              Header.Raw(ci"Access-Control-Expose-Headers", "X-Remaining-Count")
+            )
+          )
+        yield res
+
+      case authreq @ POST -> Root / "autoname" / name / rating as user =>
+        for
+          p   <- authreq.req.as[ReqParams]
+          rtg <- getRating(rating)
+          lst <- I.getAutosuggestName(name, rtg, p).compile.toList
+          _   <- hx.log("user", p).start
+          res <- Ok(lst)
+        yield res
+    }

@@ -4,11 +4,9 @@ import cats.effect.{Async, Clock, Sync}
 import cats.implicits.*
 import com.iscs.ratingbunny.domains.{TokenPair, UserDoc}
 import dev.profunktor.redis4cats.RedisCommands
-import io.circe.Json
-import tsec.jws.mac.*
-import tsec.jwt.*
-import tsec.mac.*
-import tsec.mac.jca.*
+import pdi.jwt
+import pdi.jwt.JwtAlgorithm.HS256
+import pdi.jwt.{JwtAlgorithm, JwtCirce, JwtClaim}
 
 import java.time.Instant
 import java.util.UUID
@@ -29,8 +27,7 @@ given Conversion[FiniteDuration, Instant] with
 class TokenIssuerImpl[F[_]: Async](
     redis: RedisCommands[F, String, String],
     userRepo: UserRepo[F],
-    jwtKey: HMACSHA256.type,
-    key: MacSigningKey[HMACSHA256],
+    key: String,
     accessTtl: FiniteDuration = 15.minutes,
     refreshTtl: FiniteDuration = 30.days
 ) extends TokenIssuer[F]:
@@ -43,18 +40,19 @@ class TokenIssuerImpl[F[_]: Async](
     for
       nowDuration <- Clock[F].realTime
       jti         <- Sync[F].delay(UUID.randomUUID().toString)
-      jwt <- JWTMac.build[F, HMACSHA256](
-        JWTClaims(
+      jwt = JwtCirce.encode(
+        JwtClaim(
           subject = Some(user.userid),
-          issuedAt = Some(nowDuration),
-          expiration = Some(nowDuration + accessTtl),
+          issuedAt = Some(nowDuration.length),
+          expiration = Some((nowDuration + accessTtl).length),
           jwtId = Some(jti)
         ),
-        key
+        key,
+        HS256
       )
       rawRefresh <- Sync[F].delay(UUID.randomUUID().toString)
       _          <- redis.setEx(s"refresh:${Hash.sha256(rawRefresh)}", user.userid, refreshTtl)
-    yield TokenPair(jwt.toEncodedString, rawRefresh)
+    yield TokenPair(jwt, rawRefresh)
 
   override def rotate(raw: String): F[Option[TokenPair]] =
     val key = s"refresh:${Hash.sha256(raw)}"

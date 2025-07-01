@@ -26,6 +26,7 @@ import com.iscs.ratingbunny.domains.{
 }
 import com.iscs.ratingbunny.repos.HistoryRepo
 import com.iscs.ratingbunny.routes.{AuthRoutes, EmailContactRoutes, FetchImageRoutes, ImdbRoutes, PoolSvcRoutes}
+import com.iscs.ratingbunny.security.JwtAuth
 import com.iscs.ratingbunny.util.BcryptHasher
 import com.typesafe.scalalogging.Logger
 import dev.profunktor.redis4cats.RedisCommands
@@ -39,7 +40,6 @@ import org.http4s.ember.server.*
 import org.http4s.implicits.*
 import org.http4s.server.middleware.Logger as hpLogger
 import org.http4s.server.{Router, Server}
-import tsec.mac.jca.HMACSHA256
 
 object Server:
   private val L = Logger[this.type]
@@ -55,6 +55,7 @@ object Server:
   private val tbrCollection         = "title_basics_ratings"
   private val usersCollection       = "users"
   private val userProfileCollection = "user_profile"
+  private val apiVersion            = "v3"
 
   private val jwtSecretKey =
     sys.env.getOrElse("JWT_SECRET_KEY", throw new RuntimeException("JWT_SECRET_KEY environment variable must be set"))
@@ -80,12 +81,10 @@ object Server:
   private def getTokenIssuerSvc[F[_]: Async](
       redis: RedisCommands[F, String, String],
       db: MongoDatabase[F],
-      secretKey: String
+      key: String
   ): F[TokenIssuer[F]] =
-    for
-      userRepo <- getUserRepoSvc(db)
-      key      <- HMACSHA256.buildKey[F](secretKey.getBytes)
-    yield new TokenIssuerImpl[F](redis, userRepo, HMACSHA256, key)
+    for userRepo <- getUserRepoSvc(db)
+    yield new TokenIssuerImpl[F](redis, userRepo, key)
 
   private def getImdbSvc[F[_]: Async: Parallel](db: MongoDatabase[F], client: Client[F]): F[ImdbQuery[F]] =
     for
@@ -111,16 +110,17 @@ object Server:
       historyRepo <- HistoryRepo.make(db)
       imdbSvc     <- getImdbSvc(db, client)
       poolSvc     <- getPoolStatsSvc(db)
-      httpApp <- Sync[F].delay(
-        Router(
-          "/" ->
-            (FetchImageRoutes.httpRoutes(fetchSvc) <+>
-              EmailContactRoutes.httpRoutes(emailSvc) <+>
-              ImdbRoutes.httpRoutes(imdbSvc, historyRepo) <+>
-              PoolSvcRoutes.httpRoutes(poolSvc) <+>
-              AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token))
-        ).orNotFound
-      )
+      authMw = JwtAuth.middleware(jwtSecretKey)
+      httpApp = Router(
+        s"/api/$apiVersion" ->
+          (FetchImageRoutes.httpRoutes(fetchSvc) <+>
+            EmailContactRoutes.httpRoutes(emailSvc) <+>
+            ImdbRoutes.publicRoutes(imdbSvc, historyRepo) <+>
+            PoolSvcRoutes.httpRoutes(poolSvc) <+>
+            AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token)),
+        s"/api/$apiVersion/pro" ->
+          authMw(ImdbRoutes.authedRoutes(imdbSvc, historyRepo))
+      ).orNotFound
       _            <- Sync[F].delay(L.info(s""""added routes for auth, email, hx, imdb, pool, """))
       finalHttpApp <- Sync[F].delay(hpLogger.httpApp(logHeaders = true, logBody = false)(httpApp))
     yield finalHttpApp

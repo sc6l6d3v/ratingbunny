@@ -161,6 +161,10 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
       compFx
         .aggregateWithCodec[TitleRec](queryPipeline)
         .stream
+        .evalTap { result =>
+          // Log each result as it comes through
+          Sync[F].delay(L.info(s"getByEnhancedName result: $result"))
+        }
         .onFinalize { // Ensure that logging operation happens once after all stream processing is complete
           for {
             end <- Clock[F].monotonic

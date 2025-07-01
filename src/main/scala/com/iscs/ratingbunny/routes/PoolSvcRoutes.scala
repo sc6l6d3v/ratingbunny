@@ -10,12 +10,11 @@ import org.http4s.dsl.Http4sDsl
 
 object PoolSvcRoutes {
   private val L          = Logger[this.type]
-  private val apiVersion = "v3"
 
   def httpRoutes[F[_]: Async](E: ConnectionPool[F]): HttpRoutes[F] = {
     val dsl = Http4sDsl[F]
     import dsl.*
-    val svc = HttpRoutes.of[F] { case GET -> Root / "api" / `apiVersion` / "poolStats" =>
+    val svc = HttpRoutes.of[F] { case GET -> Root / "poolStats" =>
       for {
         poolStats <- E.getCPStats
         _         <- Sync[F].delay(L.info(s""""request poolStats" $poolStats"""))

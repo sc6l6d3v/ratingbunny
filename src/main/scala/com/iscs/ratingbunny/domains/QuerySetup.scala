@@ -1,7 +1,6 @@
 package com.iscs.ratingbunny.domains
 
 import com.iscs.ratingbunny.model.Requests.ReqParams
-import com.iscs.ratingbunny.util.asInt
 import com.typesafe.scalalogging.Logger
 import mongo4cats.bson.{BsonValueEncoder, Document}
 import mongo4cats.bson.BsonValueEncoder.*
@@ -38,7 +37,7 @@ trait QuerySetup {
   private val REGX             = "$regex"
   val L: Logger                = Logger[this.type]
 
-  implicit def convertBooleanToInt(b: Boolean): asInt = new asInt(b)
+  extension (b: Boolean) def toInt: Int = if b then 1 else 0
 
   given BsonValueEncoder[Int]    = BsonValueEncoder.intEncoder
   given BsonValueEncoder[Double] = BsonValueEncoder.doubleEncoder

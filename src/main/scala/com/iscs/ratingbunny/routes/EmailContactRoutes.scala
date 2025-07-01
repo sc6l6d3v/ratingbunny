@@ -11,13 +11,12 @@ import org.http4s.dsl.Http4sDsl
 
 object EmailContactRoutes:
   private val L          = Logger[this.type]
-  private val apiVersion = "v3"
 
   def httpRoutes[F[_]: Async](E: EmailContact[F]): HttpRoutes[F] =
     val dsl = Http4sDsl[F]
     import dsl.*
     val svc = HttpRoutes.of[F]:
-      case req @ POST -> Root / "api" / `apiVersion` / "addMsg" =>
+      case req @ POST -> Root / "addMsg" =>
         for
           email   <- req.as[Email]
           _       <- Sync[F].delay(L.info(s""""request" ${email.name} ${email.email} ${email.subject} ${email.msg}"""))

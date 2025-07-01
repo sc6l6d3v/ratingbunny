@@ -1,6 +1,6 @@
 package com.iscs.ratingbunny.util
 
-import cats.effect.{Async, Sync}
+import cats.effect.Async
 import org.mindrot.jbcrypt.BCrypt
 
 trait PasswordHasher[F[_]]:

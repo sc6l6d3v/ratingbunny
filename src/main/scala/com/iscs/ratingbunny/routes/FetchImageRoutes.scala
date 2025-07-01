@@ -15,14 +15,13 @@ import scala.language.postfixOps
 
 object FetchImageRoutes:
   private val L          = Logger[this.type]
-  private val apiVersion = "v3"
 
   def httpRoutes[F[_]: Async](R: FetchImage[F]): HttpRoutes[F] =
     val dsl = Http4sDsl[F]
     import dsl.*
     val imgSvc = HttpRoutes
       .of[F]:
-        case _ @GET -> Root / "api" / `apiVersion` / "image" / imdbId =>
+        case _ @GET -> Root / "image" / imdbId =>
           for
             _ <- Sync[F].delay(L.info(s""""request" image=$imdbId"""))
             resp <- Ok(R.getImage(imdbId))
