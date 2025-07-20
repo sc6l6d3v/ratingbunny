@@ -14,7 +14,7 @@ import scala.concurrent.duration.*
 import scala.language.postfixOps
 
 object FetchImageRoutes:
-  private val L          = Logger[this.type]
+  private val L = Logger[this.type]
 
   def httpRoutes[F[_]: Async](R: FetchImage[F]): HttpRoutes[F] =
     val dsl = Http4sDsl[F]

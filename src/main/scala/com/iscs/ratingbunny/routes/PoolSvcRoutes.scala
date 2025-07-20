@@ -9,7 +9,7 @@ import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
 import org.http4s.dsl.Http4sDsl
 
 object PoolSvcRoutes {
-  private val L          = Logger[this.type]
+  private val L = Logger[this.type]
 
   def httpRoutes[F[_]: Async](E: ConnectionPool[F]): HttpRoutes[F] = {
     val dsl = Http4sDsl[F]
