@@ -1,1 +1,17 @@
 .env
+
+# IDE files
+.idea/
+
+# Build directories
+target/
+project/target/
+
+# log directories
+logs/
+
+# documents
+docs/
+
+# testing data
+data/
