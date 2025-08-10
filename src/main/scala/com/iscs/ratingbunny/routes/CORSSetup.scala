@@ -11,14 +11,12 @@ import org.typelevel.ci.*
 import scala.concurrent.duration.*
 
 object CORSSetup {
-  private val L      = Logger[this.type]
-  private val protos = List("http", "https")
+  private val L = Logger[this.type]
   private val reactDeploys: Set[Origin.Host] = sys.env
-    .getOrElse("ORIGINS", "localhost")
+    .getOrElse("ORIGINS", "http://localhost")
     .split(",")
-    .flatMap(host => protos.map(proto => Origin.parse(s"$proto://$host")))
-    .flatMap(p =>
-      p match {
+    .flatMap(o =>
+      Origin.parse(o) match {
         case Right(hList @ Origin.HostList(_)) => hList.hosts.toList
         case Right(Null)                       => L.error("empty host"); List.empty[Origin.Host]
         case Left(l)                           => L.error(s"got bad host: $l"); List.empty[Origin.Host]
@@ -27,11 +25,15 @@ object CORSSetup {
     .toSet
   L.info(s"got origins: ${reactDeploys.mkString(",")}")
   private val methods = Set(Method.GET, Method.POST)
-  private val checkOrigin = (host: Origin.Host) =>
-    reactDeploys.exists { curHosts =>
-      L.debug(s"compare ${curHosts.host.value} to ${host.host.value}")
-      curHosts.host.value == host.host.value
+  private val checkOrigin = (host: Origin.Host) => {
+    val ok = reactDeploys.exists { curHosts =>
+      val res = curHosts == host
+      L.debug(s"compare ${curHosts.renderString} to ${host.renderString}: $res")
+      res
     }
+    L.debug(s"origin ${host.renderString} accepted? $ok")
+    ok
+  }
 
   def methodConfig[F[_]: Async](svc: HttpRoutes[F]): HttpRoutes[F] = CORS.policy
     .withAllowCredentials(true)
