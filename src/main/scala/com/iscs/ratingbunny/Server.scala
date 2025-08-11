@@ -113,13 +113,11 @@ object Server:
       authMw = JwtAuth.middleware(jwtSecretKey)
       httpApp = Router(
         s"/api/$apiVersion" ->
-          CORSSetup.methodConfig(
-            FetchImageRoutes.httpRoutes(fetchSvc) <+>
-              EmailContactRoutes.httpRoutes(emailSvc) <+>
-              ImdbRoutes.publicRoutes(imdbSvc, historyRepo) <+>
-              PoolSvcRoutes.httpRoutes(poolSvc) <+>
-              AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token)
-          ),
+          (FetchImageRoutes.httpRoutes(fetchSvc) <+>
+            EmailContactRoutes.httpRoutes(emailSvc) <+>
+            CORSSetup.methodConfig(ImdbRoutes.publicRoutes(imdbSvc, historyRepo)) <+>
+            PoolSvcRoutes.httpRoutes(poolSvc) <+>
+            AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token)),
         s"/api/$apiVersion/pro" ->
           CORSSetup.methodConfig(authMw(ImdbRoutes.authedRoutes(imdbSvc, historyRepo)))
       ).orNotFound
