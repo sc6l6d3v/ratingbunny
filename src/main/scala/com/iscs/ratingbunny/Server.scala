@@ -25,7 +25,7 @@ import com.iscs.ratingbunny.domains.{
   UserRepoImpl
 }
 import com.iscs.ratingbunny.repos.HistoryRepo
-import com.iscs.ratingbunny.routes.{AuthRoutes, EmailContactRoutes, FetchImageRoutes, ImdbRoutes, PoolSvcRoutes}
+import com.iscs.ratingbunny.routes.{AuthRoutes, EmailContactRoutes, FetchImageRoutes, ImdbRoutes, PoolSvcRoutes, CORSSetup}
 import com.iscs.ratingbunny.security.JwtAuth
 import com.iscs.ratingbunny.util.BcryptHasher
 import com.typesafe.scalalogging.Logger
@@ -113,13 +113,15 @@ object Server:
       authMw = JwtAuth.middleware(jwtSecretKey)
       httpApp = Router(
         s"/api/$apiVersion" ->
-          (FetchImageRoutes.httpRoutes(fetchSvc) <+>
-            EmailContactRoutes.httpRoutes(emailSvc) <+>
-            ImdbRoutes.publicRoutes(imdbSvc, historyRepo) <+>
-            PoolSvcRoutes.httpRoutes(poolSvc) <+>
-            AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token)),
+          CORSSetup.methodConfig(
+            FetchImageRoutes.httpRoutes(fetchSvc) <+>
+              EmailContactRoutes.httpRoutes(emailSvc) <+>
+              ImdbRoutes.publicRoutes(imdbSvc, historyRepo) <+>
+              PoolSvcRoutes.httpRoutes(poolSvc) <+>
+              AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token)
+          ),
         s"/api/$apiVersion/pro" ->
-          authMw(ImdbRoutes.authedRoutes(imdbSvc, historyRepo))
+          CORSSetup.methodConfig(authMw(ImdbRoutes.authedRoutes(imdbSvc, historyRepo)))
       ).orNotFound
       _            <- Sync[F].delay(L.info(s""""added routes for auth, email, hx, imdb, pool, """))
       finalHttpApp <- Sync[F].delay(hpLogger.httpApp(logHeaders = true, logBody = false)(httpApp))

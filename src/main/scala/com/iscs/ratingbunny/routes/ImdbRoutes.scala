@@ -133,13 +133,16 @@ object ImdbRoutes extends DecodeUtils:
             res <- Ok(lst)
           yield res
       }
-      .map(_.withContentType(`Content-Type`(org.http4s.MediaType.application.json)))
+      .map(
+        _.withContentType(`Content-Type`(org.http4s.MediaType.application.json))
+      )
 
   // ---------- AUTHED NAME routes --------------------------------------------------
   def authedRoutes[F[_]: Async](I: ImdbQuery[F], hx: HistoryRepo[F]): AuthedRoutes[String, F] =
     val dsl = Http4sDsl[F]; import dsl.*
 
-    AuthedRoutes.of[String, F] {
+    AuthedRoutes
+      .of[String, F] {
       case authreq @ POST -> Root / "name2" / name / rating as user =>
         for
           p   <- authreq.req.as[ReqParams]
@@ -183,3 +186,6 @@ object ImdbRoutes extends DecodeUtils:
           res <- Ok(lst)
         yield res
     }
+      .map(
+        _.withContentType(`Content-Type`(org.http4s.MediaType.application.json))
+      )
