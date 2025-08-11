@@ -119,7 +119,7 @@ object Server:
             PoolSvcRoutes.httpRoutes(poolSvc) <+>
             AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token)),
         s"/api/$apiVersion/pro" ->
-          authMw(ImdbRoutes.authedRoutes(imdbSvc, historyRepo))
+          ImdbRoutes.authedRoutes(imdbSvc, historyRepo, authMw)
       ).orNotFound
       _            <- Sync[F].delay(L.info(s""""added routes for auth, email, hx, imdb, pool, """))
       finalHttpApp <- Sync[F].delay(hpLogger.httpApp(logHeaders = true, logBody = false)(httpApp))
