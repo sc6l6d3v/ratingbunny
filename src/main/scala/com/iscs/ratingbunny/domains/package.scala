@@ -99,6 +99,9 @@ package object domains:
   final case class LoginOK(userid: String, tokens: TokenPair)
   final case class SignupOK(userid: String, tokens: TokenPair)
 
+  /** Public view of a user, omitting sensitive fields */
+  final case class UserInfo(userid: String, email: String, displayName: Option[String])
+
   // ===== Requests / responses ===================================================
   final case class RegisterReq(email: String, password: String)
   final case class LoginReq(email: String, password: String)

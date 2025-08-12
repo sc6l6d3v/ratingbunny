@@ -1,0 +1,49 @@
+package com.iscs.ratingbunny.routes
+
+import cats.effect.IO
+import munit.CatsEffectSuite
+import org.http4s._
+import org.http4s.implicits._
+import org.http4s.circe._
+import io.circe.Json
+import io.circe.generic.auto._
+import pdi.jwt.{JwtAlgorithm, JwtCirce, JwtClaim}
+import com.iscs.ratingbunny.domains.{UserRepo, UserDoc, Plan, SubscriptionStatus}
+import com.iscs.ratingbunny.security.JwtAuth
+
+class AuthRoutesSuite extends CatsEffectSuite {
+
+  private val user = UserDoc(
+    email = "test@example.com",
+    passwordHash = "hash",
+    userid = "user1",
+    plan = Plan.Free,
+    status = SubscriptionStatus.Active,
+    displayName = Some("Tester")
+  )
+
+  private val repo = new UserRepo[IO] {
+    def findByEmail(email: String) = IO.pure(None)
+    def insert(u: UserDoc) = IO.unit
+    def findByUserId(id: String) = IO.pure(if id == user.userid then Some(user) else None)
+  }
+
+  private val secret    = "test-secret"
+  private val authMw    = JwtAuth.middleware[IO](secret)
+  private val authedSvc = AuthRoutes.authedRoutes[IO](repo, authMw)
+
+  private val token = JwtCirce.encode(JwtClaim(subject = Some(user.userid)), secret, JwtAlgorithm.HS256)
+
+  test("GET /auth/me returns user info") {
+    val req = Request[IO](Method.GET, uri"/auth/me")
+      .putHeaders(headers.Authorization(Credentials.Token(AuthScheme.Bearer, token)))
+
+    authedSvc.orNotFound.run(req).flatMap { resp =>
+      assertEquals(resp.status, Status.Ok)
+      resp.as[Json].map { json =>
+        assertEquals(json.hcursor.get[String]("userid"), Right(user.userid))
+        assertEquals(json.hcursor.get[String]("email"), Right(user.email))
+      }
+    }
+  }
+}

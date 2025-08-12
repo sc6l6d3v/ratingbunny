@@ -117,7 +117,8 @@ object Server:
             EmailContactRoutes.httpRoutes(emailSvc) <+>
             ImdbRoutes.publicRoutes(imdbSvc, historyRepo) <+>
             PoolSvcRoutes.httpRoutes(poolSvc) <+>
-            AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token)),
+            AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token) <+>
+            AuthRoutes.authedRoutes(userRepo, authMw)),
         s"/api/$apiVersion/pro" ->
           ImdbRoutes.authedRoutes(imdbSvc, historyRepo, authMw)
       ).orNotFound

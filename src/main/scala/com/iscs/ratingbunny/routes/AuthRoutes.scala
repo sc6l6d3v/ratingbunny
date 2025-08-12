@@ -12,7 +12,8 @@ import io.circe.{DecodingFailure, Json}
 import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder}
 import org.http4s.circe.{jsonEncoderOf, jsonOf}
 import org.http4s.dsl.Http4sDsl
-import org.http4s.{headers, AuthScheme, Credentials, EntityDecoder, EntityEncoder, HttpRoutes, InvalidMessageBodyFailure, Request, Response}
+import org.http4s.{headers, AuthScheme, Credentials, EntityDecoder, EntityEncoder, HttpRoutes, InvalidMessageBodyFailure, Request, Response, AuthedRoutes}
+import org.http4s.server.AuthMiddleware
 
 object AuthRoutes:
   private val L = Logger[this.type]
@@ -110,3 +111,18 @@ object AuthRoutes:
       case req @ POST -> Root / "auth" / "logout" =>
         bearer(req).fold(Forbidden())(tok => token.revoke(tok) *> NoContent())
     CORSSetup.methodConfig(svc)
+
+  def authedRoutes[F[_]: Async](userRepo: UserRepo[F], authMw: AuthMiddleware[F, String]): HttpRoutes[F] =
+    val dsl = Http4sDsl[F]
+    import dsl.*
+
+    val svc = AuthedRoutes.of[String, F]:
+      case GET -> Root / "auth" / "me" as userId =>
+        userRepo.findByUserId(userId).flatMap {
+          case Some(u) =>
+            val info = UserInfo(u.userid, u.email, u.displayName)
+            Ok(info.asJson)
+          case None => NotFound()
+        }
+
+    CORSSetup.methodConfig(authMw(svc))
