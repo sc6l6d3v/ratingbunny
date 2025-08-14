@@ -12,7 +12,18 @@ import io.circe.{DecodingFailure, Json}
 import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder}
 import org.http4s.circe.{jsonEncoderOf, jsonOf}
 import org.http4s.dsl.Http4sDsl
-import org.http4s.{headers, AuthScheme, Credentials, EntityDecoder, EntityEncoder, HttpRoutes, InvalidMessageBodyFailure, Request, Response, AuthedRoutes}
+import org.http4s.{
+  headers,
+  AuthScheme,
+  AuthedRoutes,
+  Credentials,
+  EntityDecoder,
+  EntityEncoder,
+  HttpRoutes,
+  InvalidMessageBodyFailure,
+  Request,
+  Response
+}
 import org.http4s.server.AuthMiddleware
 
 object AuthRoutes:
@@ -120,7 +131,7 @@ object AuthRoutes:
       case GET -> Root / "auth" / "me" as userId =>
         userRepo.findByUserId(userId).flatMap {
           case Some(u) =>
-            val info = UserInfo(u.userid, u.email, u.displayName)
+            val info = UserInfo(u.userid, u.email, u.plan.asString, u.displayName)
             Ok(info.asJson)
           case None => NotFound()
         }

@@ -100,7 +100,7 @@ package object domains:
   final case class SignupOK(userid: String, tokens: TokenPair)
 
   /** Public view of a user, omitting sensitive fields */
-  final case class UserInfo(userid: String, email: String, displayName: Option[String])
+  final case class UserInfo(userid: String, email: String, plan: String, displayName: Option[String])
 
   // ===== Requests / responses ===================================================
   final case class RegisterReq(email: String, password: String)
