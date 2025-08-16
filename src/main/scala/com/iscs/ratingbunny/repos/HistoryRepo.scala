@@ -63,19 +63,21 @@ final class HistoryRepo[F[_]: Async](private[repos] val coll: MongoCollection[F,
     for {
       t <- now
       _ <- Sync[F].delay(L.info(s"history log $userId $sig $newDoc"))
-      val update = JUpdates.combine(
-        JUpdates.setOnInsert("params", newDoc("params")),
-        JUpdates.set("createdAt", t),
-        JUpdates.inc("hits", 1)
-      )
-      _ <- coll
-        .updateOne(filter = filter, update = update, options = UpdateOptions().upsert(true))
-        .void
-        .handleErrorWith {
-          case mw: MongoWriteException if mw.getError.getCategory == DUPLICATE_KEY =>
-            coll.updateOne(filter = filter, update = update, options = UpdateOptions()).void
-          case _ => Async[F].unit
-        }
+      _ <- {
+        val update = JUpdates.combine(
+          JUpdates.setOnInsert("params", newDoc("params")),
+          JUpdates.set("createdAt", t),
+          JUpdates.inc("hits", 1)
+        )
+        coll
+          .updateOne(filter = filter, update = update, options = UpdateOptions().upsert(true))
+          .void
+          .handleErrorWith {
+            case mw: MongoWriteException if mw.getError.getCategory == DUPLICATE_KEY =>
+              coll.updateOne(filter = filter, update = update, options = UpdateOptions()).void
+            case _ => Async[F].unit
+          }
+      }
     } yield ()
   }
 
