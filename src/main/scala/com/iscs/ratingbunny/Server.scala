@@ -115,7 +115,7 @@ object Server:
         s"/api/$apiVersion" ->
           (FetchImageRoutes.httpRoutes(fetchSvc) <+>
             EmailContactRoutes.httpRoutes(emailSvc) <+>
-            ImdbRoutes.publicRoutes(imdbSvc, historyRepo) <+>
+              ImdbRoutes.publicRoutes(imdbSvc, historyRepo, jwtSecretKey) <+>
             PoolSvcRoutes.httpRoutes(poolSvc) <+>
             AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token) <+>
             AuthRoutes.authedRoutes(userRepo, authMw)),
