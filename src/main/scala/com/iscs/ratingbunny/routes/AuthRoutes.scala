@@ -112,6 +112,12 @@ object AuthRoutes:
                   case Left(LoginError.Inactive) =>
                     Forbidden(Json.obj("error" -> Json.fromString("account inactive")))
         yield resp
+      case POST -> Root / "auth" / "guest" =>
+        for
+          uid <- Sync[F].delay(java.util.UUID.randomUUID().toString).map(u => s"guest-$u")
+          tp  <- token.issueGuest(uid)
+          resp <- Ok(Json.obj("access" -> tp.access.asJson, "refresh" -> tp.refresh.asJson))
+        yield resp
       case req @ POST -> Root / "auth" / "refresh" =>
         bearer(req).fold(Forbidden()) { tok =>
           token.rotate(tok).flatMap {

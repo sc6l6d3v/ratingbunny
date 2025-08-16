@@ -8,7 +8,20 @@ import org.http4s.circe._
 import io.circe.Json
 import io.circe.generic.auto._
 import pdi.jwt.{JwtAlgorithm, JwtCirce, JwtClaim}
-import com.iscs.ratingbunny.domains.{UserRepo, UserDoc, Plan, SubscriptionStatus}
+import com.iscs.ratingbunny.domains.{
+  AuthCheck,
+  AuthLogin,
+  LoginError,
+  LoginRequest,
+  SignupError,
+  SignupRequest,
+  TokenIssuer,
+  TokenPair,
+  UserDoc,
+  UserRepo,
+  Plan,
+  SubscriptionStatus
+}
 import com.iscs.ratingbunny.security.JwtAuth
 
 class AuthRoutesSuite extends CatsEffectSuite {
@@ -32,6 +45,20 @@ class AuthRoutesSuite extends CatsEffectSuite {
   private val authMw    = JwtAuth.middleware[IO](secret)
   private val authedSvc = AuthRoutes.authedRoutes[IO](repo, authMw)
 
+  private val stubCheck = new AuthCheck[IO]:
+    def signup(req: SignupRequest) = IO.pure(Left(SignupError.BadEmail))
+
+  private val stubLogin = new AuthLogin[IO]:
+    def login(req: LoginRequest) = IO.pure(Left(LoginError.UserNotFound))
+
+  private val stubToken = new TokenIssuer[IO]:
+    def issue(u: UserDoc) = IO.pure(TokenPair("access", "refresh"))
+    def issueGuest(uid: String) = IO.pure(TokenPair(s"$uid-a", s"$uid-r"))
+    def rotate(r: String) = IO.pure(None)
+    def revoke(r: String) = IO.unit
+
+  private val httpSvc = AuthRoutes.httpRoutes[IO](stubCheck, stubLogin, repo, stubToken).orNotFound
+
   private val token = JwtCirce.encode(JwtClaim(subject = Some(user.userid)), secret, JwtAlgorithm.HS256)
 
   test("GET /auth/me returns user info") {
@@ -43,6 +70,19 @@ class AuthRoutesSuite extends CatsEffectSuite {
       resp.as[Json].map { json =>
         assertEquals(json.hcursor.get[String]("userid"), Right(user.userid))
         assertEquals(json.hcursor.get[String]("email"), Right(user.email))
+      }
+    }
+  }
+
+  test("POST /auth/guest issues tokens") {
+    val req = Request[IO](Method.POST, uri"/auth/guest")
+    httpSvc.run(req).flatMap { resp =>
+      assertEquals(resp.status, Status.Ok)
+      resp.as[Json].map { json =>
+        val a = json.hcursor.get[String]("access").toOption.get
+        val r = json.hcursor.get[String]("refresh").toOption.get
+        assert(a.contains("guest-"))
+        assert(r.contains("guest-"))
       }
     }
   }
