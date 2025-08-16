@@ -151,7 +151,7 @@ object ImdbRoutes extends DecodeUtils:
             p   <- authreq.req.as[ReqParams]
             rtg <- getRating(rating)
             lst <- I.getByName(name, rtg, p, SortField.from(p.sortType)).compile.toList
-            _   <- hx.log("user", p).start
+            _   <- hx.log(user, p).start
             res <- Ok(lst)
           yield res
 
@@ -174,7 +174,7 @@ object ImdbRoutes extends DecodeUtils:
             _        <- Sync[F].delay(L.info(s"got list: $lst"))
             pageLst   = pureExtract(lst, dimsL.head, pgs)
             left      = remain(dimsL.head, pgs, lst.size)
-            _ <- hx.log("user", p).start
+            _ <- hx.log(user, p).start
             res <- Ok(pageLst).map(
               _.putHeaders(
                 Header.Raw(ci"X-Remaining-Count", left.toString),
@@ -188,7 +188,7 @@ object ImdbRoutes extends DecodeUtils:
             p   <- authreq.req.as[ReqParams]
             rtg <- getRating(rating)
             lst <- I.getAutosuggestName(name, rtg, p).compile.toList
-            _   <- hx.log("user", p).start
+            _   <- hx.log(user, p).start
             res <- Ok(lst)
           yield res
       }
