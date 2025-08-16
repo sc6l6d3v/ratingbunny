@@ -6,6 +6,9 @@ Even requests to the free endpoints should include an `Authorization: Bearer <to
 header so activity can be attributed to a user. Calls without a valid token are
 still served but the requester will be logged as `guest`.
 
+Search history entries are stored with a compound unique index on `userId` and
+`sig` so identical queries from different users don't clash.
+
 ### Running locally
 
 Environment variables required by the service can be stored in a `.env` file at

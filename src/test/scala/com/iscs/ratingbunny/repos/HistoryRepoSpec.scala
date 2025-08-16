@@ -29,7 +29,7 @@ class HistoryRepoSpec extends AsyncWordSpec with Matchers with EmbeddedMongo wit
           idx2Docs <- repo.coll.listIndexes
           idx2 = idx2Docs.flatMap(_.getString("name").toList)
         } yield {
-          idx1.toSet should contain allOf ("_id_", "uid_date_idx", "sig_unique_idx")
+          idx1.toSet should contain allOf ("_id_", "uid_date_idx", "uid_sig_unique_idx")
           idx2 shouldEqual idx1
         }
       }
@@ -52,6 +52,28 @@ class HistoryRepoSpec extends AsyncWordSpec with Matchers with EmbeddedMongo wit
           _    <- repo.log("user-123", params) // upsert, hits +1
           doc  <- repo.coll.find(feq("userId", "user-123")).first
         } yield doc.get.getInt("hits").get shouldBe 2
+      }
+
+      "allow identical searches from different users" in withEmbeddedMongoClient { client =>
+        val params = ReqParams(
+          genre = Some(List("Drama")),
+          year = Some(List(2022, 2025)),
+          votes = Some(200000),
+          titleType = Some(List("movie")),
+          isAdult = Some(false),
+          sortType = Some("title")
+        )
+        for {
+          db   <- client.getDatabase("test")
+          repo <- HistoryRepo.make[IO](db)
+          _    <- repo.log("user-1", params)
+          _    <- repo.log("user-2", params)
+          c1   <- repo.coll.count(feq("userId", "user-1"))
+          c2   <- repo.coll.count(feq("userId", "user-2"))
+        } yield {
+          c1 shouldBe 1
+          c2 shouldBe 1
+        }
       }
     }
   }

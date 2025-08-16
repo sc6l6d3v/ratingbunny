@@ -15,6 +15,8 @@ import mongo4cats.collection.MongoCollection
 import mongo4cats.models.collection.{IndexOptions, UpdateOptions}
 import mongo4cats.operations.Index
 import org.mongodb.scala.model.{Filters as JFilters, Updates as JUpdates}
+import com.mongodb.MongoWriteException
+import com.mongodb.ErrorCategory.DUPLICATE_KEY
 
 import java.security.MessageDigest
 import java.time.Instant
@@ -33,10 +35,10 @@ final case class HistoryDoc(
   */
 final class HistoryRepo[F[_]: Async](private[repos] val coll: MongoCollection[F, Document]) extends QuerySetup {
   private val L              = Logger[this.type]
-  private val idxUserDate    = "uid_date_idx"          // desired explicit name
-  private val idxUserDateDef = "userId_1_createdAt_-1" // driver default name
-  private val idxSigUnq      = "sig_unique_idx"
-  private val idxSigUnqDef   = "sig_1"
+  private val idxUserDate     = "uid_date_idx"          // desired explicit name
+  private val idxUserDateDef  = "userId_1_createdAt_-1" // driver default name
+  private val idxUserSigUnq   = "uid_sig_unique_idx"
+  private val idxUserSigUnqDef= "userId_1_sig_1"
 
   // ---------- helpers -------------------------------------------------------
   private def now: F[Instant] = Clock[F].realTimeInstant
@@ -57,20 +59,23 @@ final class HistoryRepo[F[_]: Async](private[repos] val coll: MongoCollection[F,
   /** Upsert or bump the `hits` counter for an identical search. */
   def log(userId: String, params: ReqParams): F[Unit] = {
     val (sig, newDoc) = buildSigAndDoc(userId, params)
+    val filter        = JFilters.and(JFilters.equal("userId", userId), JFilters.equal("sig", sig))
     for {
       t <- now
       _ <- Sync[F].delay(L.info(s"history log $userId $sig $newDoc"))
+      val update = JUpdates.combine(
+        JUpdates.setOnInsert("params", newDoc("params")),
+        JUpdates.set("createdAt", t),
+        JUpdates.inc("hits", 1)
+      )
       _ <- coll
-        .updateOne(
-          filter = JFilters.and(JFilters.equal("userId", userId), JFilters.equal("sig", sig)),
-          update = JUpdates.combine(
-            JUpdates.setOnInsert("params", newDoc("params")),
-            JUpdates.set("createdAt", t),
-            JUpdates.inc("hits", 1)
-          ),
-          options = UpdateOptions().upsert(true)
-        )
+        .updateOne(filter = filter, update = update, options = UpdateOptions().upsert(true))
         .void
+        .handleErrorWith {
+          case mw: MongoWriteException if mw.getError.getCategory == DUPLICATE_KEY =>
+            coll.updateOne(filter = filter, update = update, options = UpdateOptions()).void
+          case _ => Async[F].unit
+        }
     } yield ()
   }
 
@@ -100,14 +105,14 @@ final class HistoryRepo[F[_]: Async](private[repos] val coll: MongoCollection[F,
               IndexOptions(background = true).name(idxUserDate)
             )
             .void
-      // unique sig index ----------------------------------------------
+      // unique userId+sig index ---------------------------------------
       _ <-
-        if (existing(idxSigUnq) || existing(idxSigUnqDef)) Async[F].unit
+        if (existing(idxUserSigUnq) || existing(idxUserSigUnqDef)) Async[F].unit
         else
           coll
             .createIndex(
-              Index.ascending("sig"),
-              IndexOptions(background = true, unique = true).name(idxSigUnq)
+              Index.ascending("userId").ascending("sig"),
+              IndexOptions(background = true, unique = true).name(idxUserSigUnq)
             )
             .void
     } yield ()
