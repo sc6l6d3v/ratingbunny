@@ -63,11 +63,13 @@ class TokenIssuerImpl[F[_]: Async](
     for
       uidOpt <- redis.getDel(key)
       res <- uidOpt.traverse { uid =>
-        userRepo.findByUserId(uid).flatMap {
-          case Some(user) => issue(user).map(Option(_))
-          case None if uid.startsWith("guest-") => issueGuest(uid).map(Option(_))
-          case None       => Option.empty[TokenPair].pure[F]
-        }
+        if uid.startsWith("guest-") then
+          issueGuest(uid).map(Option(_))
+        else
+          userRepo.findByUserId(uid).flatMap {
+            case Some(user) => issue(user).map(Option(_))
+            case None       => Option.empty[TokenPair].pure[F]
+          }
       }
     yield res.flatten
 
