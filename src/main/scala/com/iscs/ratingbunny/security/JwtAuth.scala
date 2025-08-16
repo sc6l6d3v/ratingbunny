@@ -27,12 +27,21 @@ object JwtAuth:
       }
     }
 
-    /** Extract Bearer token from Authorization header */
+  /** Extract Bearer token from Authorization header */
   def extractBearerToken[F[_]](request: Request[F]): Option[String] =
     request.headers.get[Authorization].flatMap {
       case Authorization(org.http4s.Credentials.Token(org.http4s.AuthScheme.Bearer, token)) => Some(token)
       case _                                                                                => None
     }
+
+  /**
+    * Attempt to pull a user id from the request's Authorization header.
+    * Returns `None` when the header is missing or the token fails validation.
+    */
+  def userFromRequest[F[_]: Sync](request: Request[F], secretKey: String): F[Option[String]] =
+    extractBearerToken(request) match
+      case Some(token) => validateJwt(token, secretKey)
+      case None        => Sync[F].pure(None)
 
   /** Create AuthMiddleware using pdi.jwt */
   def middleware[F[_]: Sync](secretKey: String): AuthMiddleware[F, String] =

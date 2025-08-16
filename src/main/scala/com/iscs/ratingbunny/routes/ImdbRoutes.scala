@@ -19,6 +19,7 @@ import org.http4s.circe.*
 import org.http4s.dsl.*
 import org.http4s.headers.`Content-Type`
 import org.http4s.server.AuthMiddleware
+import com.iscs.ratingbunny.security.JwtAuth
 import org.typelevel.ci.*
 
 import scala.annotation.tailrec
@@ -70,7 +71,7 @@ object ImdbRoutes extends DecodeUtils:
   }
 
   // ---------- public TITLE routes -----------------------------------------------
-  def publicRoutes[F[_]: Async](I: ImdbQuery[F], hx: HistoryRepo[F]): HttpRoutes[F] =
+  def publicRoutes[F[_]: Async](I: ImdbQuery[F], hx: HistoryRepo[F], jwtSecret: String): HttpRoutes[F] =
     val dsl = Http4sDsl[F]; import dsl.*
 
     def commonTitle(
@@ -86,10 +87,11 @@ object ImdbRoutes extends DecodeUtils:
         logText: String
     ): F[Response[F]] =
       for
-        params <- req.as[ReqParams]
-        rtg    <- getRating(rating)
-        dimsL = conv(page, ws, wh, cs, ch, off)
-        pgs   = pageSize(dimsL(1), dimsL(3), dimsL(2), dimsL(4), dimsL(5))
+        params  <- req.as[ReqParams]
+        rtg     <- getRating(rating)
+        userOpt <- JwtAuth.userFromRequest(req, jwtSecret)
+        dimsL   = conv(page, ws, wh, cs, ch, off)
+        pgs     = pageSize(dimsL(1), dimsL(3), dimsL(2), dimsL(4), dimsL(5))
         results <- Sync[F]
           .delay(
             if params.year.nonEmpty then fetch(rtg, params, pgs << 3, SortField.from(params.sortType))
@@ -98,7 +100,7 @@ object ImdbRoutes extends DecodeUtils:
           .flatMap(_.compile.toList)
         pageList = pureExtract(results, dimsL.head, pgs)
         left     = remain(dimsL.head, pgs, results.size)
-        _ <- hx.log("guest", params).start
+        _ <- hx.log(userOpt.getOrElse("guest"), params).start
         resp <- Ok(pageList).map(
           _.putHeaders(
             Header.Raw(ci"X-Remaining-Count", left.toString),
@@ -127,11 +129,12 @@ object ImdbRoutes extends DecodeUtils:
 
         case req @ POST -> Root / "autotitle" / title / rating =>
           for
-            p   <- req.as[ReqParams]
-            rtg <- getRating(rating)
-            lst <- I.getAutosuggestTitle(title, rtg, p).compile.toList
-            _   <- hx.log("guest", p).start
-            res <- Ok(lst)
+            p       <- req.as[ReqParams]
+            rtg     <- getRating(rating)
+            userOpt <- JwtAuth.userFromRequest(req, jwtSecret)
+            lst     <- I.getAutosuggestTitle(title, rtg, p).compile.toList
+            _       <- hx.log(userOpt.getOrElse("guest"), p).start
+            res     <- Ok(lst)
           yield res
       }
       .map(
