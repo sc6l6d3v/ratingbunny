@@ -15,6 +15,7 @@ import scala.language.implicitConversions
 
 trait TokenIssuer[F[_]]:
   def issue(user: UserDoc): F[TokenPair] // access + refresh
+  def issueGuest(uid: String): F[TokenPair]
   def rotate(refresh: String): F[Option[TokenPair]]
   def revoke(refresh: String): F[Unit]
 
@@ -37,12 +38,15 @@ class TokenIssuerImpl[F[_]: Async](
     def sha256(s: String): String = md.digest(s.getBytes("UTF-8")).map("%02x" format _).mkString
 
   override def issue(user: UserDoc): F[TokenPair] =
+    issueGuest(user.userid)
+
+  override def issueGuest(uid: String): F[TokenPair] =
     for
       nowDuration <- Clock[F].realTime
       jti         <- Sync[F].delay(UUID.randomUUID().toString)
       jwt = JwtCirce.encode(
         JwtClaim(
-          subject = Some(user.userid),
+          subject = Some(uid),
           issuedAt = Some(nowDuration.length),
           expiration = Some((nowDuration + accessTtl).length),
           jwtId = Some(jti)
@@ -51,7 +55,7 @@ class TokenIssuerImpl[F[_]: Async](
         HS256
       )
       rawRefresh <- Sync[F].delay(UUID.randomUUID().toString)
-      _          <- redis.setEx(s"refresh:${Hash.sha256(rawRefresh)}", user.userid, refreshTtl)
+      _          <- redis.setEx(s"refresh:${Hash.sha256(rawRefresh)}", uid, refreshTtl)
     yield TokenPair(jwt, rawRefresh)
 
   override def rotate(raw: String): F[Option[TokenPair]] =
@@ -59,10 +63,13 @@ class TokenIssuerImpl[F[_]: Async](
     for
       uidOpt <- redis.getDel(key)
       res <- uidOpt.traverse { uid =>
-        userRepo.findByUserId(uid).flatMap {
-          case None       => Option.empty[TokenPair].pure[F]
-          case Some(user) => issue(user).map(Option(_))
-        }
+        if uid.startsWith("guest-") then
+          issueGuest(uid).map(Option(_))
+        else
+          userRepo.findByUserId(uid).flatMap {
+            case Some(user) => issue(user).map(Option(_))
+            case None       => Option.empty[TokenPair].pure[F]
+          }
       }
     yield res.flatten
 

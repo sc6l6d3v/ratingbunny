@@ -23,6 +23,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo:
     new TokenIssuer[IO]:
       private val tp        = TokenPair("a", "r")
       def issue(u: UserDoc) = IO.pure(tp)
+      def issueGuest(uid: String) = IO.pure(tp)
       def rotate(r: String) = IO.pure(Some(tp))
       def revoke(r: String) = IO.unit
 
