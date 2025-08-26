@@ -49,7 +49,8 @@ object ImdbRoutes extends DecodeUtils:
     cardsPerRow(w, columnSpacer, off, cw) * rowsPerPage(h, rowSpacer, ch)
 
   private def dims(strPairs: List[(String, Int)]): List[Int] =
-    strPairs.map { case (s, d) => Try(s.toInt).toOption.getOrElse(d) }
+    strPairs.map:
+      case (s, d) => Try(s.toInt).toOption.getOrElse(d)
 
   private def conv(page: String, ws: String, wh: String, cs: String, ch: String, off: String): List[Int] =
     dims(List((page, 1), (ws, 600), (wh, 900), (cs, 160), (ch, 238), (off, 0)))
@@ -60,15 +61,13 @@ object ImdbRoutes extends DecodeUtils:
   private def remain(pg: Int, pgs: Int, total: Int): Int =
     math.max(total - (pg * pgs), 0)
 
-  implicit val encodeAutoRecBase: Encoder[AutoRecBase] = Encoder.instance {
+  implicit val encodeAutoRecBase: Encoder[AutoRecBase] = Encoder.instance:
     case autoNameRec: AutoNameRec   => autoNameRec.asJson
     case autoTitleRec: AutoTitleRec => autoTitleRec.asJson
-  }
 
-  implicit val encodeTitleRecBase: Encoder[TitleRecBase] = Encoder.instance {
+  implicit val encodeTitleRecBase: Encoder[TitleRecBase] = Encoder.instance:
     case titleRec: TitleRec         => titleRec.asJson
     case titleRecPath: TitleRecPath => titleRecPath.asJson
-  }
 
   // ---------- public TITLE routes -----------------------------------------------
   def publicRoutes[F[_]: Async](I: ImdbQuery[F], hx: HistoryRepo[F], jwtSecret: String): HttpRoutes[F] =
@@ -90,8 +89,8 @@ object ImdbRoutes extends DecodeUtils:
         params  <- req.as[ReqParams]
         rtg     <- getRating(rating)
         userOpt <- JwtAuth.userFromRequest(req, jwtSecret)
-        dimsL   = conv(page, ws, wh, cs, ch, off)
-        pgs     = pageSize(dimsL(1), dimsL(3), dimsL(2), dimsL(4), dimsL(5))
+        dimsL = conv(page, ws, wh, cs, ch, off)
+        pgs   = pageSize(dimsL(1), dimsL(3), dimsL(2), dimsL(4), dimsL(5))
         results <- Sync[F]
           .delay(
             if params.year.nonEmpty then fetch(rtg, params, pgs << 3, SortField.from(params.sortType))
@@ -110,7 +109,7 @@ object ImdbRoutes extends DecodeUtils:
       yield resp
 
     val svc = HttpRoutes
-      .of[F] {
+      .of[F]:
         case req @ POST -> Root / "title" / page / rating
             :? WindowWidthQueryParameterMatcher(ws)
             +& WindowHeightQueryParameterMatcher(wh)
@@ -136,7 +135,6 @@ object ImdbRoutes extends DecodeUtils:
             _       <- hx.log(userOpt.getOrElse("guest"), p).start
             res     <- Ok(lst)
           yield res
-      }
       .map(
         _.withContentType(`Content-Type`(org.http4s.MediaType.application.json))
       )
@@ -148,7 +146,7 @@ object ImdbRoutes extends DecodeUtils:
     val dsl = Http4sDsl[F]; import dsl.*
 
     val svc = AuthedRoutes
-      .of[String, F] {
+      .of[String, F]:
         case authreq @ POST -> Root / "name2" / name / rating as user =>
           for
             p   <- authreq.req.as[ReqParams]
@@ -174,9 +172,9 @@ object ImdbRoutes extends DecodeUtils:
               .getByEnhancedName(p.query.getOrElse(""), rtg, p, pgs << 3, SortField.from(p.sortType))
               .compile
               .toList
-            _        <- Sync[F].delay(L.info(s"got list: $lst"))
-            pageLst   = pureExtract(lst, dimsL.head, pgs)
-            left      = remain(dimsL.head, pgs, lst.size)
+            _ <- Sync[F].delay(L.info(s"got list: $lst"))
+            pageLst = pureExtract(lst, dimsL.head, pgs)
+            left    = remain(dimsL.head, pgs, lst.size)
             _ <- hx.log(user, p).start
             res <- Ok(pageLst).map(
               _.putHeaders(
@@ -194,7 +192,6 @@ object ImdbRoutes extends DecodeUtils:
             _   <- hx.log(user, p).start
             res <- Ok(lst)
           yield res
-      }
       .map(
         _.withContentType(`Content-Type`(org.http4s.MediaType.application.json))
       )

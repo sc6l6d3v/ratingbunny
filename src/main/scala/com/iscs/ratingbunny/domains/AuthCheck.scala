@@ -46,13 +46,13 @@ final class AuthCheckImpl[F[_]: Async](
 
   private def genUserId(base: String): F[String] =
     val seed = base.takeWhile(_ != '@')
-    def loop(i: Int): F[String] = {
+    def loop(i: Int): F[String] =
       val candidate = if (i == 0) seed else s"$seed$i"
-      usersCol.count(feq("userid", candidate)).flatMap {
-        case 0 => candidate.pure[F]
-        case _ => loop(i + 1)
-      }
-    }
+      usersCol
+        .count(feq("userid", candidate))
+        .flatMap:
+          case 0 => candidate.pure[F]
+          case _ => loop(i + 1)
     loop(0)
 
   override def signup(req: SignupRequest): F[Either[SignupError, SignupOK]] =

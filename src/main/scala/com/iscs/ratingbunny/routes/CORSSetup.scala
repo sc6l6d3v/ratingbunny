@@ -10,7 +10,7 @@ import org.http4s.server.middleware.*
 import org.typelevel.ci.*
 import scala.concurrent.duration.*
 
-object CORSSetup {
+object CORSSetup:
   private val L = Logger[this.type]
   private val reactDeploys: Set[Origin.Host] = sys.env
     .getOrElse("ORIGINS", "http://localhost")
@@ -25,15 +25,13 @@ object CORSSetup {
     .toSet
   L.info(s"got origins: ${reactDeploys.mkString(",")}")
   private val methods = Set(Method.GET, Method.POST)
-  private val checkOrigin = (host: Origin.Host) => {
-    val ok = reactDeploys.exists { curHosts =>
+  private val checkOrigin: Origin.Host => Boolean = host =>
+    val ok = reactDeploys.exists: curHosts =>
       val res = curHosts == host
       L.debug(s"compare ${curHosts.renderString} to ${host.renderString}: $res")
       res
-    }
     L.debug(s"origin ${host.renderString} accepted? $ok")
     ok
-  }
 
   def methodConfig[F[_]: Async](svc: HttpRoutes[F]): HttpRoutes[F] = CORS.policy
     .withAllowCredentials(true)
@@ -45,4 +43,3 @@ object CORSSetup {
 
   def RouteNotFound(badVal: String): RouteMessage =
     RouteMessage(badVal)
-}

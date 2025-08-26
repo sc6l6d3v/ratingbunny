@@ -17,21 +17,20 @@ import org.http4s.{Method, Request, Uri}
 import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
 
-trait ImdbQuery[F[_]] {
+trait ImdbQuery[F[_]]:
   def getByTitle(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec]
   def getByTitlePath(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRecPath]
   def getByName(name: String, rating: Double, params: ReqParams, sortField: SortField): Stream[F, TitleRec]
   def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec]
   def getAutosuggestTitle(titlePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoTitleRec]
   def getAutosuggestName(titlePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoNameRec]
-}
 
 class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     compFx: MongoCollection[F, TitleRec],
     tbrFx: MongoCollection[F, TitleRec],
     imageHost: String,
     client: Option[Client[F]]
-) extends ImdbQuery[F] with DecodeUtils with QuerySetup {
+) extends ImdbQuery[F] with DecodeUtils with QuerySetup:
 
   private val proto     = protoc(imageHost)
   private val imagePath = s"$proto://$imageHost/path"
@@ -42,16 +41,13 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
   private def getTitlePathsStream(titleRecsStr: Stream[F, TitleRecPath], chunkSize: Int): Stream[F, TitleRecPath] =
     titleRecsStr
       .chunkN(chunkSize, allowFewer = true) // Chunk the stream into groups of chunkSize
-      .flatMap { chunk =>
+      .flatMap: chunk =>
         // Convert the chunk to a list, process each element in parallel, and flatten back into the stream
         Stream
-          .eval(chunk.toList.parTraverseN(64) { titleRec => // Evaluate parallel traversal for the chunk
-            for {
-              pathRec <- getPath(titleRec._id) // Assume getPath returns F[PathRec] with a 'path' member
-            } yield titleRec.copy(posterPath = Some(pathRec.path))
-          })
+          .eval(chunk.toList.parTraverseN(64): titleRec => // Evaluate parallel traversal for the chunk
+            for pathRec <- getPath(titleRec._id) // Assume getPath returns F[PathRec] with a 'path' member
+            yield titleRec.copy(posterPath = Some(pathRec.path)))
           .flatMap(Stream.emits) // Directly emit the results as a stream
-      }
 
   /** db.title_basics_ratings.aggregate([ { $match: { primaryTitle: { $regex: "Gone " }, or primaryTitle: "Gone with the Light", if exact
     * startYear: { "$gte": 2019, "$lte": 2023 }, genresList: { "$in": ["Adventure"] }, titleType: "tvEpisode", isAdult: 0, $or: [{
@@ -71,29 +67,25 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     *   how to order
     * @return
     */
-  override def getByTitle(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec] = {
+  override def getByTitle(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec] =
     val queryPipeline = genTitleQueryPipeline(genTitleFilter(params, rating), isLimited = true, limit, sortField)
 
-    for {
+    for
       start  <- Stream.eval(Clock[F].monotonic)
       midRef <- Stream.eval(Ref.of[F, Long](0L))
       resultStream <- tbrFx
         .aggregateWithCodec[TitleRec](queryPipeline)
         .stream
-        .evalMap { result =>
-          Clock[F].monotonic.flatMap { mid =>
+        .evalMap: result =>
+          Clock[F].monotonic.flatMap: mid =>
             midRef.set(mid.toMillis) >> Sync[F].pure(result)
-          }
-        }
-        .onFinalize {
-          for {
+        .onFinalize:
+          for
             end <- Clock[F].monotonic
             mid <- midRef.get
             _ <- Sync[F].delay(L.info(s"getByTitle took ${end.toMillis - start.toMillis} ms, aggregation took ${mid - start.toMillis} ms"))
-          } yield ()
-        }
-    } yield resultStream
-  }
+          yield ()
+    yield resultStream
 
   /** db.getCollection("title_principals_namerating").aggregate([ { $match: { "startYear": { "$gte": 1961, "$lte": 2023 }, "genresList": {
     * "$in": ["Thriller"] }, "titleType": "movie", "isAdult": 0, "numVotes": { "$gte": 500 }, "$or": [{ "averageRating": { "$exists": false
@@ -116,21 +108,20 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     * @return
     *   stream of object
     */
-  override def getByName(name: String, rating: Double, params: ReqParams, sortField: SortField): Stream[F, TitleRec] = {
+  override def getByName(name: String, rating: Double, params: ReqParams, sortField: SortField): Stream[F, TitleRec] =
     val queryPipeline = genQueryPipeline(genNameFilter(name, rating, params), sortField = sortField)
 
-    Stream.eval(Clock[F].monotonic).flatMap { start =>
-      compFx
-        .aggregateWithCodec[TitleRec](queryPipeline)
-        .stream
-        .onFinalize { // Ensure that logging operation happens once after all stream processing is complete
-          for {
-            end <- Clock[F].monotonic
-            _   <- Sync[F].delay(L.info(s"getByName took {} ms", (end - start).toMillis))
-          } yield ()
-        }
-    }
-  }
+    Stream
+      .eval(Clock[F].monotonic)
+      .flatMap: start =>
+        compFx
+          .aggregateWithCodec[TitleRec](queryPipeline)
+          .stream
+          .onFinalize: // Ensure that logging operation happens once after all stream processing is complete
+            for
+              end <- Clock[F].monotonic
+              _   <- Sync[F].delay(L.info(s"getByName took {} ms", (end - start).toMillis))
+            yield ()
 
   /** db.getCollection("title_principals_namerating").aggregate([ { $match: { firstName: "Wallis", lastName: "Day", "startYear": { "$gte":
     * 2010, "$lte": 2024 }, "genresList": { "$in": ["Adventure"] }, "titleType": "tvEpisode", "isAdult": 0, "numVotes": { "$gte": 500 },
@@ -154,25 +145,23 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     * @return
     *   stream object
     */
-  override def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec] = {
+  override def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec] =
     val queryPipeline = genQueryPipeline(genNameFilter(name, rating, params), isLimited = true, limit, sortField = sortField)
 
-    Stream.eval(Clock[F].monotonic).flatMap { start =>
-      compFx
-        .aggregateWithCodec[TitleRec](queryPipeline)
-        .stream
-        .evalTap { result =>
-          // Log each result as it comes through
-          Sync[F].delay(L.info(s"getByEnhancedName result: $result"))
-        }
-        .onFinalize { // Ensure that logging operation happens once after all stream processing is complete
-          for {
-            end <- Clock[F].monotonic
-            _   <- Sync[F].delay(L.info(s"getByEnhancedName took {} ms", (end - start).toMillis))
-          } yield ()
-        }
-    }
-  }
+    Stream
+      .eval(Clock[F].monotonic)
+      .flatMap: start =>
+        compFx
+          .aggregateWithCodec[TitleRec](queryPipeline)
+          .stream
+          .evalTap: result =>
+            // Log each result as it comes through
+            Sync[F].delay(L.info(s"getByEnhancedName result: $result"))
+          .onFinalize: // Ensure that logging operation happens once after all stream processing is complete
+            for
+              end <- Clock[F].monotonic
+              _   <- Sync[F].delay(L.info(s"getByEnhancedName took {} ms", (end - start).toMillis))
+            yield ()
 
   /** db.getCollection("title_principals_namerating").aggregate([ { $match: { firstName: { $regex: "^Dan"}, lastName: { $regex: "^Cra" },
     * "startYear": { "$gte": 1995, "$lte": 2024 }, "genresList": { "$in": ["Adventure"] }, "titleType": "movie", "isAdult": 0, "numVotes": {
@@ -185,21 +174,20 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     * @return
     *   stream of object
     */
-  override def getAutosuggestName(namePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoNameRec] = {
+  override def getAutosuggestName(namePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoNameRec] =
     val queryPipeline = genAutonameFilter(namePrefix, rating, params)
 
-    Stream.eval(Clock[F].monotonic).flatMap { start =>
-      compFx
-        .aggregateWithCodec[AutoNameRec](queryPipeline)
-        .stream
-        .onFinalize { // Ensure that logging operation happens once after all stream processing is complete
-          for {
-            end <- Clock[F].monotonic
-            _   <- Sync[F].delay(L.info(s"getAutosuggestName took {} ms", (end - start).toMillis))
-          } yield ()
-        }
-    }
-  }
+    Stream
+      .eval(Clock[F].monotonic)
+      .flatMap: start =>
+        compFx
+          .aggregateWithCodec[AutoNameRec](queryPipeline)
+          .stream
+          .onFinalize: // Ensure that logging operation happens once after all stream processing is complete
+            for
+              end <- Clock[F].monotonic
+              _   <- Sync[F].delay(L.info(s"getAutosuggestName took {} ms", (end - start).toMillis))
+            yield ()
 
   /** db.getCollection("title_principals_namerating").aggregate([ { $match: { primaryTitle: { $regex: "^^Gone with the" }, "startYear": {
     * "$gte": 2015, "$lte": 2024 }, "genresList": { "$in": ["Adventure"] }, "titleType": "movie", "isAdult": 0, "numVotes": { "$gte": 50 },
@@ -211,46 +199,43 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     * @return
     *   stream of object
     */
-  override def getAutosuggestTitle(titlePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoTitleRec] = {
+  override def getAutosuggestTitle(titlePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoTitleRec] =
     val queryPipeline = genAutotitleFilter(titlePrefix, rating, params)
 
-    Stream.eval(Clock[F].monotonic).flatMap { start =>
-      compFx
-        .aggregateWithCodec[AutoTitleRec](queryPipeline)
-        .stream
-        .onFinalize { // Ensure that logging operation happens once after all stream processing is complete
-          for {
-            end <- Clock[F].monotonic
-            _   <- Sync[F].delay(L.info(s"getAutosuggestTitle took {} ms", (end - start).toMillis))
-          } yield ()
-        }
-    }
-  }
+    Stream
+      .eval(Clock[F].monotonic)
+      .flatMap: start =>
+        compFx
+          .aggregateWithCodec[AutoTitleRec](queryPipeline)
+          .stream
+          .onFinalize: // Ensure that logging operation happens once after all stream processing is complete
+            for
+              end <- Clock[F].monotonic
+              _   <- Sync[F].delay(L.info(s"getAutosuggestTitle took {} ms", (end - start).toMillis))
+            yield ()
 
-  private def getPath(imdb: String): F[PathRec] = {
+  private def getPath(imdb: String): F[PathRec] =
     val pathStr = s"$imagePath/$imdb/S"
     val pathReq = Request[F](Method.GET, Uri.unsafeFromString(pathStr))
 
-    for {
+    for
       result <- Clock[F].timed(client.get.expect(pathReq)(jsonOf[F, PathRec]))
       (pathTime, pathVal) = result
       _ <- Sync[F].delay(L.info(s"pathStr {} imdb {} time {} ms", pathStr, imdb, pathTime.toMillis))
-    } yield pathVal
-  }
+    yield pathVal
 
   override def getByTitlePath(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRecPath] =
-    Stream.eval(Clock[F].monotonic).flatMap { overallStart =>
-      val queryPipeline = genTitleQueryPipeline(genTitleFilter(params, rating), isLimited = true, limit, sortField)
+    Stream
+      .eval(Clock[F].monotonic)
+      .flatMap: overallStart =>
+        val queryPipeline = genTitleQueryPipeline(genTitleFilter(params, rating), isLimited = true, limit, sortField)
 
-      // connect the streams
-      val titleRecPathStream = tbrFx.aggregateWithCodec[TitleRecPath](queryPipeline).stream
-      val enhancedStream     = getTitlePathsStream(titleRecPathStream, chunkSize)
+        // connect the streams
+        val titleRecPathStream = tbrFx.aggregateWithCodec[TitleRecPath](queryPipeline).stream
+        val enhancedStream     = getTitlePathsStream(titleRecPathStream, chunkSize)
 
-      enhancedStream.onFinalize {
-        for {
-          endEnh <- Clock[F].monotonic
-          _      <- Sync[F].delay(L.info(s"getByTitlePathAgg took {} ms", (endEnh - overallStart).toMillis))
-        } yield ()
-      }
-    }
-}
+        enhancedStream.onFinalize:
+          for
+            endEnh <- Clock[F].monotonic
+            _      <- Sync[F].delay(L.info(s"getByTitlePathAgg took {} ms", (endEnh - overallStart).toMillis))
+          yield ()

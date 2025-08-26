@@ -44,9 +44,11 @@ object AuthRoutes:
     def hashPassword(plain: String): F[String] = hasher.hash(plain)
 
     def bearer(req: Request[F]): Option[String] =
-      req.headers.get[headers.Authorization].collect { case headers.Authorization(Credentials.Token(AuthScheme.Bearer, v)) =>
-        v
-      }
+      req.headers
+        .get[headers.Authorization]
+        .collect:
+          case headers.Authorization(Credentials.Token(AuthScheme.Bearer, v)) =>
+            v
 
     val svc = HttpRoutes.of[F]:
       case req @ POST -> Root / "auth" / "signup" =>
@@ -114,17 +116,17 @@ object AuthRoutes:
         yield resp
       case POST -> Root / "auth" / "guest" =>
         for
-          uid <- Sync[F].delay(java.util.UUID.randomUUID().toString).map(u => s"guest-$u")
-          tp  <- token.issueGuest(uid)
+          uid  <- Sync[F].delay(java.util.UUID.randomUUID().toString).map(u => s"guest-$u")
+          tp   <- token.issueGuest(uid)
           resp <- Ok(Json.obj("access" -> tp.access.asJson, "refresh" -> tp.refresh.asJson))
         yield resp
       case req @ POST -> Root / "auth" / "refresh" =>
-        bearer(req).fold(Forbidden()) { tok =>
-          token.rotate(tok).flatMap {
-            case None    => Forbidden()
-            case Some(p) => Ok(p)
-          }
-        }
+        bearer(req).fold(Forbidden()): tok =>
+          token
+            .rotate(tok)
+            .flatMap:
+              case None    => Forbidden()
+              case Some(p) => Ok(p)
       case req @ POST -> Root / "auth" / "logout" =>
         bearer(req).fold(Forbidden())(tok => token.revoke(tok) *> NoContent())
     CORSSetup.methodConfig(svc)
@@ -135,11 +137,12 @@ object AuthRoutes:
 
     val svc = AuthedRoutes.of[String, F]:
       case GET -> Root / "auth" / "me" as userId =>
-        userRepo.findByUserId(userId).flatMap {
-          case Some(u) =>
-            val info = UserInfo(u.userid, u.email, u.plan.asString, u.displayName)
-            Ok(info.asJson)
-          case None => NotFound()
-        }
+        userRepo
+          .findByUserId(userId)
+          .flatMap:
+            case Some(u) =>
+              val info = UserInfo(u.userid, u.email, u.plan.asString, u.displayName)
+              Ok(info.asJson)
+            case None => NotFound()
 
     CORSSetup.methodConfig(authMw(svc))

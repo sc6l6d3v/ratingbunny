@@ -21,19 +21,19 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo:
   private val hasher                    = TestHasher.make[IO]
   private val stubToken: TokenIssuer[IO] =
     new TokenIssuer[IO]:
-      private val tp        = TokenPair("a", "r")
-      def issue(u: UserDoc) = IO.pure(tp)
+      private val tp              = TokenPair("a", "r")
+      def issue(u: UserDoc)       = IO.pure(tp)
       def issueGuest(uid: String) = IO.pure(tp)
-      def rotate(r: String) = IO.pure(Some(tp))
-      def revoke(r: String) = IO.unit
+      def rotate(r: String)       = IO.pure(Some(tp))
+      def revoke(r: String)       = IO.unit
 
   // ── helpers ──────────────────────────────────────────────────
   private def withMongo[A](f: MongoDatabase[IO] => IO[A]): Future[A] =
-    withRunningEmbeddedMongo {
+    withRunningEmbeddedMongo:
       MongoClient
         .fromConnectionString[IO](s"mongodb://localhost:$mongoPort")
         .use(_.getDatabase("test").flatMap(f))
-    }.unsafeToFuture()
+    .unsafeToFuture()
 
   private def mkSignup(
       email: String = "alice@example.com",
@@ -42,8 +42,8 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo:
   ) = SignupRequest(email, pwd, None, plan)
 
   // ── tests ────────────────────────────────────────────────────
-  test("signup succeeds for fresh user") {
-    withMongo { db =>
+  test("signup succeeds for fresh user"):
+    withMongo: db =>
       for
         users <- db.getCollectionWithCodec[UserDoc]("users")
         prof  <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
@@ -57,11 +57,9 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo:
       yield
         assertEquals(countU, 1L)
         assertEquals(countP, 1L)
-    }
-  }
 
-  test("signup fails on duplicate email") {
-    withMongo { db =>
+  test("signup fails on duplicate email"):
+    withMongo: db =>
       for
         users <- db.getCollectionWithCodec[UserDoc]("users")
         prof  <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
@@ -79,16 +77,12 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo:
         svc = new AuthCheckImpl[IO](users, prof, hasher, stubToken)
         res <- svc.signup(mkSignup(email = "dup@example.com"))
       yield assertEquals(res, Left(SignupError.EmailExists))
-    }
-  }
 
-  test("signup fails on weak password") {
-    withMongo { db =>
+  test("signup fails on weak password"):
+    withMongo: db =>
       for
         users <- db.getCollectionWithCodec[UserDoc]("users")
         prof  <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
         svc = new AuthCheckImpl[IO](users, prof, hasher, stubToken)
         res <- svc.signup(mkSignup(pwd = "short"))
       yield assertEquals(res, Left(SignupError.BadPassword))
-    }
-  }
