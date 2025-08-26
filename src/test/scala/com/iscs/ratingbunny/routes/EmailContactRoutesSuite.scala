@@ -11,25 +11,24 @@ import io.circe.generic.auto.*
 import io.circe.syntax.*
 import com.iscs.ratingbunny.domains.{Email, EmailContact}
 
-object DummyEmailContact extends EmailContact[IO] {
+object DummyEmailContact extends EmailContact[IO]:
   def saveEmail(name: String, email: String, subject: String, msg: String): IO[String] = IO.pure("dummyId")
-}
 
-class EmailContactRoutesSuite extends CatsEffectSuite {
+class EmailContactRoutesSuite extends CatsEffectSuite:
 
   // Create the EmailContactRoutes service with the dummy implementation.
   private val emailRoutes: HttpRoutes[IO] = EmailContactRoutes.httpRoutes[IO](DummyEmailContact)
   private val originCI: CIString          = CIString("Origin")
 
-  test("POST /api/v3/addMsg with disallowed origin returns response without CORS header") {
+  test("POST /api/v3/addMsg with disallowed origin returns response without CORS header"):
     // Create a sample email payload.
     val sampleEmail = Email("John Doe", "john.doe@example.com", "Greetings", "Hello there!")
     // Build the request with a disallowed origin.
-    val req = Request[IO](Method.POST, uri"/api/v3/addMsg")
+    val req = Request[IO](Method.POST, uri"/addMsg")
       .withEntity(sampleEmail.asJson)
       .putHeaders(Header.Raw(originCI, "http://example.com"))
 
-    emailRoutes(req).value.map {
+    emailRoutes(req).value.map:
       case Some(resp) =>
         val allowOriginOpt = resp.headers.get(CIString("Access-Control-Allow-Origin"))
         assert(
@@ -38,6 +37,3 @@ class EmailContactRoutesSuite extends CatsEffectSuite {
         )
       case None =>
         fail("Expected a response even with a disallowed origin")
-    }
-  }
-}
