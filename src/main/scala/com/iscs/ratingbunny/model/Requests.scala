@@ -1,6 +1,6 @@
 package com.iscs.ratingbunny.model
 
-object Requests {
+object Requests:
   final case class ReqParams(
       query: Option[String] = None,
       votes: Option[Int] = None,
@@ -10,7 +10,7 @@ object Requests {
       isAdult: Option[Boolean] = None,
       searchType: Option[String] = None,
       sortType: Option[String] = None
-  ) {
+  ):
     override def toString: String = List(
       query.map(q => s"query=$q"),
       votes.map(v => s"votes=$v"),
@@ -22,5 +22,3 @@ object Requests {
       sortType.map(s => s"sortType=>$s")
     ).flatten
       .mkString(", ")
-  }
-}

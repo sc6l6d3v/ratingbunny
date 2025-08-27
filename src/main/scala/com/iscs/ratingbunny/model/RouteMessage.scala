@@ -1,5 +1,4 @@
 package com.iscs.ratingbunny.model
 
-object RouteMessage {
+object RouteMessage:
   final case class RouteMessage(message: String)
-}

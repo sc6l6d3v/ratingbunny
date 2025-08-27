@@ -7,7 +7,7 @@ import org.mongodb.scala.connection.ConnectionPoolSettings
 import org.mongodb.scala.{ConnectionString, MongoClientSettings, MongoCredential}
 import scala.concurrent.duration.MILLISECONDS
 
-case class MongodbConfig(url: String, isReadOnly: Boolean = false, cpConfig: ConnectionPoolConfig) {
+case class MongodbConfig(url: String, isReadOnly: Boolean = false, cpConfig: ConnectionPoolConfig):
   import cpConfig.*
   private val L          = Logger[this.type]
   private val connection = new ConnectionString(url)
@@ -51,4 +51,3 @@ case class MongodbConfig(url: String, isReadOnly: Boolean = false, cpConfig: Con
     else
       withCredentials
         .build()
-}

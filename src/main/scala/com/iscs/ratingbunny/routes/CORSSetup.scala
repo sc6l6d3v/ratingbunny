@@ -16,11 +16,10 @@ object CORSSetup:
     .getOrElse("ORIGINS", "http://localhost")
     .split(",")
     .flatMap(o =>
-      Origin.parse(o) match {
+      Origin.parse(o) match
         case Right(hList @ Origin.HostList(_)) => hList.hosts.toList
         case Right(Null)                       => L.error("empty host"); List.empty[Origin.Host]
         case Left(l)                           => L.error(s"got bad host: $l"); List.empty[Origin.Host]
-      }
     )
     .toSet
   L.info(s"got origins: ${reactDeploys.mkString(",")}")

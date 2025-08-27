@@ -4,9 +4,8 @@ import cats.effect.{Async, Resource, Sync}
 import com.iscs.ratingbunny.config.MongodbConfig
 import mongo4cats.client.MongoClient
 
-class DbClient[F[_]: Sync: Async](val config: MongodbConfig) {
+class DbClient[F[_]: Sync: Async](val config: MongodbConfig):
   val dbResource: Resource[F, MongoClient[F]] = MongoClient.create(config.settings)
-}
 
 final case class ConnectionPoolConfig(
     minPoolSize: Int,
@@ -17,8 +16,8 @@ final case class ConnectionPoolConfig(
     maxConnecting: Int
 )
 
-object DbClient {
-  def fromUrl(envVar: String): MongodbConfig = {
+object DbClient:
+  def fromUrl(envVar: String): MongodbConfig =
     val host                          = sys.env.getOrElse(envVar, "localhost")
     val isReadOnly                    = sys.env.getOrElse("MONGORO", "false").toBoolean
     val minPoolSize: Int              = sys.env.getOrElse("MONGO_MIN_POOL_SIZE", "5").toInt
@@ -32,5 +31,3 @@ object DbClient {
       isReadOnly,
       ConnectionPoolConfig(minPoolSize, maxPoolSize, maxWaitTimeMS, maxConnectionLifeTimeMS, maxConnectionIdleTimeMS, maxConnecting)
     )
-  }
-}

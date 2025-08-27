@@ -9,42 +9,37 @@ import org.scalatest.wordspec.AsyncWordSpec
 import mongo4cats.client
 import scala.concurrent.Future
 
-class ConnectionPoolTest extends AsyncWordSpec with Matchers with EmbeddedMongo {
+class ConnectionPoolTest extends AsyncWordSpec with Matchers with EmbeddedMongo:
 
   override val mongoPort: Int = 12348
 
-  "embedded MongoDB" when {
-    "invoking getCPStats" should {
-      "return connection pool stats as JSON" in withEmbeddedMongoClient { client =>
-        for {
-          db <- client.getDatabase("test")
-          connectionPool = new ConnectionPoolImpl[IO](db)
-          jsonResult <- connectionPool.getCPStats
-        } yield {
-          jsonResult.hcursor.get[Int]("current").getOrElse(0) should be >= 0
-          jsonResult.hcursor.get[Int]("available").getOrElse(0) should be >= 0
-          jsonResult.hcursor.get[Int]("totalCreated").getOrElse(0) should be >= 0
-        }
-      }
+  "embedded MongoDB" when:
+    "invoking getCPStats" should:
+      "return connection pool stats as JSON" in:
+        withEmbeddedMongoClient: client =>
+          for
+            db <- client.getDatabase("test")
+            connectionPool = new ConnectionPoolImpl[IO](db)
+            jsonResult <- connectionPool.getCPStats
+          yield
+            jsonResult.hcursor.get[Int]("current").getOrElse(0) should be >= 0
+            jsonResult.hcursor.get[Int]("available").getOrElse(0) should be >= 0
+            jsonResult.hcursor.get[Int]("totalCreated").getOrElse(0) should be >= 0
 
-      "handle missing connection fields gracefully" in withEmbeddedMongoClient { client =>
-        for {
-          db <- client.getDatabase("test")
-          connectionPool = new ConnectionPoolImpl[IO](db)
-          jsonResult <- connectionPool.getCPStats
-        } yield {
-          jsonResult.hcursor.get[Int]("current").getOrElse(-1) should be >= 0
-          jsonResult.hcursor.get[Int]("available").getOrElse(-1) should be >= 0
-          jsonResult.hcursor.get[Int]("totalCreated").getOrElse(-1) should be >= 0
-        }
-      }
-    }
-  }
+      "handle missing connection fields gracefully" in:
+        withEmbeddedMongoClient: client =>
+          for
+            db <- client.getDatabase("test")
+            connectionPool = new ConnectionPoolImpl[IO](db)
+            jsonResult <- connectionPool.getCPStats
+          yield
+            jsonResult.hcursor.get[Int]("current").getOrElse(-1) should be >= 0
+            jsonResult.hcursor.get[Int]("available").getOrElse(-1) should be >= 0
+            jsonResult.hcursor.get[Int]("totalCreated").getOrElse(-1) should be >= 0
 
   def withEmbeddedMongoClient[A](test: MongoClient[IO] => IO[A]): Future[A] =
-    withRunningEmbeddedMongo {
+    withRunningEmbeddedMongo:
       MongoClient
         .fromConnectionString[IO](s"mongodb://localhost:$mongoPort")
         .use(test)
-    }.unsafeToFuture()(IORuntime.global)
-}
+    .unsafeToFuture()(IORuntime.global)

@@ -62,15 +62,14 @@ class TokenIssuerImpl[F[_]: Async](
     val key = s"refresh:${Hash.sha256(raw)}"
     for
       uidOpt <- redis.getDel(key)
-      res <- uidOpt.traverse { uid =>
-        if uid.startsWith("guest-") then
-          issueGuest(uid).map(Option(_))
+      res <- uidOpt.traverse: uid =>
+        if uid.startsWith("guest-") then issueGuest(uid).map(Option(_))
         else
-          userRepo.findByUserId(uid).flatMap {
-            case Some(user) => issue(user).map(Option(_))
-            case None       => Option.empty[TokenPair].pure[F]
-          }
-      }
+          userRepo
+            .findByUserId(uid)
+            .flatMap:
+              case Some(user) => issue(user).map(Option(_))
+              case None       => Option.empty[TokenPair].pure[F]
     yield res.flatten
 
   override def revoke(raw: String): F[Unit] =

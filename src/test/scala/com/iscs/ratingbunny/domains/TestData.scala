@@ -6,7 +6,7 @@ import mongo4cats.bson.syntax.*
 import java.time.Instant
 import scala.util.Random
 
-object TestData {
+object TestData:
   implicit private val random: Random = Random
 
   val USD: Document = Document("symbol" := "$", "code" := "USD")
@@ -34,8 +34,6 @@ object TestData {
   def transactions(n: Int, account: Document = usdAccount): Vector[Document] = (0 until n).map(_ => transaction(account)).toVector
   def categories(n: Int): Vector[Document] = (0 until n).map(i => Document("_id" := ObjectId.gen, "name" := s"cat-$i")).toVector
 
-  implicit final private class SeqOps[A](private val seq: Seq[A]) extends AnyVal {
+  implicit final private class SeqOps[A](private val seq: Seq[A]) extends AnyVal:
     def pickRand(implicit rnd: Random): A =
       seq(rnd.nextInt(seq.size))
-  }
-}

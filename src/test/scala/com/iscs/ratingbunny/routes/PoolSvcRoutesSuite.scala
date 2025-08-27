@@ -22,10 +22,11 @@ class PoolSvcRoutesSuite extends CatsEffectSuite:
     poolSvcRoutes(req).value.flatMap:
       case Some(resp) =>
         // Check the status and body
-        resp.as[String].map { body =>
-          assertEquals(resp.status, Status.Ok)
-          assertEquals(body, """dummyPoolStats""" /* expected JSON string literal */ )
-        }
+        resp
+          .as[String]
+          .map: body =>
+            assertEquals(resp.status, Status.Ok)
+            assertEquals(body, """dummyPoolStats""" /* expected JSON string literal */ )
       case None =>
         IO(fail("Expected a response from the route"))
 

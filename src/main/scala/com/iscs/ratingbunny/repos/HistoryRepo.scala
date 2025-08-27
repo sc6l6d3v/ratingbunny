@@ -33,12 +33,12 @@ final case class HistoryDoc(
 /** Repository that persists/distills every search request sent from the React front‑end. It works with a plain `MongoCollection[F,
   * Document]` so you don’t need an explicit codec.
   */
-final class HistoryRepo[F[_]: Async](private[repos] val coll: MongoCollection[F, Document]) extends QuerySetup {
-  private val L              = Logger[this.type]
-  private val idxUserDate     = "uid_date_idx"          // desired explicit name
-  private val idxUserDateDef  = "userId_1_createdAt_-1" // driver default name
-  private val idxUserSigUnq   = "uid_sig_unique_idx"
-  private val idxUserSigUnqDef= "userId_1_sig_1"
+final class HistoryRepo[F[_]: Async](private[repos] val coll: MongoCollection[F, Document]) extends QuerySetup:
+  private val L                = Logger[this.type]
+  private val idxUserDate      = "uid_date_idx"          // desired explicit name
+  private val idxUserDateDef   = "userId_1_createdAt_-1" // driver default name
+  private val idxUserSigUnq    = "uid_sig_unique_idx"
+  private val idxUserSigUnqDef = "userId_1_sig_1"
 
   // ---------- helpers -------------------------------------------------------
   private def now: F[Instant] = Clock[F].realTimeInstant
@@ -46,24 +46,23 @@ final class HistoryRepo[F[_]: Async](private[repos] val coll: MongoCollection[F,
   private def sha256(s: String): String =
     MessageDigest.getInstance("SHA-256").digest(s.getBytes("UTF-8")).map("%02x" format _).mkString
 
-  private def buildSigAndDoc(userId: String, params: ReqParams): (String, Document) = {
+  private def buildSigAndDoc(userId: String, params: ReqParams): (String, Document) =
     val json    = params.asJson.dropNullValues.noSpaces
     val sig     = sha256(json)
     val created = Instant.now()
     val doc     = Document("userId" := userId, "createdAt" := created, "params" := Document.parse(json), "sig" := sig, "hits" := 1)
     sig -> doc
-  }
 
   // ---------- public API ----------------------------------------------------
 
   /** Upsert or bump the `hits` counter for an identical search. */
-  def log(userId: String, params: ReqParams): F[Unit] = {
+  def log(userId: String, params: ReqParams): F[Unit] =
     val (sig, newDoc) = buildSigAndDoc(userId, params)
     val filter        = JFilters.and(JFilters.equal("userId", userId), JFilters.equal("sig", sig))
-    for {
+    for
       t <- now
       _ <- Sync[F].delay(L.info(s"history log $userId $sig $newDoc"))
-      _ <- {
+      _ <-
         val update = JUpdates.combine(
           JUpdates.setOnInsert("params", newDoc("params")),
           JUpdates.set("createdAt", t),
@@ -72,29 +71,25 @@ final class HistoryRepo[F[_]: Async](private[repos] val coll: MongoCollection[F,
         coll
           .updateOne(filter = filter, update = update, options = UpdateOptions().upsert(true))
           .void
-          .handleErrorWith {
+          .handleErrorWith:
             case mw: MongoWriteException if mw.getError.getCategory == DUPLICATE_KEY =>
               coll.updateOne(filter = filter, update = update, options = UpdateOptions()).void
             case _ => Async[F].unit
-          }
-      }
-    } yield ()
-  }
+    yield ()
 
   /** Latest *n* records for a user (default 10). */
   def latest(userId: String, limit: Int = 10): Stream[F, Document] =
     coll.find(feq("userId", userId)).sort(Document("createdAt" := -1)).limit(limit).stream
 
   /** Fetch an entry by its signature. */
-  def bySig(userId: String, sig: String): F[Option[Document]] = {
+  def bySig(userId: String, sig: String): F[Option[Document]] =
     val query = feq("userId", userId).add(("sig", sig))
     coll.find(query).first
-  }
 
   /** Create both indexes if they don’t already exist. Safe to call on every start‑up.
     */
   def ensureIndexes: F[Unit] =
-    for {
+    for
       idxDocs <- coll.listIndexes // F[Iterable[Document]]
       existing = idxDocs.flatMap(_.getString("name").toList).toSet
       // userId + createdAt compound index -----------------------------
@@ -117,17 +112,15 @@ final class HistoryRepo[F[_]: Async](private[repos] val coll: MongoCollection[F,
               IndexOptions(background = true, unique = true).name(idxUserSigUnq)
             )
             .void
-    } yield ()
-}
+    yield ()
 
-object HistoryRepo {
+object HistoryRepo:
 
   /** Build repo from an existing `MongoDatabase` (already passed around by your `Server.getServices`).
     */
   def make[F[_]: Async](db: mongo4cats.database.MongoDatabase[F]): F[HistoryRepo[F]] =
-    for {
+    for
       coll <- db.getCollection("user_history")
       repo = new HistoryRepo[F](coll)
       _ <- repo.ensureIndexes
-    } yield repo
-}
+    yield repo

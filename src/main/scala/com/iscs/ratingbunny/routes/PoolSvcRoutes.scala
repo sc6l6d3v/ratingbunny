@@ -8,19 +8,17 @@ import org.http4s.HttpRoutes
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
 import org.http4s.dsl.Http4sDsl
 
-object PoolSvcRoutes {
+object PoolSvcRoutes:
   private val L = Logger[this.type]
 
-  def httpRoutes[F[_]: Async](E: ConnectionPool[F]): HttpRoutes[F] = {
+  def httpRoutes[F[_]: Async](E: ConnectionPool[F]): HttpRoutes[F] =
     val dsl = Http4sDsl[F]
     import dsl.*
-    val svc = HttpRoutes.of[F] { case GET -> Root / "poolStats" =>
-      for {
-        poolStats <- E.getCPStats
-        _         <- Sync[F].delay(L.info(s""""request poolStats" $poolStats"""))
-        resp      <- Ok(poolStats)
-      } yield resp
-    }
+    val svc = HttpRoutes.of[F]:
+      case GET -> Root / "poolStats" =>
+        for
+          poolStats <- E.getCPStats
+          _         <- Sync[F].delay(L.info(s""""request poolStats" $poolStats"""))
+          resp      <- Ok(poolStats)
+        yield resp
     CORSSetup.methodConfig(svc)
-  }
-}

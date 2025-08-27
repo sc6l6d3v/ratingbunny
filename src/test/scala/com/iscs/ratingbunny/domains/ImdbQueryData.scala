@@ -3,7 +3,7 @@ package com.iscs.ratingbunny.domains
 import mongo4cats.bson.{BsonValue, Document, ObjectId}
 import mongo4cats.bson.syntax.*
 
-object ImdbQueryData {
+object ImdbQueryData:
   val titlePaths: List[Some[String]] = List(
     Some("/9TGHDvWrqKBzwDxDodHYXEmOE6J.jpg"),
     Some("/t1wm4PgOQ8e4z1C6tk1yDNrps4T.jpg"),
@@ -773,4 +773,3 @@ object ImdbQueryData {
       "numVotes"       := 1554
     )
   )
-}

@@ -1,8 +1,7 @@
 package com.iscs.ratingbunny.domains
 
-enum LoginError derives CanEqual {
+enum LoginError derives CanEqual:
   case UserNotFound, BadPassword, Inactive
-}
 
 object LoginError:
   def fromString(s: String): Option[LoginError] = s match

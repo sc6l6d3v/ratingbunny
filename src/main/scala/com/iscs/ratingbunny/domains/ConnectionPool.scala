@@ -11,13 +11,12 @@ import mongo4cats.database.MongoDatabase
 import org.mongodb.scala.bson.BsonDocument
 import scala.language.implicitConversions
 
-trait ConnectionPool[F[_]] {
+trait ConnectionPool[F[_]]:
   def getCPStats: F[Json]
-}
 
 class ConnectionPoolImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     db: MongoDatabase[F]
-) extends ConnectionPool[F] {
+) extends ConnectionPool[F]:
   private val dbcmd  = BsonDocument("serverStatus" -> 1)
   private val attrib = "connections"
 
@@ -32,7 +31,7 @@ class ConnectionPoolImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
       awaitingTopologyChanges: Option[Int] = None
   )
 
-  private def getStats(statDoc: Document): Json = {
+  private def getStats(statDoc: Document): Json =
     val connectionsDoc = statDoc.get(attrib).map(_.asDocument.getOrElse(Document()))
     val connections = Connections(
       current = connectionsDoc.get("current").map(_.asInt.get),
@@ -45,9 +44,7 @@ class ConnectionPoolImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
       awaitingTopologyChanges = connectionsDoc.get("awaitingTopologyChanges").map(_.asInt.get)
     )
     connections.asJson
-  }
 
-  override def getCPStats: F[Json] = for {
-    doc <- db.runCommand(dbcmd)
-  } yield getStats(doc)
-}
+  override def getCPStats: F[Json] =
+    for doc <- db.runCommand(dbcmd)
+    yield getStats(doc)

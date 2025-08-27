@@ -13,18 +13,18 @@ import com.iscs.ratingbunny.domains.{
   AuthLogin,
   LoginError,
   LoginRequest,
+  Plan,
   SignupError,
   SignupRequest,
+  SubscriptionStatus,
   TokenIssuer,
   TokenPair,
   UserDoc,
-  UserRepo,
-  Plan,
-  SubscriptionStatus
+  UserRepo
 }
 import com.iscs.ratingbunny.security.JwtAuth
 
-class AuthRoutesSuite extends CatsEffectSuite {
+class AuthRoutesSuite extends CatsEffectSuite:
 
   private val user = UserDoc(
     email = "test@example.com",
@@ -35,11 +35,10 @@ class AuthRoutesSuite extends CatsEffectSuite {
     displayName = Some("Tester")
   )
 
-  private val repo = new UserRepo[IO] {
+  private val repo = new UserRepo[IO]:
     def findByEmail(email: String) = IO.pure(None)
-    def insert(u: UserDoc) = IO.unit
-    def findByUserId(id: String) = IO.pure(if id == user.userid then Some(user) else None)
-  }
+    def insert(u: UserDoc)         = IO.unit
+    def findByUserId(id: String)   = IO.pure(if id == user.userid then Some(user) else None)
 
   private val secret    = "test-secret"
   private val authMw    = JwtAuth.middleware[IO](secret)
@@ -52,38 +51,39 @@ class AuthRoutesSuite extends CatsEffectSuite {
     def login(req: LoginRequest) = IO.pure(Left(LoginError.UserNotFound))
 
   private val stubToken = new TokenIssuer[IO]:
-    def issue(u: UserDoc) = IO.pure(TokenPair("access", "refresh"))
+    def issue(u: UserDoc)       = IO.pure(TokenPair("access", "refresh"))
     def issueGuest(uid: String) = IO.pure(TokenPair(s"$uid-a", s"$uid-r"))
-    def rotate(r: String) = IO.pure(None)
-    def revoke(r: String) = IO.unit
+    def rotate(r: String)       = IO.pure(None)
+    def revoke(r: String)       = IO.unit
 
   private val httpSvc = AuthRoutes.httpRoutes[IO](stubCheck, stubLogin, repo, stubToken).orNotFound
 
   private val token = JwtCirce.encode(JwtClaim(subject = Some(user.userid)), secret, JwtAlgorithm.HS256)
 
-  test("GET /auth/me returns user info") {
+  test("GET /auth/me returns user info"):
     val req = Request[IO](Method.GET, uri"/auth/me")
       .putHeaders(headers.Authorization(Credentials.Token(AuthScheme.Bearer, token)))
 
-    authedSvc.orNotFound.run(req).flatMap { resp =>
-      assertEquals(resp.status, Status.Ok)
-      resp.as[Json].map { json =>
-        assertEquals(json.hcursor.get[String]("userid"), Right(user.userid))
-        assertEquals(json.hcursor.get[String]("email"), Right(user.email))
-      }
-    }
-  }
+    authedSvc.orNotFound
+      .run(req)
+      .flatMap: resp =>
+        assertEquals(resp.status, Status.Ok)
+        resp
+          .as[Json]
+          .map: json =>
+            assertEquals(json.hcursor.get[String]("userid"), Right(user.userid))
+            assertEquals(json.hcursor.get[String]("email"), Right(user.email))
 
-  test("POST /auth/guest issues tokens") {
+  test("POST /auth/guest issues tokens"):
     val req = Request[IO](Method.POST, uri"/auth/guest")
-    httpSvc.run(req).flatMap { resp =>
-      assertEquals(resp.status, Status.Ok)
-      resp.as[Json].map { json =>
-        val a = json.hcursor.get[String]("access").toOption.get
-        val r = json.hcursor.get[String]("refresh").toOption.get
-        assert(a.contains("guest-"))
-        assert(r.contains("guest-"))
-      }
-    }
-  }
-}
+    httpSvc
+      .run(req)
+      .flatMap: resp =>
+        assertEquals(resp.status, Status.Ok)
+        resp
+          .as[Json]
+          .map: json =>
+            val a = json.hcursor.get[String]("access").toOption.get
+            val r = json.hcursor.get[String]("refresh").toOption.get
+            assert(a.contains("guest-"))
+            assert(r.contains("guest-"))

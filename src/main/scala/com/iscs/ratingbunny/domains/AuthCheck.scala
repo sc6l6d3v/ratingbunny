@@ -60,12 +60,12 @@ final class AuthCheckImpl[F[_]: Async](
       // EitherT gives you an Either along the way
       _ <- EitherT.fromEither[F](validatePw(req.password))
 
-      _ <- EitherT {
-        usersCol.count(feq("email", req.email)).map {
-          case 0 => Right(())
-          case _ => Left(SignupError.EmailExists)
-        }
-      }
+      _ <- EitherT:
+        usersCol
+          .count(feq("email", req.email))
+          .map:
+            case 0 => Right(())
+            case _ => Left(SignupError.EmailExists)
       uid  <- EitherT.liftF(genUserId(req.email))
       hash <- EitherT.liftF(hasher.hash(req.password))
       user = UserDoc(
@@ -80,7 +80,7 @@ final class AuthCheckImpl[F[_]: Async](
       _  <- EitherT.liftF(userProfileCol.insertOne(UserProfileDoc(uid)))
       tp <- EitherT.liftF(tokenIssuer.issue(user))
     yield SignupOK(uid, tp)).value
-      .handleError {
+      .handleError:
         case mw: MongoWriteException if mw.getError.getCategory == DUPLICATE_KEY =>
           Left(SignupError.UserIdExists)
         case mw: MongoWriteException
@@ -89,4 +89,3 @@ final class AuthCheckImpl[F[_]: Async](
           Left(SignupError.InvalidEmail)
         case _ =>
           Left(SignupError.BadPassword) // or a generic failure
-      }

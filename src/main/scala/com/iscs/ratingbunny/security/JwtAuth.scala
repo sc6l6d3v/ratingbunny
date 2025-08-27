@@ -16,27 +16,25 @@ object JwtAuth:
 
   /** Manual JWT validation using pdi.jwt */
   def validateJwt[F[_]: Sync](token: String, secretKey: String): F[Option[String]] =
-    Sync[F].delay {
-      JwtCirce.decodeAll(token, secretKey, Seq(JwtAlgorithm.HS256)) match {
+    Sync[F].delay:
+      JwtCirce.decodeAll(token, secretKey, Seq(JwtAlgorithm.HS256)) match
         case scala.util.Success((_, claim, _)) =>
           L.debug(s"JWT validation successful for subject: ${claim.subject}")
           claim.subject
         case scala.util.Failure(ex) =>
           L.debug(s"JWT validation failed: ${ex.getMessage}")
           None
-      }
-    }
 
   /** Extract Bearer token from Authorization header */
   def extractBearerToken[F[_]](request: Request[F]): Option[String] =
-    request.headers.get[Authorization].flatMap {
-      case Authorization(org.http4s.Credentials.Token(org.http4s.AuthScheme.Bearer, token)) => Some(token)
-      case _                                                                                => None
-    }
+    request.headers
+      .get[Authorization]
+      .flatMap:
+        case Authorization(org.http4s.Credentials.Token(org.http4s.AuthScheme.Bearer, token)) => Some(token)
+        case _                                                                                => None
 
-  /**
-    * Attempt to pull a user id from the request's Authorization header.
-    * Returns `None` when the header is missing or the token fails validation.
+  /** Attempt to pull a user id from the request's Authorization header. Returns `None` when the header is missing or the token fails
+    * validation.
     */
   def userFromRequest[F[_]: Sync](request: Request[F], secretKey: String): F[Option[String]] =
     extractBearerToken(request) match
@@ -48,26 +46,22 @@ object JwtAuth:
     val dsl = Http4sDsl[F]
     import dsl._
 
-    val onFailure: AuthedRoutes[String, F] = Kleisli { req =>
+    val onFailure: AuthedRoutes[String, F] = Kleisli: req =>
       OptionT.pure(Response[F](Unauthorized).withEntity("Unauthorized"))
-    }
 
     val authUser: Kleisli[F, Request[F], Either[String, String]] =
-      Kleisli { request =>
-        extractBearerToken(request) match {
+      Kleisli: request =>
+        extractBearerToken(request) match
           case Some(token) =>
-            validateJwt(token, secretKey).map {
+            validateJwt(token, secretKey).map:
               case Some(userId) =>
                 L.debug(s"Authentication successful for user: $userId")
                 Right(userId)
               case None =>
                 L.debug("JWT validation failed")
                 Left("Invalid JWT token")
-            }
           case None =>
             L.debug("No Bearer token found")
             Sync[F].pure(Left("No Authorization header"))
-        }
-      }
 
     AuthMiddleware(authUser, onFailure)

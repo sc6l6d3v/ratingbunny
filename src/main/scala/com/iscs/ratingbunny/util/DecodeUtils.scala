@@ -4,7 +4,7 @@ import cats.effect.kernel.Sync
 
 import scala.util.Try
 
-trait DecodeUtils {
+trait DecodeUtils:
   def getRating[F[_]: Sync](rating: String): F[Double] =
     Sync[F].delay(Try(rating.toDouble).toOption.getOrElse(5.0d))
 
@@ -16,4 +16,3 @@ trait DecodeUtils {
       "http"
     else
       "https"
-}

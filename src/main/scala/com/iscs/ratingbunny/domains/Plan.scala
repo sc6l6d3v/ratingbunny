@@ -30,12 +30,12 @@ object Plan:
   ): RealCodec[Plan] =
     RealCodec.from(dec, enc)
 
-  given Decoder[Plan] = Decoder.instance { (cur: HCursor) =>
-    cur.as[String].flatMap { raw =>
-      fromString(raw) match
-        case Some(p) => Right(p) // happy path
-        case None =>
-          println(s"[Plan-decoder] unexpected value '$raw'") // ← breakpoint here
-          Left(DecodingFailure(s"Bad plan: $raw", cur.history))
-    }
-  }
+  given Decoder[Plan] = Decoder.instance: (cur: HCursor) =>
+    cur
+      .as[String]
+      .flatMap: raw =>
+        fromString(raw) match
+          case Some(p) => Right(p) // happy path
+          case None =>
+            println(s"[Plan-decoder] unexpected value '$raw'") // ← breakpoint here
+            Left(DecodingFailure(s"Bad plan: $raw", cur.history))
