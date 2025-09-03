@@ -2,7 +2,7 @@ import Dependencies.{test, *}
 
 ThisBuild / fork             := true
 ThisBuild / version          := "1.0"
-ThisBuild / scalaVersion     := "3.4.2"
+ThisBuild / scalaVersion     := "3.5.0"
 ThisBuild / name             := "ratingbunny"
 ThisBuild / organizationName := "com.iscs"
 ThisBuild / javacOptions ++= Seq("--release", "21") // For Java 21
@@ -22,6 +22,7 @@ lazy val root = (project in file("."))
       circe.circeCore,
       circe.circeGeneric,
       circe.circeParser,
+      emailSvc.client,
       mongo4cats.core,
       mongo4cats.circe,
       mongo4cats.embedded,

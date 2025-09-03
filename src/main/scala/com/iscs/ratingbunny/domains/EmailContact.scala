@@ -2,13 +2,15 @@ package com.iscs.ratingbunny.domains
 
 import cats.effect.*
 import cats.implicits.*
+import com.iscs.mail.EmailService
 import com.typesafe.scalalogging.Logger
 import mongo4cats.bson.syntax.*
 import mongo4cats.bson.{BsonValue, Document}
 import mongo4cats.collection.MongoCollection
-import org.bson.conversions.{Bson => mbson}
+import org.bson.conversions.Bson as mbson
 import org.mongodb.scala.model.*
 import org.mongodb.scala.result.UpdateResult
+
 import java.time.Instant
 import scala.concurrent.duration.FiniteDuration
 import scala.util.matching.Regex
@@ -25,7 +27,8 @@ final case class Email(name: String, email: String, subject: String, msg: String
   ).mkString("| ")
 
 class EmailContactImpl[F[_]: MonadCancelThrow: Sync](
-    emailFx: MongoCollection[F, Document]
+    emailFx: MongoCollection[F, Document],
+    emailService: EmailService[F]
 ) extends EmailContact[F]:
   private val L = Logger[this.type]
 
@@ -98,7 +101,9 @@ class EmailContactImpl[F[_]: MonadCancelThrow: Sync](
 
     validate(name, email).flatMap: isValid =>
       val emailAction: F[String] =
-        if (isValid) updateMsg(name, email, truncSubject, truncMsg)
+        if (isValid)
+          updateMsg(name, email, truncSubject, truncMsg)
+          sendEmail(name, email, truncSubject, truncMsg)
         else Sync[F].delay(s"Invalid: $email")
 
       Clock[F]
@@ -106,3 +111,12 @@ class EmailContactImpl[F[_]: MonadCancelThrow: Sync](
         .flatMap:
           case (totEmailTime, emailJson) =>
             Sync[F].delay(L.info(s"total email time {} ms", totEmailTime.toMillis)).as(emailJson)
+
+  private def sendEmail(name: String, email: String, subject: String, msg: String): F[String] =
+    val truncSubject = subject.take(maxValLen)
+    val truncMsg     = msg.take(maxMsgLen)
+    for
+      receipt   <- emailService.sendEmail(name, email, truncSubject, truncMsg)
+      messageId <- Sync[F].delay(receipt.head)
+      _         <- Sync[F].delay(L.info(s"Email $email - Message ID: $messageId"))
+    yield messageId

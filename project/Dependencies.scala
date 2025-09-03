@@ -4,6 +4,7 @@ object Dependencies {
   object V {
     val bcryptVersion     = "4.3.0"
     val circeVersion      = "0.14.6"
+    val emailSvc          = "1.0"
     val fs2Version        = "3.10.2"
     val Http4sVersion     = "0.23.26"
     val jsoupVersion      = "1.17.2"
@@ -17,6 +18,10 @@ object Dependencies {
     val scalaTestVersion  = "3.2.18"
     val scalacheckVersion = "1.17.0"
     val jwtCirceVersion   = "11.0.0"
+  }
+
+  object emailSvc {
+    val client = "com.iscs" %% "emailpoc" % V.emailSvc
   }
 
   object http4s {

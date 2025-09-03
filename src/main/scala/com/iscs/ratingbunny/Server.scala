@@ -4,6 +4,7 @@ import cats.Parallel
 import cats.effect.{Async, Resource, Sync}
 import cats.implicits.*
 import com.comcast.ip4s.*
+import com.iscs.mail.{EmailService, EmailServiceConfig}
 import com.iscs.ratingbunny.domains.{
   AuthCheck,
   AuthCheckImpl,
@@ -30,6 +31,7 @@ import com.iscs.ratingbunny.security.JwtAuth
 import com.iscs.ratingbunny.util.BcryptHasher
 import com.typesafe.scalalogging.Logger
 import dev.profunktor.redis4cats.RedisCommands
+import fs2.io.file.Files
 import io.circe.generic.auto.*
 import fs2.io.net.Network
 import mongo4cats.circe.*
@@ -47,8 +49,14 @@ object Server:
   private val port           = sys.env.getOrElse("PORT", "8080").toInt
   private val bindHost       = sys.env.getOrElse("BINDHOST", "0.0.0.0")
   private val serverPoolSize = sys.env.getOrElse("SERVERPOOL", "16").toInt
-  private val defaultHost    = sys.env.getOrElse("DATASOURCE", "www.dummy.com")
   private val imageHost      = sys.env.getOrElse("IMAGESOURCE", "localhost:8083")
+  private val ServiceConfig = EmailServiceConfig(
+    smtpUrl = sys.env.getOrElse("SMTPURL", "smtp://localhost:25"),
+    fromAddress = sys.env.getOrElse("FROMADDR", "contact@example.com"),
+    username = sys.env.getOrElse("USERID", "contact@example.com"),
+    password = sys.env.getOrElse("EMAILPWD", "dummy123"),
+    debug = sys.env.getOrElse("DEBUG", "false").toBoolean
+  )
 
   private val compositeCollection   = "title_principals_namerating"
   private val emailCollection       = "email_contact"
@@ -95,18 +103,24 @@ object Server:
   private def getPoolStatsSvc[F[_]: Async: Parallel](db: MongoDatabase[F]): F[ConnectionPool[F]] =
     Sync[F].delay(new ConnectionPoolImpl[F](db))
 
-  private def getEmailSvc[F[_]: Async](db: MongoDatabase[F]): F[EmailContact[F]] =
-    for emailColl <- db.getCollection(emailCollection)
-    yield new EmailContactImpl[F](emailColl)
+  private def getEmailSvc[F[_]: Async: Files](db: MongoDatabase[F]): F[EmailContact[F]] =
+    for
+      emailColl    <- db.getCollection(emailCollection)
+      emailService <- EmailService.initialize(ServiceConfig)
+    yield new EmailContactImpl[F](emailColl, emailService)
 
-  def getServices[F[_]: Async: Parallel](redis: RedisCommands[F, String, String], db: MongoDatabase[F], client: Client[F]): F[HttpApp[F]] =
+  def getServices[F[_]: Async: Files: Parallel](
+      redis: RedisCommands[F, String, String],
+      db: MongoDatabase[F],
+      client: Client[F]
+  ): F[HttpApp[F]] =
     for
       token       <- getTokenIssuerSvc(redis, db, jwtSecretKey)
       authSvc     <- getAuthSvc(db, token)
       loginSvc    <- getLoginSvc(db, token)
       emailSvc    <- getEmailSvc(db)
       userRepo    <- getUserRepoSvc(db)
-      fetchSvc    <- Sync[F].delay(new FetchImage[F](defaultHost, imageHost, client))
+      fetchSvc    <- Sync[F].delay(new FetchImage[F](imageHost, client))
       historyRepo <- HistoryRepo.make(db)
       imdbSvc     <- getImdbSvc(db, client)
       poolSvc     <- getPoolStatsSvc(db)

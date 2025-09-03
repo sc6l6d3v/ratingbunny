@@ -10,7 +10,7 @@ import org.http4s.client.Client
 import org.http4s.{Method, Request, Uri}
 import scodec.bits.ByteVector
 
-class FetchImage[F[_]: Async](defaultHost: String, imageHost: String, client: Client[F]) extends DecodeUtils:
+class FetchImage[F[_]: Async](imageHost: String, client: Client[F]) extends DecodeUtils:
   private val L         = Logger[this.type]
   private val proto     = protoc(imageHost)
   private val metaImage = s"$proto://$imageHost/meta"
