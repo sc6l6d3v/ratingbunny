@@ -12,6 +12,7 @@ import org.mongodb.scala.model.*
 import org.mongodb.scala.result.UpdateResult
 
 import java.time.Instant
+import jakarta.mail.internet.{InternetAddress, MimeUtility} // Java-21 module name
 import scala.concurrent.duration.FiniteDuration
 import scala.util.matching.Regex
 
@@ -112,11 +113,20 @@ class EmailContactImpl[F[_]: MonadCancelThrow: Sync](
           case (totEmailTime, emailJson) =>
             Sync[F].delay(L.info(s"total email time {} ms", totEmailTime.toMillis)).as(emailJson)
 
+  /** Build  <Display Name> <addr@dom.tld>  string following RFC-5322/2047 */
+  def rfcAddress(display: String, email: String): String =
+    // InternetAddress will quote or RFC-2047-encode when needed
+    val ia = new InternetAddress()
+    ia.setAddress(email)
+    ia.setPersonal(display, "UTF-8") // encode if non-ASCII
+    ia.toString                      // returns the RFC-compliant form
+
   private def sendEmail(name: String, email: String, subject: String, msg: String): F[String] =
+    val to           = rfcAddress(name, email) // ← RFC-correct
     val truncSubject = subject.take(maxValLen)
     val truncMsg     = msg.take(maxMsgLen)
     for
-      receipt   <- emailService.sendEmail(name, email, truncSubject, truncMsg)
+      receipt   <- emailService.sendEmail(to, truncSubject, truncMsg, truncMsg)
       messageId <- Sync[F].delay(receipt.head)
       _         <- Sync[F].delay(L.info(s"Email $email - Message ID: $messageId"))
     yield messageId

@@ -14,14 +14,19 @@ object Dependencies {
     val mongo4catsVersion = "0.7.12"
     val mongoScalaVersion = "5.4.0"
     val munitVersion      = "2.0.0"
-    val redis4catsVersion = "2.0.0-1-0f092da-SNAPSHOT"
+    val redis4catsVersion = "2.0.1"
     val scalaTestVersion  = "3.2.18"
+    val sunMailVersion    = "2.0.2"
     val scalacheckVersion = "1.17.0"
     val jwtCirceVersion   = "11.0.0"
   }
 
   object emailSvc {
     val client = "com.iscs" %% "emailpoc" % V.emailSvc
+  }
+
+  object sunMail {
+    val client = "com.sun.mail" % "jakarta.mail" % V.sunMailVersion
   }
 
   object http4s {

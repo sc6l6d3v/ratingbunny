@@ -1,7 +1,9 @@
 package com.iscs.ratingbunny.domains
 
+import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
+import com.iscs.mail.{EmailAttachment, EmailService}
 import mongo4cats.bson.Document
 import mongo4cats.client.MongoClient
 import mongo4cats.collection.MongoCollection
@@ -19,6 +21,46 @@ class EmailContactSpec extends AsyncWordSpec with Matchers with EmbeddedMongo:
   override val mongoPort: Int = 12348
   private val field_id        = "_id"
 
+  /** Very small in-memory implementation of the EmailService trait. All test cases receive the constant message-id
+    * `"test-message-id-12345"` — exactly what the app code expects to log / return.
+    */
+  private val mockEmailService: EmailService[IO] = new EmailService[IO]:
+    override val fromAddress: String = "test@example.com"
+
+    override def sendEmail(
+        to: String,
+        subject: String,
+        textBody: String,
+        htmlBody: String,
+        attachments: List[EmailAttachment[IO]]
+    ): IO[NonEmptyList[String]] =
+      IO.pure(NonEmptyList.one("test-message-id-12345"))
+
+    // The production code under test never calls the methods below,
+    // but we must still provide definitions to satisfy the trait.
+    override def sendEmail(to: String, subject: String, textBody: String, htmlBody: String): IO[NonEmptyList[String]] =
+      sendEmail(to, subject, textBody, htmlBody, Nil)
+
+    override def sendEmailToMultiple(
+        recipients: List[String],
+        subject: String,
+        textBody: String,
+        htmlBody: String,
+        attachments: List[EmailAttachment[IO]]
+    ): IO[List[NonEmptyList[String]]] =
+      IO.pure(recipients.map(_ => NonEmptyList.one("test-message-id-12345")))
+
+    override def sendEmailToMultiple(
+        recipients: List[String],
+        subject: String,
+        textBody: String,
+        htmlBody: String
+    ): IO[List[NonEmptyList[String]]] =
+      sendEmailToMultiple(recipients, subject, textBody, htmlBody, Nil)
+
+    override def send(mail: emil.Mail[IO]): IO[NonEmptyList[String]] =
+      IO.pure(NonEmptyList.one("test-message-id-12345"))
+
   "embedded MongoDB" when:
     "sending email" should:
       "saveEmail should return email when validation succeeds and update is successful" in:
@@ -26,7 +68,7 @@ class EmailContactSpec extends AsyncWordSpec with Matchers with EmbeddedMongo:
           for
             db      <- setupTestDatabase("test", client)
             emailFx <- setupTestCollection(db, "mock")
-            emailContact = new EmailContactImpl[IO](emailFx)
+            emailContact = new EmailContactImpl[IO](emailFx, mockEmailService)
             name         = "John Doe"
             email        = "john.doe@example.com"
             subject      = "Test Subject"
@@ -48,7 +90,7 @@ class EmailContactSpec extends AsyncWordSpec with Matchers with EmbeddedMongo:
           for
             db             <- setupTestDatabase("test", client)
             mockCollection <- setupTestCollection(db, "mock")
-            emailContact = new EmailContactImpl[IO](mockCollection)
+            emailContact = new EmailContactImpl[IO](mockCollection, mockEmailService)
             name         = "John Doe"
             invalidEmail = "john.doe@"
             subject      = "Test Subject"
@@ -61,7 +103,7 @@ class EmailContactSpec extends AsyncWordSpec with Matchers with EmbeddedMongo:
           for
             db             <- setupTestDatabase("test", client)
             mockCollection <- setupTestCollection(db, "mock")
-            emailContact = new EmailContactImpl[IO](mockCollection)
+            emailContact = new EmailContactImpl[IO](mockCollection, mockEmailService)
             name         = "Jane Doe"
             email        = "jane.doe@example.com"
             subject      = "Another Test"

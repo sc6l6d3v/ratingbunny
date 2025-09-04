@@ -17,7 +17,6 @@ val dummyClient: Client[IO] = Client.fromHttpApp(dummyHttpApp)
 
 // Dummy implementation for FetchImage service.
 object DummyFetchImage extends com.iscs.ratingbunny.domains.FetchImage[IO](
-      defaultHost = "dummyDefaultHost",
       imageHost = "dummyImageHost",
       client = dummyClient
     ):

@@ -4,6 +4,7 @@ import cats.effect.{Async, Clock, Sync}
 import cats.implicits.*
 import com.iscs.ratingbunny.domains.{TokenPair, UserDoc}
 import dev.profunktor.redis4cats.RedisCommands
+import dev.profunktor.redis4cats.effects.ScriptOutputType
 import pdi.jwt
 import pdi.jwt.JwtAlgorithm.HS256
 import pdi.jwt.{JwtAlgorithm, JwtCirce, JwtClaim}
@@ -37,6 +38,24 @@ class TokenIssuerImpl[F[_]: Async](
     private val md                = java.security.MessageDigest.getInstance("SHA-256")
     def sha256(s: String): String = md.digest(s.getBytes("UTF-8")).map("%02x" format _).mkString
 
+  // Lua script for atomic getDel operation
+  private val getDelScript =
+    """
+    local value = redis.call('GET', KEYS[1])
+    if value then
+        redis.call('DEL', KEYS[1])
+    end
+    return value
+    """
+
+  private def getDel(key: String): F[Option[String]] =
+    redis
+      .eval(getDelScript, ScriptOutputType.Value, List(key))
+      .map(Option(_))
+      .recover:
+        case _: NoSuchElementException => None
+        case _                         => None
+
   override def issue(user: UserDoc): F[TokenPair] =
     issueGuest(user.userid)
 
@@ -61,7 +80,7 @@ class TokenIssuerImpl[F[_]: Async](
   override def rotate(raw: String): F[Option[TokenPair]] =
     val key = s"refresh:${Hash.sha256(raw)}"
     for
-      uidOpt <- redis.getDel(key)
+      uidOpt <- getDel(key)
       res <- uidOpt.traverse: uid =>
         if uid.startsWith("guest-") then issueGuest(uid).map(Option(_))
         else
