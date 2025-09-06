@@ -69,8 +69,8 @@ object AuthRoutes:
                   case Right(ok) =>
                     Created(
                       Json.obj(
-                        "access"  -> ok.tokens.access.asJson,
-                        "refresh" -> ok.tokens.refresh.asJson
+                        "userid"  -> ok.userid.asJson,
+                        "message" -> "verification email sent".asJson
                       )
                     )
                   case Left(EmailExists)  => Conflict("email exists")
