@@ -84,7 +84,10 @@ package object domains:
       status: SubscriptionStatus,
       displayName: Option[String],
       prefs: List[String] = Nil,
-      createdAt: Instant = Instant.now()
+      createdAt: Instant = Instant.now(),
+      emailVerified: Boolean = false,
+      verificationTokenHash: Option[String] = None,
+      verificationExpires: Option[Instant] = None // consider cron to clean up expired tokens
   )
 
   final case class UserProfileDoc(
@@ -97,7 +100,7 @@ package object domains:
   // ---------- request / response ----------
   final case class LoginRequest(email: String, password: String)
   final case class LoginOK(userid: String, tokens: TokenPair)
-  final case class SignupOK(userid: String, tokens: TokenPair)
+  final case class SignupOK(userid: String)
 
   /** Public view of a user, omitting sensitive fields */
   final case class UserInfo(userid: String, email: String, plan: String, displayName: Option[String])

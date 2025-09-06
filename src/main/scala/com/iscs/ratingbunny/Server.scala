@@ -68,13 +68,13 @@ object Server:
   private val jwtSecretKey =
     sys.env.getOrElse("JWT_SECRET_KEY", throw new RuntimeException("JWT_SECRET_KEY environment variable must be set"))
 
-  private def getAuthSvc[F[_]: Async](db: MongoDatabase[F], token: TokenIssuer[F]): F[AuthCheck[F]] =
+  private def getAuthSvc[F[_]: Async](db: MongoDatabase[F], emailService: EmailService[F]): F[AuthCheck[F]] =
     for
       userCollCodec     <- db.getCollectionWithCodec[UserDoc](usersCollection)
       userProfCollCodec <- db.getCollectionWithCodec[UserProfileDoc](userProfileCollection)
     yield
       val hasher = BcryptHasher.make[F](cost = 12)
-      new AuthCheckImpl(userCollCodec, userProfCollCodec, hasher, token)
+      new AuthCheckImpl(userCollCodec, userProfCollCodec, hasher, emailService)
 
   private def getLoginSvc[F[_]: Async](db: MongoDatabase[F], token: TokenIssuer[F]): F[AuthLogin[F]] =
     for userCollCodec <- db.getCollectionWithCodec[UserDoc](usersCollection)
@@ -103,10 +103,8 @@ object Server:
   private def getPoolStatsSvc[F[_]: Async: Parallel](db: MongoDatabase[F]): F[ConnectionPool[F]] =
     Sync[F].delay(new ConnectionPoolImpl[F](db))
 
-  private def getEmailSvc[F[_]: Async: Files](db: MongoDatabase[F]): F[EmailContact[F]] =
-    for
-      emailColl    <- db.getCollection(emailCollection)
-      emailService <- EmailService.initialize(ServiceConfig)
+  private def getEmailSvc[F[_]: Async: Files](db: MongoDatabase[F], emailService: EmailService[F]): F[EmailContact[F]] =
+    for emailColl <- db.getCollection(emailCollection)
     yield new EmailContactImpl[F](emailColl, emailService)
 
   def getServices[F[_]: Async: Files: Parallel](
@@ -115,10 +113,11 @@ object Server:
       client: Client[F]
   ): F[HttpApp[F]] =
     for
-      token       <- getTokenIssuerSvc(redis, db, jwtSecretKey)
-      authSvc     <- getAuthSvc(db, token)
-      loginSvc    <- getLoginSvc(db, token)
-      emailSvc    <- getEmailSvc(db)
+      token        <- getTokenIssuerSvc(redis, db, jwtSecretKey)
+      emailService <- EmailService.initialize(ServiceConfig)
+      authSvc      <- getAuthSvc(db, emailService)
+      loginSvc     <- getLoginSvc(db, token)
+      emailSvc     <- getEmailSvc(db, emailService)
       userRepo    <- getUserRepoSvc(db)
       fetchSvc    <- Sync[F].delay(new FetchImage[F](imageHost, client))
       historyRepo <- HistoryRepo.make(db)

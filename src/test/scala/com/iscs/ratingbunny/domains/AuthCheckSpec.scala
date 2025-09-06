@@ -2,6 +2,7 @@ package com.iscs.ratingbunny.domains
 
 import cats.effect.*
 import cats.implicits.*
+import com.iscs.mail.EmailService
 import com.iscs.ratingbunny.testkit.TestHasher
 import io.circe.generic.auto.*
 import mongo4cats.circe.*
@@ -14,18 +15,13 @@ import java.time.Instant
 import scala.concurrent.Future
 import scala.concurrent.duration.*
 
-class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo:
+class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
 
   override val mongoPort: Int           = 12355
   override def munitIOTimeout: Duration = 2.minutes
-  private val hasher                    = TestHasher.make[IO]
-  private val stubToken: TokenIssuer[IO] =
-    new TokenIssuer[IO]:
-      private val tp              = TokenPair("a", "r")
-      def issue(u: UserDoc)       = IO.pure(tp)
-      def issueGuest(uid: String) = IO.pure(tp)
-      def rotate(r: String)       = IO.pure(Some(tp))
-      def revoke(r: String)       = IO.unit
+  private val hasher = TestHasher.make[IO]
+  private val stubEmailService = new EmailService[IO]:
+    def sendEmail(to: String, subject: String, text: String, html: String) = IO.pure(List("ok"))
 
   // ── helpers ──────────────────────────────────────────────────
   private def withMongo[A](f: MongoDatabase[IO] => IO[A]): Future[A] =
@@ -47,16 +43,20 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo:
       for
         users <- db.getCollectionWithCodec[UserDoc]("users")
         prof  <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
-        svc = new AuthCheckImpl[IO](users, prof, hasher, stubToken)
+        svc = new AuthCheckImpl[IO](users, prof, hasher, stubEmailService)
 
         res <- svc.signup(mkSignup())
-        _   <- IO(assert(res.exists(_.tokens.access == "a"), s"expected Right but got $res"))
+        _   <- IO(assert(res.exists(_.userid.nonEmpty), s"expected Right but got $res"))
 
+        stored <- users.find(feq("email", "alice@example.com")).first
         countU <- users.count
         countP <- prof.count
       yield
         assertEquals(countU, 1L)
         assertEquals(countP, 1L)
+        assertEquals(stored.exists(!_.emailVerified), true)
+        assertEquals(stored.flatMap(_.verificationTokenHash).isDefined, true)
+        assertEquals(stored.flatMap(_.verificationExpires).isDefined, true)
 
   test("signup fails on duplicate email"):
     withMongo: db =>
@@ -74,7 +74,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo:
             createdAt = Instant.now()
           )
         )
-        svc = new AuthCheckImpl[IO](users, prof, hasher, stubToken)
+        svc = new AuthCheckImpl[IO](users, prof, hasher, stubEmailService)
         res <- svc.signup(mkSignup(email = "dup@example.com"))
       yield assertEquals(res, Left(SignupError.EmailExists))
 
@@ -83,6 +83,6 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo:
       for
         users <- db.getCollectionWithCodec[UserDoc]("users")
         prof  <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
-        svc = new AuthCheckImpl[IO](users, prof, hasher, stubToken)
+        svc = new AuthCheckImpl[IO](users, prof, hasher, stubEmailService)
         res <- svc.signup(mkSignup(pwd = "short"))
       yield assertEquals(res, Left(SignupError.BadPassword))
