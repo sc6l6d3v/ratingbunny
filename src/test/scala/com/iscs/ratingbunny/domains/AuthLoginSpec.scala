@@ -40,7 +40,8 @@ class AuthLoginSpec extends CatsEffectSuite with EmbeddedMongo:
       col: MongoCollection[IO, UserDoc],
       email: String,
       pwd: String,
-      status: SubscriptionStatus = SubscriptionStatus.Active
+      status: SubscriptionStatus = SubscriptionStatus.Active,
+      verified: Boolean = true
   ) =
     hasher
       .hash(pwd)
@@ -53,7 +54,8 @@ class AuthLoginSpec extends CatsEffectSuite with EmbeddedMongo:
             plan = Plan.Free,
             status = status,
             displayName = None,
-            createdAt = Instant.now()
+            createdAt = Instant.now(),
+            emailVerified = verified
           )
         )
 
@@ -62,7 +64,7 @@ class AuthLoginSpec extends CatsEffectSuite with EmbeddedMongo:
     withMongo: db =>
       for
         users <- db.getCollectionWithCodec[UserDoc]("users")
-        _     <- insertUser(users, "bob@example.com", "Passw0rd!")
+        _     <- insertUser(users, "bob@example.com", "Passw0rd!", verified = true)
         svc = new AuthLoginImpl[IO](users, hasher, stubToken)
         res <- svc.login(LoginRequest("bob@example.com", "Passw0rd!"))
       yield assert(res.exists(_.userid == "u1"))
@@ -71,7 +73,7 @@ class AuthLoginSpec extends CatsEffectSuite with EmbeddedMongo:
     withMongo: db =>
       for
         users <- db.getCollectionWithCodec[UserDoc]("users")
-        _     <- insertUser(users, "bob@example.com", "Passw0rd!")
+        _     <- insertUser(users, "bob@example.com", "Passw0rd!", verified = true)
         svc = new AuthLoginImpl[IO](users, hasher, stubToken)
         res <- svc.login(LoginRequest("bob@example.com", "wrong"))
       yield assertEquals(res, Left(LoginError.BadPassword))
@@ -80,7 +82,7 @@ class AuthLoginSpec extends CatsEffectSuite with EmbeddedMongo:
     withMongo: db =>
       for
         users <- db.getCollectionWithCodec[UserDoc]("users")
-        _     <- insertUser(users, "inactive@ex.com", "Passw0rd!", SubscriptionStatus.PastDue)
+        _     <- insertUser(users, "inactive@ex.com", "Passw0rd!", SubscriptionStatus.PastDue, verified = true)
         svc = new AuthLoginImpl[IO](users, hasher, stubToken)
         res <- svc.login(LoginRequest("inactive@ex.com", "Passw0rd!"))
       yield assertEquals(res, Left(LoginError.Inactive))
@@ -92,3 +94,12 @@ class AuthLoginSpec extends CatsEffectSuite with EmbeddedMongo:
         svc = new AuthLoginImpl[IO](users, hasher, stubToken)
         res <- svc.login(LoginRequest("nobody@ex.com", "Passw0rd!"))
       yield assertEquals(res, Left(LoginError.UserNotFound))
+
+  test("login fails for unverified email"):
+    withMongo: db =>
+      for
+        users <- db.getCollectionWithCodec[UserDoc]("users")
+        _     <- insertUser(users, "unver@ex.com", "Passw0rd!", verified = false)
+        svc = new AuthLoginImpl[IO](users, hasher, stubToken)
+        res <- svc.login(LoginRequest("unver@ex.com", "Passw0rd!"))
+      yield assertEquals(res, Left(LoginError.Unverified))

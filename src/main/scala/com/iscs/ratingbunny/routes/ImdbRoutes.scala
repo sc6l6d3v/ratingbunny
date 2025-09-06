@@ -142,19 +142,27 @@ object ImdbRoutes extends DecodeUtils:
     CORSSetup.methodConfig(svc)
 
   // ---------- AUTHED NAME routes --------------------------------------------------
-  def authedRoutes[F[_]: Async](I: ImdbQuery[F], hx: HistoryRepo[F], authMw: AuthMiddleware[F, String]): HttpRoutes[F] =
+  def authedRoutes[F[_]: Async](I: ImdbQuery[F], hx: HistoryRepo[F], userRepo: UserRepo[F], authMw: AuthMiddleware[F, String]): HttpRoutes[F] =
     val dsl = Http4sDsl[F]; import dsl.*
+
+    def ensureVerified(uid: String)(body: => F[Response[F]]): F[Response[F]] =
+      userRepo.findByUserId(uid).flatMap {
+        case Some(u) if u.emailVerified => body
+        case _                          => Forbidden()
+      }
 
     val svc = AuthedRoutes
       .of[String, F]:
         case authreq @ POST -> Root / "name2" / name / rating as user =>
-          for
-            p   <- authreq.req.as[ReqParams]
-            rtg <- getRating(rating)
-            lst <- I.getByName(name, rtg, p, SortField.from(p.sortType)).compile.toList
-            _   <- hx.log(user, p).start
-            res <- Ok(lst)
-          yield res
+          ensureVerified(user) {
+            for
+              p   <- authreq.req.as[ReqParams]
+              rtg <- getRating(rating)
+              lst <- I.getByName(name, rtg, p, SortField.from(p.sortType)).compile.toList
+              _   <- hx.log(user, p).start
+              res <- Ok(lst)
+            yield res
+          }
 
         case authreq @ POST -> Root / "name" / page / rating
             :? WindowWidthQueryParameterMatcher(ws)
@@ -162,36 +170,40 @@ object ImdbRoutes extends DecodeUtils:
             +& CardWidthQueryParameterMatcher(cs)
             +& CardHeightQueryParameterMatcher(ch)
             +& OffsetQUeryParameterMatcher(off) as user =>
-          val dimsL = conv(page, ws, wh, cs, ch, off)
-          val pgs   = pageSize(dimsL(1), dimsL(3), dimsL(2), dimsL(4), dimsL(5))
-          for
-            p   <- authreq.req.as[ReqParams]
-            _   <- Sync[F].delay(L.info(s"got reqParams: $p"))
-            rtg <- getRating(rating)
-            lst <- I
-              .getByEnhancedName(p.query.getOrElse(""), rtg, p, pgs << 3, SortField.from(p.sortType))
-              .compile
-              .toList
-            _ <- Sync[F].delay(L.info(s"got list: $lst"))
-            pageLst = pureExtract(lst, dimsL.head, pgs)
-            left    = remain(dimsL.head, pgs, lst.size)
-            _ <- hx.log(user, p).start
-            res <- Ok(pageLst).map(
-              _.putHeaders(
-                Header.Raw(ci"X-Remaining-Count", left.toString),
-                Header.Raw(ci"Access-Control-Expose-Headers", "X-Remaining-Count")
+          ensureVerified(user) {
+            val dimsL = conv(page, ws, wh, cs, ch, off)
+            val pgs   = pageSize(dimsL(1), dimsL(3), dimsL(2), dimsL(4), dimsL(5))
+            for
+              p   <- authreq.req.as[ReqParams]
+              _   <- Sync[F].delay(L.info(s"got reqParams: $p"))
+              rtg <- getRating(rating)
+              lst <- I
+                .getByEnhancedName(p.query.getOrElse(""), rtg, p, pgs << 3, SortField.from(p.sortType))
+                .compile
+                .toList
+              _ <- Sync[F].delay(L.info(s"got list: $lst"))
+              pageLst = pureExtract(lst, dimsL.head, pgs)
+              left    = remain(dimsL.head, pgs, lst.size)
+              _ <- hx.log(user, p).start
+              res <- Ok(pageLst).map(
+                _.putHeaders(
+                  Header.Raw(ci"X-Remaining-Count", left.toString),
+                  Header.Raw(ci"Access-Control-Expose-Headers", "X-Remaining-Count")
+                )
               )
-            )
-          yield res
+            yield res
+          }
 
         case authreq @ POST -> Root / "autoname" / name / rating as user =>
-          for
-            p   <- authreq.req.as[ReqParams]
-            rtg <- getRating(rating)
-            lst <- I.getAutosuggestName(name, rtg, p).compile.toList
-            _   <- hx.log(user, p).start
-            res <- Ok(lst)
-          yield res
+          ensureVerified(user) {
+            for
+              p   <- authreq.req.as[ReqParams]
+              rtg <- getRating(rating)
+              lst <- I.getAutosuggestName(name, rtg, p).compile.toList
+              _   <- hx.log(user, p).start
+              res <- Ok(lst)
+            yield res
+          }
       .map(
         _.withContentType(`Content-Type`(org.http4s.MediaType.application.json))
       )

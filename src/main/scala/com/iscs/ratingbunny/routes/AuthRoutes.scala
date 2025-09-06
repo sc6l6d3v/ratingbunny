@@ -25,6 +25,8 @@ import org.http4s.{
   Response
 }
 import org.http4s.server.AuthMiddleware
+import java.time.Instant
+import org.http4s.dsl.impl.QueryParamDecoderMatcher
 
 object AuthRoutes:
   private val L = Logger[this.type]
@@ -49,6 +51,8 @@ object AuthRoutes:
         .collect:
           case headers.Authorization(Credentials.Token(AuthScheme.Bearer, v)) =>
             v
+
+    object TokenParamMatcher extends QueryParamDecoderMatcher[String]("token")
 
     val svc = HttpRoutes.of[F]:
       case req @ POST -> Root / "auth" / "signup" =>
@@ -113,6 +117,20 @@ object AuthRoutes:
                     )
                   case Left(LoginError.Inactive) =>
                     Forbidden(Json.obj("error" -> Json.fromString("account inactive")))
+                  case Left(LoginError.Unverified) =>
+                    Forbidden(Json.obj("error" -> Json.fromString("email not verified")))
+        yield resp
+      case ((POST | GET) -> Root / "auth" / "verify") :? TokenParamMatcher(token) =>
+        for
+          hash <- hashPassword(token)
+          userOpt <- userRepo.findByVerificationTokenHash(hash)
+          now <- Sync[F].delay(Instant.now)
+          resp <- userOpt match
+            case Some(u) if u.verificationExpires.forall(_.isAfter(now)) =>
+              userRepo.markEmailVerified(u.userid) *>
+                token.issue(u.copy(emailVerified = true, verificationTokenHash = None, verificationExpires = None)).flatMap:
+                  tp => Ok(Json.obj("access" -> tp.access.asJson, "refresh" -> tp.refresh.asJson))
+            case _ => Forbidden(Json.obj("error" -> Json.fromString("invalid or expired token")))
         yield resp
       case POST -> Root / "auth" / "guest" =>
         for
@@ -140,9 +158,10 @@ object AuthRoutes:
         userRepo
           .findByUserId(userId)
           .flatMap:
-            case Some(u) =>
+            case Some(u) if u.emailVerified =>
               val info = UserInfo(u.userid, u.email, u.plan.asString, u.displayName)
               Ok(info.asJson)
-            case None => NotFound()
+            case Some(_) => Forbidden()
+            case None    => NotFound()
 
     CORSSetup.methodConfig(authMw(svc))
