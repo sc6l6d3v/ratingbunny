@@ -31,6 +31,9 @@ final class AuthLoginImpl[F[_]: Async](
         case Some(u) if u.status != SubscriptionStatus.Active =>
           LoginError.Inactive.asLeft.pure[F]
 
+        case Some(u) if !u.emailVerified =>
+          LoginError.Unverified.asLeft.pure[F]
+
         case Some(u) =>
           hasher
             .verify(req.password, u.passwordHash)

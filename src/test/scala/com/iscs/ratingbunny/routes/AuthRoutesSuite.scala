@@ -32,13 +32,18 @@ class AuthRoutesSuite extends CatsEffectSuite:
     userid = "user1",
     plan = Plan.Free,
     status = SubscriptionStatus.Active,
-    displayName = Some("Tester")
+    displayName = Some("Tester"),
+    emailVerified = true
   )
+
+  private val unverified = user.copy(emailVerified = false, verificationExpires = Some(java.time.Instant.now.plusSeconds(3600)))
 
   private val repo = new UserRepo[IO]:
     def findByEmail(email: String) = IO.pure(None)
     def insert(u: UserDoc)         = IO.unit
     def findByUserId(id: String)   = IO.pure(if id == user.userid then Some(user) else None)
+    def findByVerificationTokenHash(hash: String) = IO.pure(Some(unverified))
+    def markEmailVerified(uid: String)             = IO.unit
 
   private val secret    = "test-secret"
   private val authMw    = JwtAuth.middleware[IO](secret)
@@ -87,3 +92,15 @@ class AuthRoutesSuite extends CatsEffectSuite:
             val r = json.hcursor.get[String]("refresh").toOption.get
             assert(a.contains("guest-"))
             assert(r.contains("guest-"))
+
+  test("GET /auth/verify returns tokens"):
+    val req = Request[IO](Method.GET, uri"/auth/verify?token=abc")
+    httpSvc
+      .run(req)
+      .flatMap: resp =>
+        assertEquals(resp.status, Status.Ok)
+        resp
+          .as[Json]
+          .map: json =>
+            assert(json.hcursor.get[String]("access").isRight)
+            assert(json.hcursor.get[String]("refresh").isRight)
