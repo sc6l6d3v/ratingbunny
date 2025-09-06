@@ -9,7 +9,7 @@
 FROM bellsoft/liberica-openjdk-alpine:21-cds
 
 # Env variables
-ENV SCALA_VERSION=3.4.2
+ENV SCALA_VERSION=3.5.0
 ENV SBT_VERSION=1.10.0
 ENV APP_NAME=ratingbunny
 ENV APP_VERSION=1.0

@@ -120,16 +120,18 @@ object AuthRoutes:
                   case Left(LoginError.Unverified) =>
                     Forbidden(Json.obj("error" -> Json.fromString("email not verified")))
         yield resp
-      case ((POST | GET) -> Root / "auth" / "verify") :? TokenParamMatcher(token) =>
+      case ((POST | GET) -> Root / "auth" / "verify") :? TokenParamMatcher(strToken) =>
         for
-          hash <- hashPassword(token)
+          hash    <- hashPassword(strToken)
           userOpt <- userRepo.findByVerificationTokenHash(hash)
-          now <- Sync[F].delay(Instant.now)
+          now     <- Sync[F].delay(Instant.now)
           resp <- userOpt match
             case Some(u) if u.verificationExpires.forall(_.isAfter(now)) =>
               userRepo.markEmailVerified(u.userid) *>
-                token.issue(u.copy(emailVerified = true, verificationTokenHash = None, verificationExpires = None)).flatMap:
-                  tp => Ok(Json.obj("access" -> tp.access.asJson, "refresh" -> tp.refresh.asJson))
+                token
+                  .issue(u.copy(emailVerified = true, verificationTokenHash = None, verificationExpires = None))
+                  .flatMap: tp =>
+                    Ok(Json.obj("access" -> tp.access.asJson, "refresh" -> tp.refresh.asJson))
             case _ => Forbidden(Json.obj("error" -> Json.fromString("invalid or expired token")))
         yield resp
       case POST -> Root / "auth" / "guest" =>
