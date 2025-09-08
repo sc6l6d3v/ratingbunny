@@ -2,7 +2,6 @@ package com.iscs.ratingbunny.domains
 
 import cats.data.EitherT
 import cats.effect.*
-import cats.effect.implicits.*
 import cats.implicits.*
 import com.iscs.mail.EmailService
 import com.iscs.ratingbunny.util.PasswordHasher
@@ -38,8 +37,9 @@ final class AuthCheckImpl[F[_]: Async](
     hasher: PasswordHasher[F],
     emailService: EmailService[F]
 ) extends AuthCheck[F] with QuerySetup:
-  private val docFail   = 121
-  private val MINPWDLEN = 8
+  private val docFail    = 121
+  private val MINPWDLEN  = 8
+  private val VERIFYHOST = sys.env.getOrElse("VERIFYHOST", "https://example.com/")
 
   private def validatePw(pw: String): Either[SignupError, Unit] =
     val ok =
@@ -71,11 +71,11 @@ final class AuthCheckImpl[F[_]: Async](
           .map:
             case 0 => Right(())
             case _ => Left(SignupError.EmailExists)
-      uid        <- EitherT.liftF(genUserId(req.email))
-      hash       <- EitherT.liftF(hasher.hash(req.password))
-      token      <- EitherT.liftF(Sync[F].delay(UUID.randomUUID().toString))
-      tokenHash  <- EitherT.liftF(hasher.hash(token))
-      expiresAt  <- EitherT.liftF(Sync[F].delay(Instant.now.plus(1, ChronoUnit.DAYS)))
+      uid       <- EitherT.liftF(genUserId(req.email))
+      hash      <- EitherT.liftF(hasher.hash(req.password))
+      token     <- EitherT.liftF(Sync[F].delay(UUID.randomUUID().toString))
+      tokenHash <- EitherT.liftF(hasher.hash(token))
+      expiresAt <- EitherT.liftF(Sync[F].delay(Instant.now.plus(1, ChronoUnit.DAYS)))
       user = UserDoc(
         email = req.email,
         passwordHash = hash,
@@ -83,14 +83,13 @@ final class AuthCheckImpl[F[_]: Async](
         plan = req.plan,
         status = SubscriptionStatus.Active,
         displayName = req.displayName,
-        emailVerified = false,
         verificationTokenHash = Some(tokenHash),
         verificationExpires = Some(expiresAt)
       )
-      _   <- EitherT.liftF(usersCol.insertOne(user))
-      _   <- EitherT.liftF(userProfileCol.insertOne(UserProfileDoc(uid)))
-      link = s"https://example.com/api/v3/auth/verify?token=$token"
-      _   <- EitherT.liftF(emailService.sendEmail(req.email, "Verify your email", link, link).void)
+      _ <- EitherT.liftF(usersCol.insertOne(user))
+      _ <- EitherT.liftF(userProfileCol.insertOne(UserProfileDoc(uid)))
+      link = s"${VERIFYHOST}api/v3/auth/verify?token=$token"
+      _ <- EitherT.liftF(emailService.sendEmail(req.email, "Verify your email", link, link).void)
     yield SignupOK(uid)).value
       .handleError:
         case mw: MongoWriteException if mw.getError.getCategory == DUPLICATE_KEY =>

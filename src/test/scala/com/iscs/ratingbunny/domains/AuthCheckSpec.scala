@@ -1,9 +1,10 @@
 package com.iscs.ratingbunny.domains
 
+import cats.data.NonEmptyList
 import cats.effect.*
 import cats.implicits.*
 import com.iscs.mail.EmailService
-import com.iscs.ratingbunny.testkit.TestHasher
+import com.iscs.ratingbunny.testkit.{MockEmailService, TestHasher}
 import io.circe.generic.auto.*
 import mongo4cats.circe.*
 import mongo4cats.client.MongoClient
@@ -19,9 +20,8 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
 
   override val mongoPort: Int           = 12355
   override def munitIOTimeout: Duration = 2.minutes
-  private val hasher = TestHasher.make[IO]
-  private val stubEmailService = new EmailService[IO]:
-    def sendEmail(to: String, subject: String, text: String, html: String) = IO.pure(List("ok"))
+  private val hasher                    = TestHasher.make[IO]
+  private val stubEmailService          = new MockEmailService[IO]()
 
   // ── helpers ──────────────────────────────────────────────────
   private def withMongo[A](f: MongoDatabase[IO] => IO[A]): Future[A] =
