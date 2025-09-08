@@ -69,8 +69,11 @@ addCommandAlias(
 
 assembly / assemblyMergeStrategy := {
   case PathList("META-INF", "services", xs @ _*) => MergeStrategy.concat
-  case PathList("META-INF", xs @ _*)             => MergeStrategy.discard
-  case "io.netty.versions.properties"            => MergeStrategy.discard
-  case "reference.conf"                          => MergeStrategy.concat
-  case x                                         => MergeStrategy.first
+  case PathList("META-INF", "mailcap") | PathList("META-INF", "javamail.default.providers") |
+      PathList("META-INF", "javamail.default.address.map") =>
+    MergeStrategy.concat
+  case PathList("META-INF", xs @ _*)  => MergeStrategy.discard
+  case "io.netty.versions.properties" => MergeStrategy.discard
+  case "reference.conf"               => MergeStrategy.concat
+  case x                              => MergeStrategy.first
 }
