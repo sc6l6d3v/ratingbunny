@@ -28,6 +28,7 @@ class AuthRoutesSuite extends CatsEffectSuite:
 
   private val user = UserDoc(
     email = "test@example.com",
+    emailNorm = "test@example.com".trim.toLowerCase,
     passwordHash = "hash",
     userid = "user1",
     plan = Plan.Free,
@@ -39,11 +40,11 @@ class AuthRoutesSuite extends CatsEffectSuite:
   private val unverified = user.copy(emailVerified = false, verificationExpires = Some(java.time.Instant.now.plusSeconds(3600)))
 
   private val repo = new UserRepo[IO]:
-    def findByEmail(email: String) = IO.pure(None)
-    def insert(u: UserDoc)         = IO.unit
-    def findByUserId(id: String)   = IO.pure(if id == user.userid then Some(user) else None)
-    def findByVerificationTokenHash(hash: String) = IO.pure(Some(unverified))
-    def markEmailVerified(uid: String)             = IO.unit
+    def findByEmail(email: String): IO[None.type] = IO.pure(None)
+    def insert(u: UserDoc): IO[Unit] = IO.unit
+    def findByUserId(id: String): IO[Option[UserDoc]] = IO.pure(if id == user.userid then Some(user) else None)
+    def findByVerificationTokenHash(hash: String): IO[Some[UserDoc]] = IO.pure(Some(unverified))
+    def markEmailVerified(uid: String): IO[Unit] = IO.unit
 
   private val secret    = "test-secret"
   private val authMw    = JwtAuth.middleware[IO](secret)

@@ -49,6 +49,7 @@ class AuthLoginSpec extends CatsEffectSuite with EmbeddedMongo:
         col.insertOne(
           UserDoc(
             email = email,
+            emailNorm = email.trim.toLowerCase,
             passwordHash = h,
             userid = "u1",
             plan = Plan.Free,

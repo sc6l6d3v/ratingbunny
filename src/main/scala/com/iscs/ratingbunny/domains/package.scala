@@ -78,6 +78,7 @@ package object domains:
   final case class UserDoc(
       _id: ObjectId = new ObjectId(),
       email: String,
+      emailNorm: String,
       passwordHash: String,
       userid: String,
       plan: Plan,

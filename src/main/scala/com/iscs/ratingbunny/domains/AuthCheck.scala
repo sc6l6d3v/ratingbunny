@@ -78,6 +78,7 @@ final class AuthCheckImpl[F[_]: Async](
       expiresAt <- EitherT.liftF(Sync[F].delay(Instant.now.plus(1, ChronoUnit.DAYS)))
       user = UserDoc(
         email = req.email,
+        emailNorm = req.email.trim.toLowerCase,
         passwordHash = hash,
         userid = uid,
         plan = req.plan,
