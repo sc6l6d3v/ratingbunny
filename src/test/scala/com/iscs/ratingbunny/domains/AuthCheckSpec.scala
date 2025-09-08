@@ -66,7 +66,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         _ <- users.insertOne(
           UserDoc(
             email = "dup@example.com",
-            emailNorm = "dup@example.com".trim.toLowerCase,
+            email_norm = "dup@example.com".trim.toLowerCase,
             passwordHash = "x",
             userid = "dup",
             plan = Plan.Free,

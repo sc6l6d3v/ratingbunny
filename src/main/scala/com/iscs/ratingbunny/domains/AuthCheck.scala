@@ -65,9 +65,11 @@ final class AuthCheckImpl[F[_]: Async](
       // EitherT gives you an Either along the way
       _ <- EitherT.fromEither[F](validatePw(req.password))
 
+      email_norm = req.email.trim.toLowerCase
+
       _ <- EitherT:
         usersCol
-          .count(feq("email", req.email))
+          .count(feq("email_norm", email_norm))
           .map:
             case 0 => Right(())
             case _ => Left(SignupError.EmailExists)
@@ -78,7 +80,7 @@ final class AuthCheckImpl[F[_]: Async](
       expiresAt <- EitherT.liftF(Sync[F].delay(Instant.now.plus(1, ChronoUnit.DAYS)))
       user = UserDoc(
         email = req.email,
-        emailNorm = req.email.trim.toLowerCase,
+        email_norm = email_norm,
         passwordHash = hash,
         userid = uid,
         plan = req.plan,
@@ -94,7 +96,9 @@ final class AuthCheckImpl[F[_]: Async](
     yield SignupOK(uid)).value
       .handleError:
         case mw: MongoWriteException if mw.getError.getCategory == DUPLICATE_KEY =>
-          Left(SignupError.UserIdExists)
+          val msg = Option(mw.getError.getMessage).getOrElse("")
+          if (msg.contains("email_norm")) Left(SignupError.EmailExists)
+          else Left(SignupError.UserIdExists)
         case mw: MongoWriteException
             if mw.getError.getCode == docFail ||
               mw.getError.getMessage.startsWith("Document failed validation") =>
