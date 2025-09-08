@@ -103,5 +103,6 @@ final class AuthCheckImpl[F[_]: Async](
             if mw.getError.getCode == docFail ||
               mw.getError.getMessage.startsWith("Document failed validation") =>
           Left(SignupError.InvalidEmail)
-        case _ =>
+        case e =>
+          L.error("Error during signup", e)
           Left(SignupError.BadPassword) // or a generic failure
