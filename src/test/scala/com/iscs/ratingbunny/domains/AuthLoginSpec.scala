@@ -104,3 +104,12 @@ class AuthLoginSpec extends CatsEffectSuite with EmbeddedMongo:
         svc = new AuthLoginImpl[IO](users, hasher, stubToken)
         res <- svc.login(LoginRequest("unver@ex.com", "Passw0rd!"))
       yield assertEquals(res, Left(LoginError.Unverified))
+
+  test("login succeeds with mixed-case email"):
+    withMongo: db =>
+      for
+        users <- db.getCollectionWithCodec[UserDoc]("users")
+        _     <- insertUser(users, "bob@example.com", "Passw0rd!", verified = true)
+        svc = new AuthLoginImpl[IO](users, hasher, stubToken)
+        res <- svc.login(LoginRequest("BoB@Example.com", "Passw0rd!"))
+      yield assert(res.exists(_.userid == "u1"))
