@@ -2,6 +2,7 @@ package com.iscs.ratingbunny
 
 import com.iscs.ratingbunny.model.Requests.ReqParams
 import mongo4cats.bson.ObjectId
+import org.mongodb.scala.bson.annotations.BsonProperty
 
 import java.time.Instant
 
@@ -78,7 +79,7 @@ package object domains:
   final case class UserDoc(
       _id: ObjectId = new ObjectId(),
       email: String,
-      emailNorm: String,
+      @BsonProperty("email_norm") emailNorm: String,
       passwordHash: String,
       userid: String,
       plan: Plan,

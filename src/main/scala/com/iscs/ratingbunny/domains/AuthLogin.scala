@@ -22,7 +22,7 @@ final class AuthLoginImpl[F[_]: Async](
     val emailNorm = req.email.trim.toLowerCase
     for
       userOpt <- usersCol
-        .find(feq("emailNorm", emailNorm))
+        .find(feq("email_norm", emailNorm))
         .first
 
       result <- userOpt match
