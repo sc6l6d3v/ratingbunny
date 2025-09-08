@@ -19,9 +19,10 @@ final class AuthLoginImpl[F[_]: Async](
 ) extends AuthLogin[F] with QuerySetup:
 
   override def login(req: LoginRequest): F[Either[LoginError, LoginOK]] =
+    val emailNorm = req.email.trim.toLowerCase
     for
       userOpt <- usersCol
-        .find(feq("email", req.email))
+        .find(feq("emailNorm", emailNorm))
         .first
 
       result <- userOpt match
