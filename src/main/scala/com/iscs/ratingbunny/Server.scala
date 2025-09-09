@@ -84,7 +84,9 @@ object Server:
 
   private def getUserRepoSvc[F[_]: Async](db: MongoDatabase[F]): F[UserRepo[F]] =
     for userCollCodec <- db.getCollectionWithCodec[UserDoc](usersCollection)
-    yield new UserRepoImpl(userCollCodec)
+    yield
+      val hasher = BcryptHasher.make[F](cost = 12)
+      new UserRepoImpl(userCollCodec, hasher)
 
   private def getTokenIssuerSvc[F[_]: Async](
       redis: RedisCommands[F, String, String],
