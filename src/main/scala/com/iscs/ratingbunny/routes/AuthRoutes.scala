@@ -4,7 +4,6 @@ import cats.effect.{Async, Sync}
 import cats.implicits.*
 import com.iscs.ratingbunny.domains.SignupError.*
 import com.iscs.ratingbunny.domains.*
-import com.iscs.ratingbunny.util.BcryptHasher
 import com.typesafe.scalalogging.Logger
 import io.circe.generic.auto.*
 import io.circe.syntax.*
@@ -38,12 +37,6 @@ object AuthRoutes:
     given EntityDecoder[F, RegisterReq] = jsonOf
     given EntityDecoder[F, LoginReq]    = jsonOf
     given EntityEncoder[F, TokenPair]   = jsonEncoderOf
-
-    val hasher = BcryptHasher.make[F](cost = 12)
-
-    def verifyPassword(plain: String, hashed: String): F[Boolean] = hasher.verify(plain, hashed)
-
-    def hashPassword(plain: String): F[String] = hasher.hash(plain)
 
     def bearer(req: Request[F]): Option[String] =
       req.headers
@@ -122,8 +115,7 @@ object AuthRoutes:
         yield resp
       case ((POST | GET) -> Root / "auth" / "verify") :? TokenParamMatcher(strToken) =>
         for
-          hash    <- hashPassword(strToken)
-          userOpt <- userRepo.findByVerificationTokenHash(hash)
+          userOpt <- userRepo.findByVerificationToken(strToken)
           now     <- Sync[F].delay(Instant.now)
           resp <- userOpt match
             case Some(u) if u.verificationExpires.forall(_.isAfter(now)) =>
@@ -132,8 +124,8 @@ object AuthRoutes:
                   .issue(u.copy(emailVerified = true, verificationTokenHash = None, verificationExpires = None))
                   .flatMap: tp =>
                     Ok(Json.obj("access" -> tp.access.asJson, "refresh" -> tp.refresh.asJson))
-            case e =>
-              L.error(s"Error during verify: $hash not found")
+            case _ =>
+              L.error(s"Error during verify: token not found")
               Forbidden(Json.obj("error" -> Json.fromString("invalid or expired token")))
         yield resp
       case POST -> Root / "auth" / "guest" =>
