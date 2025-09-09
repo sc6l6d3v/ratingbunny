@@ -4,6 +4,7 @@ import com.iscs.ratingbunny.model.Requests.ReqParams
 import mongo4cats.bson.ObjectId
 
 import java.time.Instant
+import scala.language.postfixOps
 
 package object domains:
 
@@ -95,22 +96,22 @@ package object domains:
     import io.circe.{Codec, Decoder, Encoder, HCursor}
     import io.circe.generic.semiauto.*
     import mongo4cats.circe.*
-    given Encoder[UserDoc] = deriveEncoder[UserDoc]
-    given Decoder[UserDoc] = (c: HCursor) =>
+    given encUserDoc: Encoder[UserDoc] = deriveEncoder[UserDoc]
+    given decUserDoc: Decoder[UserDoc] = (c: HCursor) =>
       for
-        id   <- c.downField("_id").as[ObjectId]
-        email <- c.downField("email").as[String]
-        emailNorm <- c.downField("email_norm").as[String]
-        passwordHash <- c.downField("passwordHash").as[String]
-        userid <- c.downField("userid").as[String]
-        plan <- c.downField("plan").as[Plan]
-        status <- c.downField("status").as[SubscriptionStatus]
-        displayName <- c.downField("displayName").as[Option[String]]
-        prefs <- c.downField("prefs").as[Option[List[String]]].map(_.getOrElse(Nil))
-        createdAt <- c.downField("createdAt").as[Instant]
-        emailVerified <- c.downField("emailVerified").as[Option[Boolean]].map(_.getOrElse(false))
+        id                    <- c.downField("_id").as[ObjectId]
+        email                 <- c.downField("email").as[String]
+        emailNorm             <- c.downField("email_norm").as[String]
+        passwordHash          <- c.downField("passwordHash").as[String]
+        userid                <- c.downField("userid").as[String]
+        plan                  <- c.downField("plan").as[Plan]
+        status                <- c.downField("status").as[SubscriptionStatus]
+        displayName           <- c.downField("displayName").as[Option[String]]
+        prefs                 <- c.downField("prefs").as[Option[List[String]]].map(_.getOrElse(Nil))
+        createdAt             <- c.downField("createdAt").as[Instant]
+        emailVerified         <- c.downField("emailVerified").as[Option[Boolean]].map(_.getOrElse(false))
         verificationTokenHash <- c.downField("verificationTokenHash").as[Option[String]]
-        verificationExpires <- c.downField("verificationExpires").as[Option[Instant]]
+        verificationExpires   <- c.downField("verificationExpires").as[Option[Instant]]
       yield UserDoc(
         id,
         email,
@@ -126,7 +127,7 @@ package object domains:
         verificationTokenHash,
         verificationExpires
       )
-    given Codec[UserDoc] = Codec.from(given Decoder[UserDoc], given Encoder[UserDoc])
+    given Codec[UserDoc] = Codec.from(decUserDoc, encUserDoc)
 
   final case class UserProfileDoc(
       userid: String,
