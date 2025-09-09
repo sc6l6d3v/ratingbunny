@@ -132,7 +132,9 @@ object AuthRoutes:
                   .issue(u.copy(emailVerified = true, verificationTokenHash = None, verificationExpires = None))
                   .flatMap: tp =>
                     Ok(Json.obj("access" -> tp.access.asJson, "refresh" -> tp.refresh.asJson))
-            case _ => Forbidden(Json.obj("error" -> Json.fromString("invalid or expired token")))
+            case e =>
+              L.error(s"Error during verify: $hash not found")
+              Forbidden(Json.obj("error" -> Json.fromString("invalid or expired token")))
         yield resp
       case POST -> Root / "auth" / "guest" =>
         for

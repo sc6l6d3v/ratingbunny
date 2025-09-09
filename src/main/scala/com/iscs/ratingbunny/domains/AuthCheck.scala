@@ -92,6 +92,7 @@ final class AuthCheckImpl[F[_]: Async](
       _ <- EitherT.liftF(usersCol.insertOne(user))
       _ <- EitherT.liftF(userProfileCol.insertOne(UserProfileDoc(uid)))
       link = s"${VERIFYHOST}api/v3/auth/verify?token=$token"
+      _ <- EitherT.liftF(Sync[F].delay(L.debug(s"saved $token with $tokenHash")))
       _ <- EitherT.liftF(emailService.sendEmail(req.email, "Verify your email", link, link).void)
     yield SignupOK(uid)).value
       .handleError:
@@ -104,5 +105,5 @@ final class AuthCheckImpl[F[_]: Async](
               mw.getError.getMessage.startsWith("Document failed validation") =>
           Left(SignupError.InvalidEmail)
         case e =>
-          L.error("Error during signup", e)
+          L.error(s"Error during signup: ${e.getMessage}", e)
           Left(SignupError.BadPassword) // or a generic failure
