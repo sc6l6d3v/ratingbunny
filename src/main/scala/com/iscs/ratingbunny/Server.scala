@@ -83,10 +83,10 @@ object Server:
       new AuthLoginImpl(userCollCodec, hasher, token)
 
   private def getUserRepoSvc[F[_]: Async](db: MongoDatabase[F]): F[UserRepo[F]] =
-    for userCollCodec <- db.getCollectionWithCodec[UserDoc](usersCollection)
-    yield
-      val hasher = BcryptHasher.make[F](cost = 12)
-      new UserRepoImpl(userCollCodec, hasher)
+    for
+      userCollCodec <- db.getCollectionWithCodec[UserDoc](usersCollection)
+      repo          <- UserRepoImpl.make[F](userCollCodec)
+    yield repo
 
   private def getTokenIssuerSvc[F[_]: Async](
       redis: RedisCommands[F, String, String],

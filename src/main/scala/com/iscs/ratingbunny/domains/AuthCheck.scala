@@ -4,7 +4,7 @@ import cats.data.EitherT
 import cats.effect.*
 import cats.implicits.*
 import com.iscs.mail.EmailService
-import com.iscs.ratingbunny.util.PasswordHasher
+import com.iscs.ratingbunny.util.{DeterministicHash, PasswordHasher}
 import com.mongodb.ErrorCategory.DUPLICATE_KEY
 import com.mongodb.{ErrorCategory, MongoWriteException}
 import mongo4cats.circe.*
@@ -73,11 +73,11 @@ final class AuthCheckImpl[F[_]: Async](
           .map:
             case 0 => Right(())
             case _ => Left(SignupError.EmailExists)
-      uid       <- EitherT.liftF(genUserId(req.email))
-      hash      <- EitherT.liftF(hasher.hash(req.password))
-      token     <- EitherT.liftF(Sync[F].delay(UUID.randomUUID().toString))
-      tokenHash <- EitherT.liftF(hasher.hash(token))
-      expiresAt <- EitherT.liftF(Sync[F].delay(Instant.now.plus(1, ChronoUnit.DAYS)))
+      uid        <- EitherT.liftF(genUserId(req.email))
+      hash       <- EitherT.liftF(hasher.hash(req.password))
+      token      <- EitherT.liftF(Sync[F].delay(UUID.randomUUID().toString))
+      tokenHash <- EitherT.liftF(Sync[F].delay(DeterministicHash.sha256(token)))
+      expiresAt  <- EitherT.liftF(Sync[F].delay(Instant.now.plus(1, ChronoUnit.DAYS)))
       user = UserDoc(
         email = req.email,
         email_norm = email_norm,

@@ -4,8 +4,10 @@ import cats.effect.*
 import cats.implicits.*
 import mongo4cats.circe.*
 import mongo4cats.collection.MongoCollection
+import mongo4cats.models.collection.IndexOptions
+import mongo4cats.operations.Index
 import org.mongodb.scala.model.{Updates as JUpdates}
-import com.iscs.ratingbunny.util.PasswordHasher
+import com.iscs.ratingbunny.util.DeterministicHash
 
 trait UserRepo[F[_]]:
   def findByEmail(email: String): F[Option[UserDoc]]
@@ -14,7 +16,7 @@ trait UserRepo[F[_]]:
   def findByVerificationToken(token: String): F[Option[UserDoc]]
   def markEmailVerified(uid: String): F[Unit]
 
-class UserRepoImpl[F[_]: Async](collection: MongoCollection[F, UserDoc], hasher: PasswordHasher[F])
+class UserRepoImpl[F[_]: Async](collection: MongoCollection[F, UserDoc])
     extends UserRepo[F]
     with QuerySetup:
   override def findByEmail(email: String): F[Option[UserDoc]] = collection.find(feq("email", email)).first
@@ -22,17 +24,8 @@ class UserRepoImpl[F[_]: Async](collection: MongoCollection[F, UserDoc], hasher:
   override def findByUserId(uid: String): F[Option[UserDoc]]  = collection.find(feq("userid", uid)).first
 
   override def findByVerificationToken(token: String): F[Option[UserDoc]] =
-    collection
-      .find
-      .stream
-      .evalMap: u =>
-        u.verificationTokenHash match
-          case Some(h) => hasher.verify(token, h).map(res => if res then Some(u) else None)
-          case None    => Async[F].pure(None)
-      .collect { case Some(u) => u }
-      .head
-      .compile
-      .last
+    val hash = DeterministicHash.sha256(token)
+    collection.find(feq("verificationTokenHash", hash)).first
 
   override def markEmailVerified(uid: String): F[Unit] =
     val update = JUpdates.combine(
@@ -41,3 +34,26 @@ class UserRepoImpl[F[_]: Async](collection: MongoCollection[F, UserDoc], hasher:
       JUpdates.unset("verificationExpires")
     )
     collection.updateOne(feq("userid", uid), update).void
+
+  private val idxVerif    = "verificationTokenHash_idx"
+  private val idxVerifDef = "verificationTokenHash_1"
+
+  def ensureIndexes: F[Unit] =
+    for
+      idxDocs <- collection.listIndexes
+      existing = idxDocs.flatMap(_.getString("name").toList).toSet
+      _ <-
+        if existing(idxVerif) || existing(idxVerifDef) then Async[F].unit
+        else
+          collection
+            .createIndex(
+              Index.ascending("verificationTokenHash"),
+              IndexOptions(background = true, unique = true).name(idxVerif)
+            )
+            .void
+    yield ()
+
+object UserRepoImpl:
+  def make[F[_]: Async](collection: MongoCollection[F, UserDoc]): F[UserRepo[F]] =
+    val repo = new UserRepoImpl[F](collection)
+    repo.ensureIndexes.as(repo)
