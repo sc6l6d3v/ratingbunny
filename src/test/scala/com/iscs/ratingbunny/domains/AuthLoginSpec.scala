@@ -9,6 +9,8 @@ import mongo4cats.client.MongoClient
 import mongo4cats.collection.MongoCollection
 import mongo4cats.database.MongoDatabase
 import mongo4cats.embedded.EmbeddedMongo
+import mongo4cats.bson.{Document, ObjectId}
+import mongo4cats.bson.syntax.*
 import munit.CatsEffectSuite
 
 import java.time.Instant
@@ -103,6 +105,30 @@ class AuthLoginSpec extends CatsEffectSuite with EmbeddedMongo:
         _     <- insertUser(users, "unver@ex.com", "Passw0rd!", verified = false)
         svc = new AuthLoginImpl[IO](users, hasher, stubToken)
         res <- svc.login(LoginRequest("unver@ex.com", "Passw0rd!"))
+      yield assertEquals(res, Left(LoginError.Unverified))
+
+  test("login treats missing emailVerified as unverified"):
+    withMongo: db =>
+      for
+        raw <- db.getCollectionWithCodec[Document]("users")
+        h   <- hasher.hash("Passw0rd!")
+        _ <- raw.insertOne(
+          Document(
+            "_id" := ObjectId.gen,
+            "email" := "legacy@ex.com",
+            "email_norm" := "legacy@ex.com",
+            "passwordHash" := h,
+            "userid" := "u1",
+            "plan" := Plan.Free,
+            "status" := SubscriptionStatus.Active,
+            "displayName" := Option.empty[String],
+            "prefs" := List.empty[String],
+            "createdAt" := Instant.now()
+          )
+        )
+        users <- db.getCollectionWithCodec[UserDoc]("users")
+        svc = new AuthLoginImpl[IO](users, hasher, stubToken)
+        res <- svc.login(LoginRequest("legacy@ex.com", "Passw0rd!"))
       yield assertEquals(res, Left(LoginError.Unverified))
 
   test("login succeeds with mixed-case email"):
