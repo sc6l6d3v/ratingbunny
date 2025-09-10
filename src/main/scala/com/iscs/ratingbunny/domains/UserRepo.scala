@@ -6,7 +6,7 @@ import mongo4cats.circe.*
 import mongo4cats.collection.MongoCollection
 import mongo4cats.models.collection.IndexOptions
 import mongo4cats.operations.Index
-import org.mongodb.scala.model.{Updates as JUpdates}
+import org.mongodb.scala.model.Updates as JUpdates
 import com.iscs.ratingbunny.util.DeterministicHash
 
 trait UserRepo[F[_]]:
@@ -16,9 +16,7 @@ trait UserRepo[F[_]]:
   def findByVerificationToken(token: String): F[Option[UserDoc]]
   def markEmailVerified(uid: String): F[Unit]
 
-class UserRepoImpl[F[_]: Async](collection: MongoCollection[F, UserDoc])
-    extends UserRepo[F]
-    with QuerySetup:
+class UserRepoImpl[F[_]: Async](collection: MongoCollection[F, UserDoc]) extends UserRepo[F] with QuerySetup:
   override def findByEmail(email: String): F[Option[UserDoc]] = collection.find(feq("email", email)).first
   override def insert(u: UserDoc): F[Unit]                    = collection.insertOne(u).void
   override def findByUserId(uid: String): F[Option[UserDoc]]  = collection.find(feq("userid", uid)).first
@@ -48,7 +46,7 @@ class UserRepoImpl[F[_]: Async](collection: MongoCollection[F, UserDoc])
           collection
             .createIndex(
               Index.ascending("verificationTokenHash"),
-              IndexOptions(background = true, unique = true).name(idxVerif)
+              IndexOptions(background = true, unique = true, sparse = true).name(idxVerif)
             )
             .void
     yield ()
