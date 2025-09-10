@@ -3,7 +3,9 @@ package com.iscs.ratingbunny.domains
 import cats.data.NonEmptyList
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
-import com.iscs.mail.{EmailAttachment, EmailService}
+import com.iscs.mail.EmailAttachment
+import com.iscs.ratingbunny.testkit.MockEmailService
+import jakarta.mail.SendFailedException
 import mongo4cats.bson.Document
 import mongo4cats.client.MongoClient
 import mongo4cats.collection.MongoCollection
@@ -21,45 +23,8 @@ class EmailContactSpec extends AsyncWordSpec with Matchers with EmbeddedMongo:
   override val mongoPort: Int = 12348
   private val field_id        = "_id"
 
-  /** Very small in-memory implementation of the EmailService trait. All test cases receive the constant message-id
-    * `"test-message-id-12345"` — exactly what the app code expects to log / return.
-    */
-  private val mockEmailService: EmailService[IO] = new EmailService[IO]:
-    override val fromAddress: String = "test@example.com"
-
-    override def sendEmail(
-        to: String,
-        subject: String,
-        textBody: String,
-        htmlBody: String,
-        attachments: List[EmailAttachment[IO]]
-    ): IO[NonEmptyList[String]] =
-      IO.pure(NonEmptyList.one("test-message-id-12345"))
-
-    // The production code under test never calls the methods below,
-    // but we must still provide definitions to satisfy the trait.
-    override def sendEmail(to: String, subject: String, textBody: String, htmlBody: String): IO[NonEmptyList[String]] =
-      sendEmail(to, subject, textBody, htmlBody, Nil)
-
-    override def sendEmailToMultiple(
-        recipients: List[String],
-        subject: String,
-        textBody: String,
-        htmlBody: String,
-        attachments: List[EmailAttachment[IO]]
-    ): IO[List[NonEmptyList[String]]] =
-      IO.pure(recipients.map(_ => NonEmptyList.one("test-message-id-12345")))
-
-    override def sendEmailToMultiple(
-        recipients: List[String],
-        subject: String,
-        textBody: String,
-        htmlBody: String
-    ): IO[List[NonEmptyList[String]]] =
-      sendEmailToMultiple(recipients, subject, textBody, htmlBody, Nil)
-
-    override def send(mail: emil.Mail[IO]): IO[NonEmptyList[String]] =
-      IO.pure(NonEmptyList.one("test-message-id-12345"))
+  /** Use mock email service to capture sends */
+  private val mockEmailService = new MockEmailService[IO]()
 
   "embedded MongoDB" when:
     "sending email" should:
@@ -110,6 +75,52 @@ class EmailContactSpec extends AsyncWordSpec with Matchers with EmbeddedMongo:
             msg          = "This is another test message."
             result <- emailContact.saveEmail(name, email, subject, msg)
           yield result shouldBe email
+
+      "sendEmail should surface failure when underlying service errors" in:
+        withEmbeddedMongoClient: client =>
+          for
+            db      <- setupTestDatabase("test", client)
+            emailFx <- setupTestCollection(db, "mock")
+            failingService = new MockEmailService[IO]():
+              override def sendEmail(
+                  to: String,
+                  subject: String,
+                  textBody: String,
+                  htmlBody: String,
+                  attachments: List[EmailAttachment[IO]]
+              ): IO[NonEmptyList[String]] =
+                IO.raiseError(new SendFailedException("bad address"))
+              override def sendEmail(
+                  to: String,
+                  subject: String,
+                  textBody: String,
+                  htmlBody: String
+              ): IO[NonEmptyList[String]] =
+                sendEmail(to, subject, textBody, htmlBody, Nil)
+              override def sendEmailToMultiple(
+                  recipients: List[String],
+                  subject: String,
+                  textBody: String,
+                  htmlBody: String,
+                  attachments: List[EmailAttachment[IO]]
+              ): IO[List[NonEmptyList[String]]] =
+                IO.raiseError(new SendFailedException("bad address"))
+              override def sendEmailToMultiple(
+                  recipients: List[String],
+                  subject: String,
+                  textBody: String,
+                  htmlBody: String
+              ): IO[List[NonEmptyList[String]]] =
+                sendEmailToMultiple(recipients, subject, textBody, htmlBody, Nil)
+              override def send(mail: emil.Mail[IO]): IO[NonEmptyList[String]] =
+                IO.raiseError(new SendFailedException("bad address"))
+            emailContact = new EmailContactImpl[IO](emailFx, failingService)
+            result <- emailContact
+              .saveEmail("John Doe", "john.doe@example.com", "Test", "msg")
+              .attempt
+          yield result match
+            case Left(_: SendFailedException) => succeed
+            case other                        => fail(s"expected SendFailedException but got $other")
 
   def setupTestDatabase(name: String, client: MongoClient[IO]): IO[MongoDatabase[IO]] =
     client.getDatabase(name)

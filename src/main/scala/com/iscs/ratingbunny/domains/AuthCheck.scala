@@ -7,6 +7,7 @@ import com.iscs.mail.EmailService
 import com.iscs.ratingbunny.util.{DeterministicHash, PasswordHasher}
 import com.mongodb.ErrorCategory.DUPLICATE_KEY
 import com.mongodb.{ErrorCategory, MongoWriteException}
+import jakarta.mail.MessagingException
 import mongo4cats.circe.*
 import mongo4cats.collection.MongoCollection
 
@@ -104,6 +105,8 @@ final class AuthCheckImpl[F[_]: Async](
             if mw.getError.getCode == docFail ||
               mw.getError.getMessage.startsWith("Document failed validation") =>
           Left(SignupError.InvalidEmail)
+        case _: MessagingException =>
+          Left(SignupError.BadEmail)
         case e =>
           L.error(s"Error during signup: ${e.getMessage}", e)
           Left(SignupError.BadPassword) // or a generic failure
