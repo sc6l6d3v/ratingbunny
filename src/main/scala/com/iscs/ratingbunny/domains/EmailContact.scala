@@ -12,6 +12,7 @@ import org.mongodb.scala.model.*
 import org.mongodb.scala.result.UpdateResult
 
 import java.time.Instant
+import jakarta.mail.MessagingException
 import jakarta.mail.internet.{InternetAddress, MimeUtility} // Java-21 module name
 import scala.concurrent.duration.FiniteDuration
 import scala.util.matching.Regex
@@ -125,8 +126,16 @@ class EmailContactImpl[F[_]: MonadCancelThrow: Sync](
     val to           = rfcAddress(name, email) // ← RFC-correct
     val truncSubject = subject.take(maxValLen)
     val truncMsg     = msg.take(maxMsgLen)
-    for
-      receipt   <- emailService.sendEmail(to, truncSubject, truncMsg, truncMsg)
-      messageId <- Sync[F].delay(receipt.head)
-      _         <- Sync[F].delay(L.info(s"Email $email - Message ID: $messageId"))
-    yield messageId
+    (for
+      receipt <- emailService.sendEmail(to, truncSubject, truncMsg, truncMsg)
+      messageId = receipt.head
+      _ <- Sync[F].delay(L.info(s"Email $email - Message ID: $messageId"))
+    yield messageId).handleErrorWith:
+      case e: MessagingException =>
+        Sync[F]
+          .delay(L.error(s"Failed to send email to $email: ${e.getMessage}"))
+          *> Sync[F].raiseError[String](e)
+      case e =>
+        Sync[F]
+          .delay(L.error(s"Unexpected error sending email to $email: ${e.getMessage}"))
+          *> Sync[F].raiseError[String](e)

@@ -3,8 +3,10 @@ package com.iscs.ratingbunny.domains
 import cats.data.NonEmptyList
 import cats.effect.*
 import cats.implicits.*
-import com.iscs.mail.EmailService
+import com.iscs.mail.EmailAttachment
 import com.iscs.ratingbunny.testkit.{MockEmailService, TestHasher}
+import emil.Mail
+import jakarta.mail.SendFailedException
 import io.circe.generic.auto.*
 import mongo4cats.circe.*
 import mongo4cats.client.MongoClient
@@ -87,3 +89,45 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         svc = new AuthCheckImpl[IO](users, prof, hasher, stubEmailService)
         res <- svc.signup(mkSignup(pwd = "short"))
       yield assertEquals(res, Left(SignupError.BadPassword))
+
+  test("signup fails when email service rejects recipient"):
+    withMongo: db =>
+      for
+        users <- db.getCollectionWithCodec[UserDoc]("users")
+        prof  <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        failingEmailService = new MockEmailService[IO]():
+          override def sendEmail(
+              to: String,
+              subject: String,
+              textBody: String,
+              htmlBody: String,
+              attachments: List[EmailAttachment[IO]]
+          ): IO[NonEmptyList[String]] =
+            IO.raiseError(new SendFailedException("bad address"))
+          override def sendEmail(
+              to: String,
+              subject: String,
+              textBody: String,
+              htmlBody: String
+          ): IO[NonEmptyList[String]] =
+            sendEmail(to, subject, textBody, htmlBody, Nil)
+          override def sendEmailToMultiple(
+              recipients: List[String],
+              subject: String,
+              textBody: String,
+              htmlBody: String,
+              attachments: List[EmailAttachment[IO]]
+          ): IO[List[NonEmptyList[String]]] =
+            IO.raiseError(new SendFailedException("bad address"))
+          override def sendEmailToMultiple(
+              recipients: List[String],
+              subject: String,
+              textBody: String,
+              htmlBody: String
+          ): IO[List[NonEmptyList[String]]] =
+            sendEmailToMultiple(recipients, subject, textBody, htmlBody, Nil)
+          override def send(mail: Mail[IO]): IO[NonEmptyList[String]] =
+            IO.raiseError(new SendFailedException("bad address"))
+        svc = new AuthCheckImpl[IO](users, prof, hasher, failingEmailService)
+        res <- svc.signup(mkSignup())
+      yield assertEquals(res, Left(SignupError.BadEmail))
