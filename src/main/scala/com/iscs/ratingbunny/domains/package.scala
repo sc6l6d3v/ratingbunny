@@ -6,6 +6,9 @@ import mongo4cats.bson.ObjectId
 import java.time.Instant
 import scala.language.postfixOps
 
+import io.circe.{Codec, Decoder, Encoder}
+import io.circe.generic.semiauto.*
+
 package object domains:
 
   final private case class PathRec(path: String)
@@ -134,6 +137,72 @@ package object domains:
       avatarUrl: Option[String] = None,
       favGenres: List[String] = Nil,
       locale: Option[String] = Some("en_US")
+  )
+
+  // ── Which gateway is backing this record (future‑proofing) ──
+  enum BillingGateway derives CanEqual:
+    case Helcim, Stripe
+
+  object BillingGateway:
+    given Encoder[BillingGateway] =
+      Encoder.encodeString.contramap {
+        case BillingGateway.Helcim => "helcim"
+        case BillingGateway.Stripe => "stripe"
+      }
+    given Decoder[BillingGateway] =
+      Decoder.decodeString.emap {
+        case "helcim" => Right(BillingGateway.Helcim)
+        case "stripe" => Right(BillingGateway.Stripe)
+        case other    => Left(s"unsupported gateway: $other")
+      }
+    given codecBillingGateway(using
+        dec: Decoder[BillingGateway],
+        enc: Encoder[BillingGateway]
+    ): Codec[BillingGateway] =
+      io.circe.Codec.from(dec, enc)
+
+  // ── Helcim account refs attached to a user ──
+  // customerId: Helcim “customer” object id
+  // defaultCardToken / defaultBankToken: tokenized payment methods (PCI‑safe)
+  final case class HelcimAccount(
+      customerId: String,
+      defaultCardToken: Option[String] = None,
+      defaultBankToken: Option[String] = None
+  )
+
+  object HelcimAccount:
+    given Codec[HelcimAccount] = deriveCodec
+
+  // ── Snapshot of a Helcim Recurring subscription ──
+  // Keep `status` as String to avoid coupling to Helcim’s status vocabulary.
+  final case class HelcimSubSnapshot(
+      subscriptionId: String, // /v2/subscriptions id
+      planId: String,         // /v2/payment-plans id
+      status: String,         // e.g. "active", "paused", ...
+      nextBillAt: Option[Instant] = None,
+      amountCents: Long,
+      currency: String
+  )
+
+  object HelcimSubSnapshot:
+    given Codec[HelcimSubSnapshot] = deriveCodec
+
+  final case class Address(
+      line1: String,
+      line2: Option[String] = None,
+      city: String,
+      state: String,
+      postalCode: String,
+      country: String
+  )
+
+  final case class BillingInfo(
+      userId: ObjectId,
+      gateway: BillingGateway = BillingGateway.Helcim,
+      helcim: HelcimAccount, // required when gateway=Helcim
+      address: Address,
+      subscription: Option[HelcimSubSnapshot] = None,
+      updatedAt: Instant = Instant.now()
   )
 
   // ---------- request / response ----------
