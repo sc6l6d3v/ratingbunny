@@ -80,6 +80,7 @@ object AuthRoutes:
                   case Left(BadCountry)   => BadRequest("Invalid country")
                   case Left(BadLanguage)  => BadRequest("Invalid language")
                   case Left(BadTimezone)  => BadRequest("Invalid time zone")
+                  case Left(BillingRequired) => BadRequest("billing info required for pro plan")
               yield out
         yield resp
       case req @ POST -> Root / "auth" / "login" =>

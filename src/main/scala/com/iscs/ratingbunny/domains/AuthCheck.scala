@@ -31,16 +31,34 @@ enum SignupError:
   case BadCountry
   case BadLanguage
   case BadTimezone
+  case BillingRequired
 
 final class AuthCheckImpl[F[_]: Async](
     usersCol: MongoCollection[F, UserDoc],
     userProfileCol: MongoCollection[F, UserProfileDoc],
+    billingCol: MongoCollection[F, BillingInfo],
     hasher: PasswordHasher[F],
     emailService: EmailService[F]
 ) extends AuthCheck[F] with QuerySetup:
   private val docFail    = 121
   private val MINPWDLEN  = 8
   private val VERIFYHOST = sys.env.getOrElse("VERIFYHOST", "https://example.com/")
+
+  private def persistBilling(user: UserDoc, billing: Option[SignupBilling]): EitherT[F, SignupError, Unit] =
+    user.plan match
+      case Plan.Free => EitherT.rightT[F, SignupError](())
+      case Plan.ProMonthly | Plan.ProYearly =>
+        billing match
+          case Some(details) =>
+            val doc = BillingInfo(
+              userId = user._id,
+              gateway = details.gateway,
+              helcim = details.helcim,
+              address = details.address,
+              subscription = details.subscription
+            )
+            EitherT.liftF(billingCol.insertOne(doc).void)
+          case None => EitherT.leftT[F, Unit](SignupError.BillingRequired)
 
   private def validatePw(pw: String): Either[SignupError, Unit] =
     val ok =
@@ -92,6 +110,7 @@ final class AuthCheckImpl[F[_]: Async](
       )
       _ <- EitherT.liftF(usersCol.insertOne(user))
       _ <- EitherT.liftF(userProfileCol.insertOne(UserProfileDoc(uid)))
+      _ <- persistBilling(user, req.billing)
       link = s"${VERIFYHOST}api/v3/auth/verify?token=$token"
       _ <- EitherT.liftF(Sync[F].delay(L.debug(s"saved $token with $tokenHash")))
       _ <- EitherT.liftF(emailService.sendEmail(req.email, "Verify your email", link, link).void)

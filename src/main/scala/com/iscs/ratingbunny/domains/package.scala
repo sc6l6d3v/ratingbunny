@@ -71,11 +71,22 @@ package object domains:
   )
 
   /** -- incoming payload */
+  final case class SignupBilling(
+      gateway: BillingGateway = BillingGateway.Helcim,
+      helcim: HelcimAccount,
+      address: Address,
+      subscription: Option[HelcimSubSnapshot] = None
+  )
+
+  object SignupBilling:
+    given Codec[SignupBilling] = deriveCodec
+
   final case class SignupRequest(
       email: String,
       password: String,
       displayName: Option[String],
-      plan: Plan
+      plan: Plan,
+      billing: Option[SignupBilling] = None
   )
 
   /** --- persisted docs --- */
@@ -196,6 +207,9 @@ package object domains:
       country: String
   )
 
+  object Address:
+    given Codec[Address] = deriveCodec
+
   final case class BillingInfo(
       userId: ObjectId,
       gateway: BillingGateway = BillingGateway.Helcim,
@@ -204,6 +218,9 @@ package object domains:
       subscription: Option[HelcimSubSnapshot] = None,
       updatedAt: Instant = Instant.now()
   )
+
+  object BillingInfo:
+    given Codec[BillingInfo] = deriveCodec
 
   // ---------- request / response ----------
   final case class LoginRequest(email: String, password: String)

@@ -10,6 +10,7 @@ import com.iscs.ratingbunny.domains.{
   AuthCheckImpl,
   AuthLogin,
   AuthLoginImpl,
+  BillingInfo,
   ConnectionPool,
   ConnectionPoolImpl,
   EmailContact,
@@ -63,6 +64,7 @@ object Server:
   private val tbrCollection         = "title_basics_ratings"
   private val usersCollection       = "users"
   private val userProfileCollection = "user_profile"
+  private val billingCollection     = "billing_info"
   private val apiVersion            = "v3"
 
   private val jwtSecretKey =
@@ -72,9 +74,10 @@ object Server:
     for
       userCollCodec     <- db.getCollectionWithCodec[UserDoc](usersCollection)
       userProfCollCodec <- db.getCollectionWithCodec[UserProfileDoc](userProfileCollection)
+      billingCollCodec  <- db.getCollectionWithCodec[BillingInfo](billingCollection)
     yield
       val hasher = BcryptHasher.make[F](cost = 12)
-      new AuthCheckImpl(userCollCodec, userProfCollCodec, hasher, emailService)
+      new AuthCheckImpl(userCollCodec, userProfCollCodec, billingCollCodec, hasher, emailService)
 
   private def getLoginSvc[F[_]: Async](db: MongoDatabase[F], token: TokenIssuer[F]): F[AuthLogin[F]] =
     for userCollCodec <- db.getCollectionWithCodec[UserDoc](usersCollection)
