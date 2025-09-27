@@ -33,19 +33,37 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         .use(_.getDatabase("test").flatMap(f))
     .unsafeToFuture()
 
+  private def mkBilling(
+      customerId: String = "cust-123",
+      gateway: BillingGateway = BillingGateway.Helcim
+  ) =
+    SignupBilling(
+      gateway = gateway,
+      helcim = HelcimAccount(customerId, defaultCardToken = Some("card-abc")),
+      address = Address(
+        line1 = "123 Main St",
+        city = "Metropolis",
+        state = "NY",
+        postalCode = "10001",
+        country = "US"
+      )
+    )
+
   private def mkSignup(
       email: String = "alice@example.com",
       pwd: String = "Passw0rd!",
-      plan: Plan = Plan.Free
-  ) = SignupRequest(email, pwd, None, plan)
+      plan: Plan = Plan.Free,
+      billing: Option[SignupBilling] = None
+  ) = SignupRequest(email, pwd, None, plan, billing)
 
   // ── tests ────────────────────────────────────────────────────
   test("signup succeeds for fresh user"):
     withMongo: db =>
       for
-        users <- db.getCollectionWithCodec[UserDoc]("users")
-        prof  <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
-        svc = new AuthCheckImpl[IO](users, prof, hasher, stubEmailService)
+        users    <- db.getCollectionWithCodec[UserDoc]("users")
+        prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService)
 
         res <- svc.signup(mkSignup())
         _   <- IO(assert(res.exists(_.userid.nonEmpty), s"expected Right but got $res"))
@@ -53,9 +71,11 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         stored <- users.find(feq("email", "alice@example.com")).first
         countU <- users.count
         countP <- prof.count
+        countB <- billingC.count
       yield
         assertEquals(countU, 1L)
         assertEquals(countP, 1L)
+        assertEquals(countB, 0L)
         assertEquals(stored.exists(!_.emailVerified), true)
         assertEquals(stored.flatMap(_.verificationTokenHash).isDefined, true)
         assertEquals(stored.flatMap(_.verificationExpires).isDefined, true)
@@ -63,8 +83,9 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
   test("signup fails on duplicate email"):
     withMongo: db =>
       for
-        users <- db.getCollectionWithCodec[UserDoc]("users")
-        prof  <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        users    <- db.getCollectionWithCodec[UserDoc]("users")
+        prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
         _ <- users.insertOne(
           UserDoc(
             email = "dup@example.com",
@@ -77,24 +98,26 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
             createdAt = Instant.now()
           )
         )
-        svc = new AuthCheckImpl[IO](users, prof, hasher, stubEmailService)
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService)
         res <- svc.signup(mkSignup(email = "dup@example.com"))
       yield assertEquals(res, Left(SignupError.EmailExists))
 
   test("signup fails on weak password"):
     withMongo: db =>
       for
-        users <- db.getCollectionWithCodec[UserDoc]("users")
-        prof  <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
-        svc = new AuthCheckImpl[IO](users, prof, hasher, stubEmailService)
+        users    <- db.getCollectionWithCodec[UserDoc]("users")
+        prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService)
         res <- svc.signup(mkSignup(pwd = "short"))
       yield assertEquals(res, Left(SignupError.BadPassword))
 
   test("signup fails when email service rejects recipient"):
     withMongo: db =>
       for
-        users <- db.getCollectionWithCodec[UserDoc]("users")
-        prof  <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        users    <- db.getCollectionWithCodec[UserDoc]("users")
+        prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
         failingEmailService = new MockEmailService[IO]():
           override def sendEmail(
               to: String,
@@ -128,6 +151,35 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
             sendEmailToMultiple(recipients, subject, textBody, htmlBody, Nil)
           override def send(mail: Mail[IO]): IO[NonEmptyList[String]] =
             IO.raiseError(new SendFailedException("bad address"))
-        svc = new AuthCheckImpl[IO](users, prof, hasher, failingEmailService)
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, failingEmailService)
         res <- svc.signup(mkSignup())
       yield assertEquals(res, Left(SignupError.BadEmail))
+
+  test("pro signup requires billing info"):
+    withMongo: db =>
+      for
+        users    <- db.getCollectionWithCodec[UserDoc]("users")
+        prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService)
+        res <- svc.signup(mkSignup(plan = Plan.ProMonthly))
+      yield assertEquals(res, Left(SignupError.BillingRequired))
+
+  test("pro signup stores billing info"):
+    withMongo: db =>
+      for
+        users    <- db.getCollectionWithCodec[UserDoc]("users")
+        prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService)
+        res <- svc.signup(mkSignup(plan = Plan.ProMonthly, billing = Some(mkBilling())))
+        _   <- IO(assert(res.exists(_.userid.nonEmpty), s"expected success but got $res"))
+        storedUser <- users.find(feq("email", "alice@example.com")).first
+        billingDoc <- storedUser match
+          case Some(u) => billingC.find(feq("userId", u._id)).first
+          case None    => IO.pure(None)
+        countB <- billingC.count
+      yield
+        assertEquals(countB, 1L)
+        assertEquals(billingDoc.map(_.helcim.customerId), Some("cust-123"))
+        assertEquals(billingDoc.flatMap(_.address.line2), None)
