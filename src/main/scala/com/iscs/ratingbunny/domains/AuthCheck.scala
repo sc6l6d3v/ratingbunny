@@ -51,7 +51,7 @@ final class AuthCheckImpl[F[_]: Async](
         billing match
           case Some(details) =>
             val doc = BillingInfo(
-              userId = user._id,
+              userId = user.userid,
               gateway = details.gateway,
               helcim = details.helcim,
               address = details.address,

@@ -176,7 +176,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         _   <- IO(assert(res.exists(_.userid.nonEmpty), s"expected success but got $res"))
         storedUser <- users.find(feq("email", "alice@example.com")).first
         billingDoc <- storedUser match
-          case Some(u) => billingC.find(feq("userId", u._id)).first
+          case Some(u) => billingC.find(feq("userId", u.userid)).first
           case None    => IO.pure(None)
         countB <- billingC.count
       yield
