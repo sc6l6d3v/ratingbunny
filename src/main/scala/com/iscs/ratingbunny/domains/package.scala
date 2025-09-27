@@ -211,7 +211,7 @@ package object domains:
     given Codec[Address] = deriveCodec
 
   final case class BillingInfo(
-      userId: ObjectId,
+      userId: String,
       gateway: BillingGateway = BillingGateway.Helcim,
       helcim: HelcimAccount, // required when gateway=Helcim
       address: Address,
