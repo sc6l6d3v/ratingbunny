@@ -114,16 +114,16 @@ class AuthLoginSpec extends CatsEffectSuite with EmbeddedMongo:
         h   <- hasher.hash("Passw0rd!")
         _ <- raw.insertOne(
           Document(
-            "_id" := ObjectId.gen,
-            "email" := "legacy@ex.com",
-            "email_norm" := "legacy@ex.com",
+            "_id"          := ObjectId.gen,
+            "email"        := "legacy@ex.com",
+            "email_norm"   := "legacy@ex.com",
             "passwordHash" := h,
-            "userid" := "u1",
-            "plan" := Plan.Free,
-            "status" := SubscriptionStatus.Active,
-            "displayName" := Option.empty[String],
-            "prefs" := List.empty[String],
-            "createdAt" := Instant.now()
+            "userid"       := "u1",
+            "plan"         := Plan.Free,
+            "status"       := SubscriptionStatus.Active,
+            "displayName"  := Option.empty[String],
+            "prefs"        := List.empty[String],
+            "createdAt"    := Instant.now()
           )
         )
         users <- db.getCollectionWithCodec[UserDoc]("users")

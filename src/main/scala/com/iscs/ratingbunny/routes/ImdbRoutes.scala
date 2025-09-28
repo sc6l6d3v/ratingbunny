@@ -142,7 +142,12 @@ object ImdbRoutes extends DecodeUtils:
     CORSSetup.methodConfig(svc)
 
   // ---------- AUTHED NAME routes --------------------------------------------------
-  def authedRoutes[F[_]: Async](I: ImdbQuery[F], hx: HistoryRepo[F], userRepo: UserRepo[F], authMw: AuthMiddleware[F, String]): HttpRoutes[F] =
+  def authedRoutes[F[_]: Async](
+      I: ImdbQuery[F],
+      hx: HistoryRepo[F],
+      userRepo: UserRepo[F],
+      authMw: AuthMiddleware[F, String]
+  ): HttpRoutes[F] =
     val dsl = Http4sDsl[F]; import dsl.*
 
     def ensureVerified(uid: String)(body: => F[Response[F]]): F[Response[F]] =

@@ -123,11 +123,11 @@ object Server:
       authSvc      <- getAuthSvc(db, emailService)
       loginSvc     <- getLoginSvc(db, token)
       emailSvc     <- getEmailSvc(db, emailService)
-      userRepo    <- getUserRepoSvc(db)
-      fetchSvc    <- Sync[F].delay(new FetchImage[F](imageHost, client))
-      historyRepo <- HistoryRepo.make(db)
-      imdbSvc     <- getImdbSvc(db, client)
-      poolSvc     <- getPoolStatsSvc(db)
+      userRepo     <- getUserRepoSvc(db)
+      fetchSvc     <- Sync[F].delay(new FetchImage[F](imageHost, client))
+      historyRepo  <- HistoryRepo.make(db)
+      imdbSvc      <- getImdbSvc(db, client)
+      poolSvc      <- getPoolStatsSvc(db)
       authMw = JwtAuth.middleware(jwtSecretKey)
       httpApp = Router(
         s"/api/$apiVersion" ->

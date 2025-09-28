@@ -172,8 +172,8 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
         billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
         svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService)
-        res <- svc.signup(mkSignup(plan = Plan.ProMonthly, billing = Some(mkBilling())))
-        _   <- IO(assert(res.exists(_.userid.nonEmpty), s"expected success but got $res"))
+        res        <- svc.signup(mkSignup(plan = Plan.ProMonthly, billing = Some(mkBilling())))
+        _          <- IO(assert(res.exists(_.userid.nonEmpty), s"expected success but got $res"))
         storedUser <- users.find(feq("email", "alice@example.com")).first
         billingDoc <- storedUser match
           case Some(u) => billingC.find(feq("userId", u.userid)).first
