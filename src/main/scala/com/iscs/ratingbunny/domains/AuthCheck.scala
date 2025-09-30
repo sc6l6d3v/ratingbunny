@@ -2,11 +2,12 @@ package com.iscs.ratingbunny.domains
 
 import cats.data.EitherT
 import cats.effect.*
+import cats.effect.kernel.Ref
 import cats.implicits.*
 import com.iscs.mail.EmailService
 import com.iscs.ratingbunny.util.{DeterministicHash, PasswordHasher}
 import com.mongodb.ErrorCategory.DUPLICATE_KEY
-import com.mongodb.{ErrorCategory, MongoWriteException}
+import com.mongodb.MongoWriteException
 import jakarta.mail.MessagingException
 import mongo4cats.circe.*
 import mongo4cats.collection.MongoCollection
@@ -80,52 +81,76 @@ final class AuthCheckImpl[F[_]: Async](
     loop(0)
 
   override def signup(req: SignupRequest): F[Either[SignupError, SignupOK]] =
-    (for
-      // EitherT gives you an Either along the way
-      _ <- EitherT.fromEither[F](validatePw(req.password))
+    Ref.of[F, Option[String]](None).flatMap: userIdRef =>
+      val program = (for
+        _ <- EitherT.fromEither[F](validatePw(req.password))
 
-      email_norm = req.email.trim.toLowerCase
+        email_norm = req.email.trim.toLowerCase
 
-      _ <- EitherT:
-        usersCol
-          .count(feq("email_norm", email_norm))
-          .map:
-            case 0 => Right(())
-            case _ => Left(SignupError.EmailExists)
-      uid       <- EitherT.liftF(genUserId(req.email))
-      hash      <- EitherT.liftF(hasher.hash(req.password))
-      token     <- EitherT.liftF(Sync[F].delay(UUID.randomUUID().toString))
-      tokenHash <- EitherT.liftF(Sync[F].delay(DeterministicHash.sha256(token)))
-      expiresAt <- EitherT.liftF(Sync[F].delay(Instant.now.plus(1, ChronoUnit.DAYS)))
-      user = UserDoc(
-        email = req.email,
-        email_norm = email_norm,
-        passwordHash = hash,
-        userid = uid,
-        plan = req.plan,
-        status = SubscriptionStatus.Active,
-        displayName = req.displayName,
-        verificationTokenHash = Some(tokenHash),
-        verificationExpires = Some(expiresAt)
-      )
-      _ <- EitherT.liftF(usersCol.insertOne(user))
-      _ <- EitherT.liftF(userProfileCol.insertOne(UserProfileDoc(uid)))
-      _ <- persistBilling(user, req.billing)
-      link = s"${VERIFYHOST}api/v3/auth/verify?token=$token"
-      _ <- EitherT.liftF(Sync[F].delay(L.debug(s"saved $token with $tokenHash")))
-      _ <- EitherT.liftF(emailService.sendEmail(req.email, "Verify your email", link, link).void)
-    yield SignupOK(uid)).value
-      .handleError:
-        case mw: MongoWriteException if mw.getError.getCategory == DUPLICATE_KEY =>
-          val msg = Option(mw.getError.getMessage).getOrElse("")
-          if (msg.contains("email_norm")) Left(SignupError.EmailExists)
-          else Left(SignupError.UserIdExists)
-        case mw: MongoWriteException
-            if mw.getError.getCode == docFail ||
-              mw.getError.getMessage.startsWith("Document failed validation") =>
-          Left(SignupError.InvalidEmail)
-        case _: MessagingException =>
-          Left(SignupError.BadEmail)
-        case e =>
-          L.error(s"Error during signup: ${e.getMessage}", e)
-          Left(SignupError.BadPassword) // or a generic failure
+        _ <- EitherT:
+          usersCol
+            .count(feq("email_norm", email_norm))
+            .map:
+              case 0 => Right(())
+              case _ => Left(SignupError.EmailExists)
+        uid       <- EitherT.liftF(genUserId(req.email))
+        hash      <- EitherT.liftF(hasher.hash(req.password))
+        token     <- EitherT.liftF(Sync[F].delay(UUID.randomUUID().toString))
+        tokenHash <- EitherT.liftF(Sync[F].delay(DeterministicHash.sha256(token)))
+        expiresAt <- EitherT.liftF(Sync[F].delay(Instant.now.plus(1, ChronoUnit.DAYS)))
+        user = UserDoc(
+          email = req.email,
+          email_norm = email_norm,
+          passwordHash = hash,
+          userid = uid,
+          plan = req.plan,
+          status = SubscriptionStatus.Active,
+          displayName = req.displayName,
+          verificationTokenHash = Some(tokenHash),
+          verificationExpires = Some(expiresAt)
+        )
+        _ <- EitherT.liftF(usersCol.insertOne(user) *> userIdRef.set(Some(uid)))
+        _ <- EitherT.liftF(userProfileCol.insertOne(UserProfileDoc(uid)).void)
+        _ <- persistBilling(user, req.billing)
+        link = s"${VERIFYHOST}api/v3/auth/verify?token=$token"
+        _ <- EitherT.liftF(Sync[F].delay(L.debug(s"saved $token with $tokenHash")))
+        _ <- EitherT.liftF(emailService.sendEmail(req.email, "Verify your email", link, link).void)
+      yield SignupOK(uid))
+
+      program.value.attempt.flatMap:
+        case Left(e) =>
+          cleanupSignup(userIdRef) *> handleSignupException(e)
+        case Right(Left(err)) =>
+          cleanupSignup(userIdRef) *> (Left(err): Either[SignupError, SignupOK]).pure[F]
+        case Right(Right(ok)) =>
+          Right(ok).pure[F]
+
+  private def cleanupSignup(userIdRef: Ref[F, Option[String]]): F[Unit] =
+    userIdRef.get.flatMap:
+      case Some(uid) =>
+        val deleteOps: List[F[Unit]] = List(
+          billingCol.deleteOne(feq("userId", uid)).void,
+          userProfileCol.deleteOne(feq("userid", uid)).void,
+          usersCol.deleteOne(feq("userid", uid)).void
+        )
+        deleteOps.sequence_.handleErrorWith: e =>
+          L.error(s"Failed to cleanup signup artifacts for $uid: ${e.getMessage}", e)
+          Async[F].unit
+      case None => Async[F].unit
+
+  private def handleSignupException(e: Throwable): F[Either[SignupError, SignupOK]] =
+    (e match
+      case mw: MongoWriteException if mw.getError.getCategory == DUPLICATE_KEY =>
+        val msg = Option(mw.getError.getMessage).getOrElse("")
+        if msg.contains("email_norm") then Left(SignupError.EmailExists)
+        else Left(SignupError.UserIdExists)
+      case mw: MongoWriteException
+          if mw.getError.getCode == docFail ||
+            Option(mw.getError.getMessage).exists(_.startsWith("Document failed validation")) =>
+        Left(SignupError.InvalidEmail)
+      case _: MessagingException =>
+        Left(SignupError.BadEmail)
+      case other =>
+        L.error(s"Error during signup: ${other.getMessage}", other)
+        Left(SignupError.BadPassword)
+    ).pure[F]
