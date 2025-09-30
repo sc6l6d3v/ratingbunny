@@ -163,7 +163,14 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
         svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService)
         res <- svc.signup(mkSignup(plan = Plan.ProMonthly))
-      yield assertEquals(res, Left(SignupError.BillingRequired))
+        countU <- users.count
+        countP <- prof.count
+        countB <- billingC.count
+      yield
+        assertEquals(res, Left(SignupError.BillingRequired))
+        assertEquals(countU, 0L)
+        assertEquals(countP, 0L)
+        assertEquals(countB, 0L)
 
   test("pro signup stores billing info"):
     withMongo: db =>
