@@ -52,3 +52,12 @@ REST syntax
 GET http://localhost:8080/reldate/YYYY/MM/rating
 
 where rating is a double ranging from 1 to 10.
+
+## Billing integrations
+
+Paid signups require you to provision customers and subscriptions directly in
+Helcim (or any other configured gateway) before calling the backend. See
+[`docs/helcim-integration.md`](docs/helcim-integration.md) for a checklist of
+the Helcim identifiers you must capture—customer IDs, tokenized payment
+methods, and optional recurring subscription metadata—plus links to the relevant
+Helcim API reference pages.

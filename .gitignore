@@ -12,7 +12,9 @@ project/project/target/
 logs/
 
 # documents
-docs/
+docs/*
+!docs/
+!docs/*.md
 
 # testing data
 data/
