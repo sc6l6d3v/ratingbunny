@@ -27,6 +27,14 @@ Set `HELCIM4S_MODE=live` together with a valid `HELCIM_API_TOKEN` in
 production. In `stub` mode the flow runs entirely in-process using the
 `helcim4s-testkit` stubbed client.
 
+## Library entry points
+
+The billing workflow relies on the [`HelcimClient` type that ships with the
+`helcim4s` core module](https://github.com/iscs/helcim4s/blob/main/modules/core/src/main/scala/com/iscs/helcim4s/core/HelcimClient.scala).
+It is imported from `com.iscs.helcim4s.core.HelcimClient` and provided by the
+library's client builder/testkit helpers at runtime, so no project-local
+implementation is required.
+
 ## Signup payload
 
 Paid signups must include a `billing` object that provides enough context to
