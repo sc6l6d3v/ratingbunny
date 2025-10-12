@@ -7,7 +7,7 @@ object Dependencies {
     val emailSvc          = "1.0"
     val fs2Version        = "3.10.2"
     val Http4sVersion     = "0.23.26"
-    val helcim4sVersion   = "0.1.0"
+    val helcim4sVersion   = "1.0"
     val jsoupVersion      = "1.17.2"
     val LogbackVersion    = "1.5.3"
     val loggingVersion    = "3.9.5"
