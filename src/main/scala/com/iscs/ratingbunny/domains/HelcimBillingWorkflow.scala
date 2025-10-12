@@ -176,10 +176,10 @@ final class HelcimBillingWorkflow[F[_]: Async](
     methodNames.toList.view
       .flatMap(name => invoke(target, name))
       .collectFirst {
-        case l: Long   => l
-        case i: Int    => i.toLong
-        case s: String => s.toLongOption
-        case bd: BigDecimal => Some(bd.toLong)
+        case l: Long                  => Some(l)
+        case i: Int                   => Some(i.toLong)
+        case s: String                => s.toLongOption
+        case bd: BigDecimal           => Some(bd.toLong)
         case bd: java.math.BigDecimal => Some(BigDecimal(bd).toLong)
       }
       .flatten
