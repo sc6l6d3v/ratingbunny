@@ -33,13 +33,15 @@ enum SignupError:
   case BadLanguage
   case BadTimezone
   case BillingRequired
+  case BillingFailed(message: String)
 
 final class AuthCheckImpl[F[_]: Async](
     usersCol: MongoCollection[F, UserDoc],
     userProfileCol: MongoCollection[F, UserProfileDoc],
     billingCol: MongoCollection[F, BillingInfo],
     hasher: PasswordHasher[F],
-    emailService: EmailService[F]
+    emailService: EmailService[F],
+    billingWorkflow: BillingWorkflow[F]
 ) extends AuthCheck[F] with QuerySetup:
   private val docFail    = 121
   private val MINPWDLEN  = 8
@@ -50,15 +52,13 @@ final class AuthCheckImpl[F[_]: Async](
       case Plan.Free => EitherT.rightT[F, SignupError](())
       case Plan.ProMonthly | Plan.ProYearly =>
         billing match
+          case Some(details) if details.gateway == BillingGateway.Helcim =>
+            for
+              doc <- billingWorkflow.createBilling(user, details)
+              _   <- EitherT.liftF(billingCol.insertOne(doc).void)
+            yield ()
           case Some(details) =>
-            val doc = BillingInfo(
-              userId = user.userid,
-              gateway = details.gateway,
-              helcim = details.helcim,
-              address = details.address,
-              subscription = details.subscription
-            )
-            EitherT.liftF(billingCol.insertOne(doc).void)
+            EitherT.leftT[F, Unit](SignupError.BillingFailed(s"unsupported gateway: ${details.gateway}"))
           case None => EitherT.leftT[F, Unit](SignupError.BillingRequired)
 
   private def validatePw(pw: String): Either[SignupError, Unit] =

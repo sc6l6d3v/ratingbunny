@@ -72,10 +72,10 @@ package object domains:
 
   /** -- incoming payload */
   final case class SignupBilling(
-      gateway: BillingGateway = BillingGateway.Helcim,
-      helcim: HelcimAccount,
+      fullName: String,
       address: Address,
-      subscription: Option[HelcimSubSnapshot] = None
+      cardToken: String,
+      gateway: BillingGateway = BillingGateway.Helcim
   )
 
   object SignupBilling:

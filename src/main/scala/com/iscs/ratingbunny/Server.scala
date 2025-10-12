@@ -11,6 +11,7 @@ import com.iscs.ratingbunny.domains.{
   AuthLogin,
   AuthLoginImpl,
   BillingInfo,
+  HelcimBillingWorkflow,
   ConnectionPool,
   ConnectionPoolImpl,
   EmailContact,
@@ -75,9 +76,10 @@ object Server:
       userCollCodec     <- db.getCollectionWithCodec[UserDoc](usersCollection)
       userProfCollCodec <- db.getCollectionWithCodec[UserProfileDoc](userProfileCollection)
       billingCollCodec  <- db.getCollectionWithCodec[BillingInfo](billingCollection)
+      billingWorkflow   <- HelcimBillingWorkflow.make[F]
     yield
       val hasher = BcryptHasher.make[F](cost = 12)
-      new AuthCheckImpl(userCollCodec, userProfCollCodec, billingCollCodec, hasher, emailService)
+      new AuthCheckImpl(userCollCodec, userProfCollCodec, billingCollCodec, hasher, emailService, billingWorkflow)
 
   private def getLoginSvc[F[_]: Async](db: MongoDatabase[F], token: TokenIssuer[F]): F[AuthLogin[F]] =
     for userCollCodec <- db.getCollectionWithCodec[UserDoc](usersCollection)

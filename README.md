@@ -55,9 +55,10 @@ where rating is a double ranging from 1 to 10.
 
 ## Billing integrations
 
-Paid signups require you to provision customers and subscriptions directly in
-Helcim (or any other configured gateway) before calling the backend. See
-[`docs/helcim-integration.md`](docs/helcim-integration.md) for a checklist of
-the Helcim identifiers you must capture—customer IDs, tokenized payment
-methods, and optional recurring subscription metadata—plus links to the relevant
-Helcim API reference pages.
+Paid signups trigger an automated Helcim provisioning flow powered by
+[`helcim4s`](https://github.com/iscs/helcim4s). When the `plan` is set to a pro
+tier the backend will create a Helcim customer, attach the configured payment
+plan and persist the resulting subscription snapshot. See
+[`docs/helcim-integration.md`](docs/helcim-integration.md) for the required
+environment variables and an example signup payload containing the billing
+details (name, address and HelcimPay token) that the API expects.

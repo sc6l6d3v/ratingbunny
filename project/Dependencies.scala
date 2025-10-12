@@ -7,6 +7,7 @@ object Dependencies {
     val emailSvc          = "1.0"
     val fs2Version        = "3.10.2"
     val Http4sVersion     = "0.23.26"
+    val helcim4sVersion   = "0.1.0"
     val jsoupVersion      = "1.17.2"
     val LogbackVersion    = "1.5.3"
     val loggingVersion    = "3.9.5"
@@ -34,6 +35,11 @@ object Dependencies {
     val server = "org.http4s" %% "http4s-ember-server" % V.Http4sVersion
     val circe  = "org.http4s" %% "http4s-circe"        % V.Http4sVersion
     val dsl    = "org.http4s" %% "http4s-dsl"          % V.Http4sVersion
+  }
+
+  object helcim4s {
+    val core    = "com.iscs" %% "helcim4s"         % V.helcim4sVersion
+    val testkit = "com.iscs" %% "helcim4s-testkit" % V.helcim4sVersion
   }
 
   object fs2 {

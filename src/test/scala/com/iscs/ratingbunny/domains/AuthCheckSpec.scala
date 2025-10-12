@@ -1,6 +1,6 @@
 package com.iscs.ratingbunny.domains
 
-import cats.data.NonEmptyList
+import cats.data.{EitherT, NonEmptyList}
 import cats.effect.*
 import cats.implicits.*
 import com.iscs.mail.EmailAttachment
@@ -22,8 +22,34 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
 
   override val mongoPort: Int           = 12355
   override def munitIOTimeout: Duration = 2.minutes
-  private val hasher                    = TestHasher.make[IO]
-  private val stubEmailService          = new MockEmailService[IO]()
+  private val hasher           = TestHasher.make[IO]
+  private val stubEmailService = new MockEmailService[IO]()
+
+  private val stubBillingWorkflow = new BillingWorkflow[IO]:
+    override def createBilling(user: UserDoc, details: SignupBilling) =
+      EitherT.rightT(
+        BillingInfo(
+          userId = user.userid,
+          helcim = HelcimAccount(
+            customerId = "cust-123",
+            defaultCardToken = Some(details.cardToken)
+          ),
+          address = details.address,
+          subscription = Some(
+            HelcimSubSnapshot(
+              subscriptionId = "sub-1",
+              planId = user.plan match
+                case Plan.ProMonthly => "21361"
+                case Plan.ProYearly  => "21362"
+                case Plan.Free       => "0",
+              status = "active",
+              nextBillAt = None,
+              amountCents = 1000L,
+              currency = "USD"
+            )
+          )
+        )
+      )
 
   // ── helpers ──────────────────────────────────────────────────
   private def withMongo[A](f: MongoDatabase[IO] => IO[A]): Future[A] =
@@ -34,19 +60,19 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
     .unsafeToFuture()
 
   private def mkBilling(
-      customerId: String = "cust-123",
-      gateway: BillingGateway = BillingGateway.Helcim
+      fullName: String = "Jane Doe",
+      cardToken: String = "card-abc"
   ) =
     SignupBilling(
-      gateway = gateway,
-      helcim = HelcimAccount(customerId, defaultCardToken = Some("card-abc")),
+      fullName = fullName,
       address = Address(
         line1 = "123 Main St",
         city = "Metropolis",
         state = "NY",
         postalCode = "10001",
         country = "US"
-      )
+      ),
+      cardToken = cardToken
     )
 
   private def mkSignup(
@@ -63,7 +89,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         users    <- db.getCollectionWithCodec[UserDoc]("users")
         prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
         billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
-        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService)
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, stubBillingWorkflow)
 
         res <- svc.signup(mkSignup())
         _   <- IO(assert(res.exists(_.userid.nonEmpty), s"expected Right but got $res"))
@@ -98,7 +124,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
             createdAt = Instant.now()
           )
         )
-        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService)
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, stubBillingWorkflow)
         res <- svc.signup(mkSignup(email = "dup@example.com"))
       yield assertEquals(res, Left(SignupError.EmailExists))
 
@@ -108,7 +134,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         users    <- db.getCollectionWithCodec[UserDoc]("users")
         prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
         billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
-        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService)
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, stubBillingWorkflow)
         res <- svc.signup(mkSignup(pwd = "short"))
       yield assertEquals(res, Left(SignupError.BadPassword))
 
@@ -151,7 +177,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
             sendEmailToMultiple(recipients, subject, textBody, htmlBody, Nil)
           override def send(mail: Mail[IO]): IO[NonEmptyList[String]] =
             IO.raiseError(new SendFailedException("bad address"))
-        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, failingEmailService)
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, failingEmailService, stubBillingWorkflow)
         res <- svc.signup(mkSignup())
       yield assertEquals(res, Left(SignupError.BadEmail))
 
@@ -161,7 +187,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         users    <- db.getCollectionWithCodec[UserDoc]("users")
         prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
         billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
-        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService)
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, stubBillingWorkflow)
         res <- svc.signup(mkSignup(plan = Plan.ProMonthly))
         countU <- users.count
         countP <- prof.count
@@ -178,7 +204,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         users    <- db.getCollectionWithCodec[UserDoc]("users")
         prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
         billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
-        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService)
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, stubBillingWorkflow)
         res        <- svc.signup(mkSignup(plan = Plan.ProMonthly, billing = Some(mkBilling())))
         _          <- IO(assert(res.exists(_.userid.nonEmpty), s"expected success but got $res"))
         storedUser <- users.find(feq("email", "alice@example.com")).first
@@ -190,3 +216,16 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         assertEquals(countB, 1L)
         assertEquals(billingDoc.map(_.helcim.customerId), Some("cust-123"))
         assertEquals(billingDoc.flatMap(_.address.line2), None)
+
+  test("billing workflow failure bubbles up"):
+    withMongo: db =>
+      for
+        users    <- db.getCollectionWithCodec[UserDoc]("users")
+        prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
+        failingWorkflow = new BillingWorkflow[IO]:
+          override def createBilling(user: UserDoc, details: SignupBilling) =
+            EitherT.leftT(SignupError.BillingFailed("boom"))
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, failingWorkflow)
+        res <- svc.signup(mkSignup(plan = Plan.ProMonthly, billing = Some(mkBilling())))
+      yield assertEquals(res, Left(SignupError.BillingFailed("boom")))
