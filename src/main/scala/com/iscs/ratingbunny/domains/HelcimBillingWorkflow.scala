@@ -3,7 +3,8 @@ package com.iscs.ratingbunny.domains
 import cats.data.EitherT
 import cats.effect.{Async, Resource}
 import cats.implicits.*
-import com.iscs.helcim4s.core.{ClientBuilder, HelcimClient, HelcimConfig}
+import com.iscs.helcim4s.HelcimClient
+import com.iscs.helcim4s.core.{ClientBuilder, HelcimConfig}
 import com.iscs.helcim4s.customer.models.{Address as HelcimAddress, CreateCustomer}
 import com.iscs.helcim4s.recurring.models.CreateSubscription
 import com.iscs.helcim4s.testkit.HelcimTestkit
@@ -130,11 +131,11 @@ final class HelcimBillingWorkflow[F[_]: Async](
       planId: Long
   ): BillingInfo =
     val customerKey =
-      extractString(customer, "customerCode").orElse(extractLong(customer, "customerId").map(_.toString))).getOrElse(
+      extractString(customer, "customerCode").orElse(extractLong(customer, "customerId").map(_.toString)).getOrElse(
         throw RuntimeException("Helcim customer identifier missing")
       )
     val subscriptionId =
-      extractString(subscription, "subscriptionId").orElse(extractLong(subscription, "subscriptionId").map(_.toString))).getOrElse(
+      extractString(subscription, "subscriptionId").orElse(extractLong(subscription, "subscriptionId").map(_.toString)).getOrElse(
         throw RuntimeException("Helcim subscription identifier missing")
       )
     val status = extractString(subscription, "status").getOrElse("pending")
