@@ -9,6 +9,7 @@ import com.iscs.helcim4s.customer.models.{Address as HelcimAddress, CreateCustom
 import com.iscs.helcim4s.recurring.models.CreateSubscription
 import com.iscs.helcim4s.testkit.HelcimTestkit
 import com.typesafe.scalalogging.Logger
+import fs2.io.net.Network
 import org.http4s.Uri
 
 import java.time.{Instant, LocalDateTime, OffsetDateTime, ZoneOffset}
@@ -36,7 +37,7 @@ object HelcimBillingWorkflow:
   private def readToken(mode: String): String =
     sys.env.getOrElse("HELCIM_API_TOKEN", if mode == "stub" then "stub-token" else "")
 
-  def make[F[_]: Async]: F[BillingWorkflow[F]] =
+  def make[F[_]: Async](using Network[F]): F[BillingWorkflow[F]] =
     val mode          = sys.env.getOrElse("HELCIM4S_MODE", "stub")
     val monthlyPlanId = readPlanId("PROMONTHLY", DefaultMonthly)
     val yearlyPlanId  = readPlanId("PROANNUAL", DefaultAnnual)

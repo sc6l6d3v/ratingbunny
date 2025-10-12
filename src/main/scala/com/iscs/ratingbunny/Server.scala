@@ -71,7 +71,7 @@ object Server:
   private val jwtSecretKey =
     sys.env.getOrElse("JWT_SECRET_KEY", throw new RuntimeException("JWT_SECRET_KEY environment variable must be set"))
 
-  private def getAuthSvc[F[_]: Async](db: MongoDatabase[F], emailService: EmailService[F]): F[AuthCheck[F]] =
+  private def getAuthSvc[F[_]: Async](db: MongoDatabase[F], emailService: EmailService[F])(using Network[F]): F[AuthCheck[F]] =
     for
       userCollCodec     <- db.getCollectionWithCodec[UserDoc](usersCollection)
       userProfCollCodec <- db.getCollectionWithCodec[UserProfileDoc](userProfileCollection)
@@ -119,6 +119,7 @@ object Server:
       db: MongoDatabase[F],
       client: Client[F]
   ): F[HttpApp[F]] =
+    given Network[F] = Network.forAsync[F]
     for
       token        <- getTokenIssuerSvc(redis, db, jwtSecretKey)
       emailService <- EmailService.initialize(ServiceConfig)
