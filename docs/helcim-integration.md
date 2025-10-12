@@ -68,6 +68,40 @@ token and a snapshot of the subscription (plan ID, status, currency, next bill
 date, amount in cents). Any provisioning failure returns HTTP 500 with a generic
 `failed to provision billing` error message.
 
+### Test with `curl`
+
+When the service is running locally (defaults to `http://localhost:8080`) you
+can exercise the stubbed Helcim flow with a single `curl` invocation. The
+example below assumes `HELCIM4S_MODE=stub` so the library's in-memory testkit is
+used and the `tok_test_visa_4242` payment token is accepted:
+
+```bash
+curl -i \
+  -X POST http://localhost:8080/auth/signup \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "email": "helcim.stub+pro@example.com",
+    "password": "Sup3rS3cret!",
+    "displayName": "Helcim Stub",
+    "plan": "pro_monthly",
+    "billing": {
+      "fullName": "Jane Doe",
+      "cardToken": "tok_test_visa_4242",
+      "address": {
+        "line1": "123 Example St",
+        "city": "Calgary",
+        "state": "AB",
+        "postalCode": "T2P 1J9",
+        "country": "CA"
+      }
+    }
+  }'
+```
+
+Switch `plan` to `"pro_yearly"` to enrol in the annual offering or adjust the
+payload fields to mirror your frontend. In `live` mode provide the real Helcim
+token emitted by HelcimPay.js.
+
 ## Local development tips
 
 * Run with `HELCIM4S_MODE=stub` to exercise the happy path without contacting
