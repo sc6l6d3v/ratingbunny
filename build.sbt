@@ -19,6 +19,7 @@ lazy val root = (project in file("."))
       fs2.io,
       jwt.circe,
       bcrypt.core,
+      helcim.core,
       circe.circeCore,
       circe.circeGeneric,
       circe.circeParser,

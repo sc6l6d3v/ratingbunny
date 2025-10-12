@@ -60,4 +60,4 @@ Helcim (or any other configured gateway) before calling the backend. See
 [`docs/helcim-integration.md`](docs/helcim-integration.md) for a checklist of
 the Helcim identifiers you must capture—customer IDs, tokenized payment
 methods, and optional recurring subscription metadata—plus links to the relevant
-Helcim API reference pages.
+Helcim API reference pages [`https://devdocs.helcim.com/docs/overview-of-helcim-api`](https://devdocs.helcim.com/docs/overview-of-helcim-api).
