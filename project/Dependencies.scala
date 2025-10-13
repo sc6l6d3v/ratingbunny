@@ -6,8 +6,8 @@ object Dependencies {
     val circeVersion      = "0.14.6"
     val emailSvc          = "1.0"
     val fs2Version        = "3.10.2"
-    val Http4sVersion     = "0.23.26"
-    val helcim4sVersion   = "1.0"
+    val helcimVersion     = "1.0"
+    val Http4sVersion     = "0.23.32"
     val jsoupVersion      = "1.17.2"
     val LogbackVersion    = "1.5.3"
     val loggingVersion    = "3.9.5"
@@ -28,6 +28,10 @@ object Dependencies {
 
   object sunMail {
     val client = "com.sun.mail" % "jakarta.mail" % V.sunMailVersion
+  }
+
+  object helcim {
+    val core = "com.iscs" %% "helcim4s" % V.helcimVersion
   }
 
   object http4s {
