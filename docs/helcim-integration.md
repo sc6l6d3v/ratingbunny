@@ -1,42 +1,44 @@
-# Helcim Integration Checklist
+# Helcim integration
 
-The Rating Slave backend does not create any Helcim resources on your behalf. All
-Helcim objects must be created through Helcim’s own tools (dashboard, REST API,
-or Helcim.js) and then their identifiers are passed to this service. The tables
-below outline what the backend expects and where you obtain the values inside
-Helcim.
+Rating Bunny provisions Helcim resources directly during `/auth/signup` for paid
+plans. The backend now uses the [`helcim4s`](https://github.com/iscs/helcim4s)
+client to orchestrate the following workflow when `plan` is either
+`pro_monthly` or `pro_yearly`:
 
-## Required Helcim artefacts
+1. Create a Helcim customer using the contact and address information supplied
+   in the signup payload.
+2. Enrol the new customer into the configured payment plan (monthly or annual).
+3. Capture the resulting subscription metadata and persist it alongside the
+   user's account so future billing and reconciliation can run through Helcim.
 
-| Backend field | Helcim resource | How to obtain it |
+Free plans skip the billing workflow entirely.
+
+## Environment variables
+
+| Variable | Description | Default |
 | --- | --- | --- |
-| `billing.helcim.customerId` | Customer | Create the customer through the Helcim Dashboard (**Commerce** → **Customers**) or via [`POST /v2/customers`](https://docs.helcim.com/api/#customers-create). Copy the `id` field from Helcim’s response. |
-| `billing.helcim.defaultCardToken` | Tokenized card (optional) | Use Helcim.js or the [Payments API](https://docs.helcim.com/api/#payments-create) to tokenize a card, then persist the token string returned in the `token` field. |
-| `billing.helcim.defaultBankToken` | Tokenized bank account (optional) | Tokenize the ACH account through Helcim.js or [`POST /v2/bank-accounts`](https://docs.helcim.com/api/#bank-accounts-create) and store the returned `token`. |
+| `HELCIM4S_MODE` | `live` to reach Helcim's production API, `stub` to use the in-memory testkit. | `stub` |
+| `HELCIM_API_TOKEN` | API token issued by Helcim. Required in `live` mode. | `stub-token` in stub mode |
+| `PROMONTHLY` | Helcim plan ID for the monthly subscription. | `21361` |
+| `PROANNUAL` | Helcim plan ID for the annual subscription. | `21362` |
+| `HELCIM_DEFAULT_CURRENCY` | Fallback ISO currency code when Helcim does not return one. | `USD` |
 
-At minimum you must supply the `customerId`; tokens are optional but let you
-charge the customer without re-entering payment details.
+Set `HELCIM4S_MODE=live` together with a valid `HELCIM_API_TOKEN` in
+production. In `stub` mode the flow runs entirely in-process using the
+`helcim4s-testkit` stubbed client.
 
-## Recurring plans (optional but recommended for Pro tiers)
+## Library entry points
 
-If you sell recurring subscriptions, create them in Helcim first and then attach
-their identifiers in the optional `billing.subscription` block. Rating Slave
-never infers these IDs; it simply stores what you provide.
+The billing workflow relies on the [`HelcimClient` type that ships with the
+`helcim4s` core module](https://github.com/iscs/helcim4s/blob/main/modules/core/src/main/scala/com/iscs/helcim4s/core/HelcimClient.scala).
+It is imported from `com.iscs.helcim4s.core.HelcimClient` and provided by the
+library's client builder/testkit helpers at runtime, so no project-local
+implementation is required.
 
-| Backend field | Helcim resource | How to obtain it |
-| --- | --- | --- |
-| `billing.subscription.planId` | Payment Plan | Create plans via the Helcim Dashboard (**Commerce** → **Recurring / Payment Plans**) or with [`POST /v2/payment-plans`](https://docs.helcim.com/api/#payment-plans-create). Copy the `id` of your "Pro Monthly" or "Pro Annual" plan. |
-| `billing.subscription.subscriptionId` | Subscription | Once you enrol a customer in a plan (dashboard or [`POST /v2/subscriptions`](https://docs.helcim.com/api/#subscriptions-create)), store the returned subscription `id`. |
-| `billing.subscription.status` | Subscription status | Store Helcim’s `status` string (e.g., `active`, `paused`). |
-| `billing.subscription.nextBillAt` | Next billing timestamp | Optional ISO timestamp from Helcim’s response (e.g., `nextBilling`). |
-| `billing.subscription.amountCents` | Billing amount | Convert Helcim’s plan amount to cents before persisting. |
-| `billing.subscription.currency` | Currency code | Copy the three-letter code (e.g., `USD`) from the plan/subscription. |
+## Signup payload
 
-## Where to plug the values in
-
-When calling the `/auth/signup` endpoint for a paid plan, include a `billing`
-payload that embeds the identifiers captured above. An example request body is
-shown below:
+Paid signups must include a `billing` object that provides enough context to
+create the Helcim customer:
 
 ```json
 {
@@ -44,33 +46,69 @@ shown below:
   "password": "hunter2",
   "plan": "pro_monthly",
   "billing": {
-    "helcim": {
-      "customerId": "CUST-12345",
-      "defaultCardToken": "CARD-abc123"
-    },
+    "fullName": "Jane Doe",
+    "cardToken": "tok_test_visa_4242",
     "address": {
       "line1": "123 Example St",
       "city": "Calgary",
       "state": "AB",
       "postalCode": "T2P 1J9",
       "country": "CA"
-    },
-    "subscription": {
-      "subscriptionId": "SUB-98765",
-      "planId": "PLAN-54321",
-      "status": "active",
-      "amountCents": 1900,
-      "currency": "CAD"
     }
   }
 }
 ```
 
-This service simply persists those identifiers, allowing you to reconcile the
-user’s account with Helcim later.
+`cardToken` is the opaque token generated by HelcimPay.js or the Helcim REST
+tokenization endpoints. Line 2 for addresses can be supplied through
+`address.line2`.
 
-## Additional Helcim resources
+On success the backend stores the Helcim customer identifier, the provided card
+token and a snapshot of the subscription (plan ID, status, currency, next bill
+date, amount in cents). That snapshot is represented by the
+`HelcimSubSnapshot` case class inside the `/signup` logic; it captures what
+Helcim actually returned so later billing screens or reconciliation jobs never
+depend on client-supplied values. Any provisioning failure returns HTTP 500 with
+a generic `failed to provision billing` error message.
 
-Helcim’s full API reference is published at <https://docs.helcim.com/api/>. You
-can also use their SDK snippets and the Helcim.js browser library documented at
-<https://docs.helcim.com/helcimjs/> to tokenize payment details securely.
+### Test with `curl`
+
+When the service is running locally (defaults to `http://localhost:8080`) you
+can exercise the stubbed Helcim flow with a single `curl` invocation. The
+example below assumes `HELCIM4S_MODE=stub` so the library's in-memory testkit is
+used and the `tok_test_visa_4242` payment token is accepted:
+
+```bash
+curl -i \
+  -X POST http://localhost:8080/auth/signup \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "email": "helcim.stub+pro@example.com",
+    "password": "Sup3rS3cret!",
+    "displayName": "Helcim Stub",
+    "plan": "pro_monthly",
+    "billing": {
+      "fullName": "Jane Doe",
+      "cardToken": "tok_test_visa_4242",
+      "address": {
+        "line1": "123 Example St",
+        "city": "Calgary",
+        "state": "AB",
+        "postalCode": "T2P 1J9",
+        "country": "CA"
+      }
+    }
+  }'
+```
+
+Switch `plan` to `"pro_yearly"` to enrol in the annual offering or adjust the
+payload fields to mirror your frontend. In `live` mode provide the real Helcim
+token emitted by HelcimPay.js.
+
+## Local development tips
+
+* Run with `HELCIM4S_MODE=stub` to exercise the happy path without contacting
+  Helcim.
+* Override `PROMONTHLY`/`PROANNUAL` to match IDs from your Helcim account.
+* Set `HELCIM_DEFAULT_CURRENCY` if your plans bill in a currency other than
+  USD.

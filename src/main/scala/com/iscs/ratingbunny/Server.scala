@@ -11,6 +11,7 @@ import com.iscs.ratingbunny.domains.{
   AuthLogin,
   AuthLoginImpl,
   BillingInfo,
+  HelcimBillingWorkflow,
   ConnectionPool,
   ConnectionPoolImpl,
   EmailContact,
@@ -70,14 +71,15 @@ object Server:
   private val jwtSecretKey =
     sys.env.getOrElse("JWT_SECRET_KEY", throw new RuntimeException("JWT_SECRET_KEY environment variable must be set"))
 
-  private def getAuthSvc[F[_]: Async](db: MongoDatabase[F], emailService: EmailService[F]): F[AuthCheck[F]] =
+  private def getAuthSvc[F[_]: Async](db: MongoDatabase[F], emailService: EmailService[F])(using Network[F]): F[AuthCheck[F]] =
     for
       userCollCodec     <- db.getCollectionWithCodec[UserDoc](usersCollection)
       userProfCollCodec <- db.getCollectionWithCodec[UserProfileDoc](userProfileCollection)
       billingCollCodec  <- db.getCollectionWithCodec[BillingInfo](billingCollection)
+      billingWorkflow   <- HelcimBillingWorkflow.make[F]
     yield
       val hasher = BcryptHasher.make[F](cost = 12)
-      new AuthCheckImpl(userCollCodec, userProfCollCodec, billingCollCodec, hasher, emailService)
+      new AuthCheckImpl(userCollCodec, userProfCollCodec, billingCollCodec, hasher, emailService, billingWorkflow)
 
   private def getLoginSvc[F[_]: Async](db: MongoDatabase[F], token: TokenIssuer[F]): F[AuthLogin[F]] =
     for userCollCodec <- db.getCollectionWithCodec[UserDoc](usersCollection)
@@ -117,6 +119,7 @@ object Server:
       db: MongoDatabase[F],
       client: Client[F]
   ): F[HttpApp[F]] =
+    given Network[F] = Network.forAsync[F]
     for
       token        <- getTokenIssuerSvc(redis, db, jwtSecretKey)
       emailService <- EmailService.initialize(ServiceConfig)

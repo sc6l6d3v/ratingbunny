@@ -29,6 +29,8 @@ lazy val root = (project in file("."))
       mongo4cats.embedded,
       mongodb.driver,
       sunMail.client,
+      helcim4s.core,
+      helcim4s.testkit,
       test.scalatest,
       munit.catseffect,
       redis4cats.core,

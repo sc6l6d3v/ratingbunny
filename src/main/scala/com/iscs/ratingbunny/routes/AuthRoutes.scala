@@ -81,6 +81,8 @@ object AuthRoutes:
                   case Left(BadLanguage)     => BadRequest("Invalid language")
                   case Left(BadTimezone)     => BadRequest("Invalid time zone")
                   case Left(BillingRequired) => BadRequest("billing info required for pro plan")
+                  case Left(BillingFailed(_)) =>
+                    InternalServerError(Json.obj("error" -> Json.fromString("failed to provision billing")))
               yield out
         yield resp
       case req @ POST -> Root / "auth" / "login" =>

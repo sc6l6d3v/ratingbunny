@@ -41,6 +41,11 @@ object Dependencies {
     val dsl    = "org.http4s" %% "http4s-dsl"          % V.Http4sVersion
   }
 
+  object helcim4s {
+    val core    = "com.iscs" %% "helcim4s"         % V.helcim4sVersion
+    val testkit = "com.iscs" %% "helcim4s-testkit" % V.helcim4sVersion
+  }
+
   object fs2 {
     val core = "co.fs2" %% "fs2-core" % V.fs2Version
     val io   = "co.fs2" %% "fs2-io"   % V.fs2Version
