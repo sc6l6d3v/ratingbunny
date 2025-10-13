@@ -185,7 +185,11 @@ package object domains:
     given Codec[HelcimAccount] = deriveCodec
 
   // ── Snapshot of a Helcim Recurring subscription ──
-  // Keep `status` as String to avoid coupling to Helcim’s status vocabulary.
+  // These fields mirror what the Helcim API returns after provisioning a
+  // subscription in the `/auth/signup` flow. We persist the snapshot so the
+  // backend can render billing state or reconcile renewals later without ever
+  // trusting client-provided values. Keep `status` as String to avoid coupling
+  // to Helcim’s status vocabulary.
   final case class HelcimSubSnapshot(
       subscriptionId: String, // /v2/subscriptions id
       planId: String,         // /v2/payment-plans id

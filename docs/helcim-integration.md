@@ -65,8 +65,11 @@ tokenization endpoints. Line 2 for addresses can be supplied through
 
 On success the backend stores the Helcim customer identifier, the provided card
 token and a snapshot of the subscription (plan ID, status, currency, next bill
-date, amount in cents). Any provisioning failure returns HTTP 500 with a generic
-`failed to provision billing` error message.
+date, amount in cents). That snapshot is represented by the
+`HelcimSubSnapshot` case class inside the `/signup` logic; it captures what
+Helcim actually returned so later billing screens or reconciliation jobs never
+depend on client-supplied values. Any provisioning failure returns HTTP 500 with
+a generic `failed to provision billing` error message.
 
 ### Test with `curl`
 
