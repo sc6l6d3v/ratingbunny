@@ -20,6 +20,7 @@ object Dependencies {
     val sunMailVersion    = "2.0.2"
     val scalacheckVersion = "1.17.0"
     val jwtCirceVersion   = "11.0.0"
+    val stripeJavaVersion = "24.25.0"
   }
 
   object emailSvc {
@@ -74,6 +75,10 @@ object Dependencies {
     val core     = "dev.profunktor" %% "redis4cats-effects"  % V.redis4catsVersion
     val stream   = "dev.profunktor" %% "redis4cats-streams"  % V.redis4catsVersion
     val log4cats = "dev.profunktor" %% "redis4cats-log4cats" % V.redis4catsVersion
+  }
+
+  object stripe {
+    val java = "com.stripe" % "stripe-java" % V.stripeJavaVersion
   }
 
   object scalamock {
