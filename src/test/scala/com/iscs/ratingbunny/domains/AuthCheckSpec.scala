@@ -217,7 +217,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         countB <- billingC.count
       yield
         assertEquals(countB, 1L)
-        assertEquals(billingDoc.map(_.helcim.customerId), Some("cust-123"))
+        assertEquals(billingDoc.flatMap(_.helcim.map(_.customerId)), Some("cust-123"))
         assertEquals(billingDoc.flatMap(_.address.line2), None)
 
   test("billing workflow failure bubbles up"):
