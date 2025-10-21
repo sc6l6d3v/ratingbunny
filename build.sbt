@@ -38,8 +38,7 @@ lazy val root = (project in file("."))
       scalamock.core,
       logback.classic,
       logback.logging,
-      stripe.java,
-      jsoup.base
+      stripe.java
     ),
     Compile / mainClass      := Some("com.iscs.ratingbunny.Main"),
     coverageExcludedPackages := "com\\.iscs\\.ratingbunny\\.(dslparams|model).*",

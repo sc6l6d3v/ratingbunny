@@ -3,24 +3,24 @@ import sbt.*
 object Dependencies {
   object V {
     val bcryptVersion     = "4.3.0"
-    val circeVersion      = "0.14.6"
+    val circeVersion      = "0.14.15"
     val emailSvc          = "1.0"
-    val fs2Version        = "3.10.2"
-    val helcimVersion     = "1.0"
+    val fs2Version        = "3.12.2"
+    val helcim4sVersion   = "1.0"
     val Http4sVersion     = "0.23.32"
     val jsoupVersion      = "1.17.2"
-    val LogbackVersion    = "1.5.3"
-    val loggingVersion    = "3.9.5"
-    val scalamockVersion  = "6.0.0"
-    val mongo4catsVersion = "0.7.12"
+    val LogbackVersion    = "1.5.20"
+    val loggingVersion    = "3.9.6"
+    val scalamockVersion  = "7.5.0"
+    val mongo4catsVersion = "0.7.13"
     val mongoScalaVersion = "5.4.0"
-    val munitVersion      = "2.0.0"
+    val munitVersion      = "2.1.0"
     val redis4catsVersion = "2.0.1"
-    val scalaTestVersion  = "3.2.18"
+    val scalaTestVersion  = "3.2.19"
     val sunMailVersion    = "2.0.2"
-    val scalacheckVersion = "1.17.0"
-    val jwtCirceVersion   = "11.0.0"
-    val stripeJavaVersion = "24.25.0"
+    val scalacheckVersion = "1.19.0"
+    val jwtCirceVersion   = "11.0.3"
+    val stripeJavaVersion = "30.0.0"
   }
 
   object emailSvc {
@@ -32,7 +32,7 @@ object Dependencies {
   }
 
   object helcim {
-    val core = "com.iscs" %% "helcim4s" % V.helcimVersion
+    val core = "com.iscs" %% "helcim4s" % V.helcim4sVersion
   }
 
   object http4s {
@@ -65,10 +65,6 @@ object Dependencies {
   object logback {
     val logging = "com.typesafe.scala-logging" %% "scala-logging"   % V.loggingVersion
     val classic = "ch.qos.logback"              % "logback-classic" % V.LogbackVersion
-  }
-
-  object jsoup {
-    val base = "org.jsoup" % "jsoup" % V.jsoupVersion
   }
 
   object redis4cats {
