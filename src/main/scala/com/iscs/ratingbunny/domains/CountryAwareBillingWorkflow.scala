@@ -1,0 +1,47 @@
+package com.iscs.ratingbunny.domains
+
+import cats.data.EitherT
+import cats.effect.Async
+import cats.implicits.*
+import com.typesafe.scalalogging.Logger
+import fs2.io.net.Network
+
+object CountryAwareBillingWorkflow:
+  private val HelcimCountries: Set[String] = Set("US", "CA")
+
+  def make[F[_]: Async](using Network[F]): F[BillingWorkflow[F]] =
+    for
+      helcim <- HelcimBillingWorkflow.make[F]
+      stripe <- StripeBillingWorkflow.make[F]
+    yield CountryAwareBillingWorkflow[F](helcim, stripe, HelcimCountries)
+
+  def apply[F[_]: Async](
+      helcim: BillingWorkflow[F],
+      stripe: BillingWorkflow[F],
+      helcimCountries: Set[String]
+  ): BillingWorkflow[F] =
+    new CountryAwareBillingWorkflow[F](helcim, stripe, helcimCountries.map(_.trim.toUpperCase))
+
+final class CountryAwareBillingWorkflow[F[_]: Async] private[
+    domains
+] (
+    helcimWorkflow: BillingWorkflow[F],
+    stripeWorkflow: BillingWorkflow[F],
+    helcimCountries: Set[String]
+) extends BillingWorkflow[F]:
+
+  private val L = Logger[CountryAwareBillingWorkflow[F]]
+
+  override def createBilling(user: UserDoc, details: SignupBilling): EitherT[F, SignupError, BillingInfo] =
+    val gateway    = selectGateway(details.address.country)
+    val normalized = details.copy(gateway = gateway)
+    L.debug(s"Selected $gateway gateway for ${user.email} (${details.address.country})")
+    gateway match
+      case BillingGateway.Helcim => helcimWorkflow.createBilling(user, normalized)
+      case BillingGateway.Stripe => stripeWorkflow.createBilling(user, normalized)
+
+  private def selectGateway(country: String): BillingGateway =
+    val normalized = Option(country).map(_.trim.toUpperCase).filter(_.nonEmpty)
+    normalized match
+      case Some(code) if helcimCountries.contains(code) => BillingGateway.Helcim
+      case _                                            => BillingGateway.Stripe

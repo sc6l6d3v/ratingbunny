@@ -148,10 +148,13 @@ final class HelcimBillingWorkflow[F[_]: Async](
 
     BillingInfo(
       userId = user.userid,
-      helcim = HelcimAccount(
-        customerId = customerKey,
-        defaultCardToken = Option(details.cardToken).filter(_.nonEmpty),
-        defaultBankToken = None
+      gateway = BillingGateway.Helcim,
+      helcim = Some(
+        HelcimAccount(
+          customerId = customerKey,
+          defaultCardToken = Option(details.cardToken).filter(_.nonEmpty),
+          defaultBankToken = None
+        )
       ),
       address = details.address,
       subscription = Some(

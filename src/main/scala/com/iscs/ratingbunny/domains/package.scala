@@ -202,6 +202,30 @@ package object domains:
   object HelcimSubSnapshot:
     given Codec[HelcimSubSnapshot] = deriveCodec
 
+  final case class StripeAccount(
+      customerId: String,
+      defaultSource: Option[String] = None,
+      metadata: Map[String, String] = Map.empty
+  )
+
+  object StripeAccount:
+    given Codec[StripeAccount] = deriveCodec
+
+  final case class StripeSubSnapshot(
+      subscriptionId: String,
+      priceId: String,
+      status: String,
+      currentPeriodStart: Option[Instant] = None,
+      currentPeriodEnd: Option[Instant] = None,
+      cancelAt: Option[Instant] = None,
+      collectionMethod: Option[String] = None,
+      amountCents: Option[Long] = None,
+      currency: Option[String] = None
+  )
+
+  object StripeSubSnapshot:
+    given Codec[StripeSubSnapshot] = deriveCodec
+
   final case class Address(
       line1: String,
       line2: Option[String] = None,
@@ -217,9 +241,11 @@ package object domains:
   final case class BillingInfo(
       userId: String,
       gateway: BillingGateway = BillingGateway.Helcim,
-      helcim: HelcimAccount, // required when gateway=Helcim
+      helcim: Option[HelcimAccount] = None,
+      stripe: Option[StripeAccount] = None,
       address: Address,
       subscription: Option[HelcimSubSnapshot] = None,
+      stripeSubscription: Option[StripeSubSnapshot] = None,
       updatedAt: Instant = Instant.now()
   )
 

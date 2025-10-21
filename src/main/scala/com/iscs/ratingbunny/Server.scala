@@ -11,7 +11,7 @@ import com.iscs.ratingbunny.domains.{
   AuthLogin,
   AuthLoginImpl,
   BillingInfo,
-  HelcimBillingWorkflow,
+  CountryAwareBillingWorkflow,
   ConnectionPool,
   ConnectionPoolImpl,
   EmailContact,
@@ -76,7 +76,7 @@ object Server:
       userCollCodec     <- db.getCollectionWithCodec[UserDoc](usersCollection)
       userProfCollCodec <- db.getCollectionWithCodec[UserProfileDoc](userProfileCollection)
       billingCollCodec  <- db.getCollectionWithCodec[BillingInfo](billingCollection)
-      billingWorkflow   <- HelcimBillingWorkflow.make[F]
+      billingWorkflow   <- CountryAwareBillingWorkflow.make[F]
     yield
       val hasher = BcryptHasher.make[F](cost = 12)
       new AuthCheckImpl(userCollCodec, userProfCollCodec, billingCollCodec, hasher, emailService, billingWorkflow)
