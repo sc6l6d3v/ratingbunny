@@ -83,3 +83,34 @@ class CountryAwareBillingWorkflowSpec extends CatsEffectSuite:
     yield
       assertEquals(result.isRight, true)
       assertEquals(counts, (0, 1))
+
+  test("fails when workflow response gateway disagrees with selection"):
+    val international = billingDetails.copy(address = billingDetails.address.copy(country = "de"))
+    for
+      helcimCount <- Ref.of[IO, Int](0)
+      workflow = CountryAwareBillingWorkflow[IO](
+        trackingWorkflow(helcimCount, BillingGateway.Helcim),
+        new BillingWorkflow[IO]:
+          override def createBilling(user: UserDoc, details: SignupBilling) =
+            EitherT.rightT(
+              BillingInfo(
+                userId = user.userid,
+                gateway = BillingGateway.Helcim,
+                helcim = Some(HelcimAccount("stub-helcim")),
+                address = details.address
+              )
+            ),
+        Set("US", "CA")
+      )
+      result <- workflow.createBilling(baseUser, international).value
+      helcimInvocations <- helcimCount.get
+    yield
+      assertEquals(helcimInvocations, 0)
+      assertEquals(
+        result,
+        Left(
+          SignupError.BillingFailed(
+            "gateway mismatch: expected Stripe but workflow returned Helcim"
+          )
+        )
+      )

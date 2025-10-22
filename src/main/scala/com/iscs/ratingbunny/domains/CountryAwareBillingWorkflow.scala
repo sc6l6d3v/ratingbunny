@@ -36,9 +36,23 @@ final class CountryAwareBillingWorkflow[F[_]: Async] private[
     val gateway    = selectGateway(details.address.country)
     val normalized = details.copy(gateway = gateway)
     L.debug(s"Selected $gateway gateway for ${user.email} (${details.address.country})")
-    gateway match
+    val provisioned = gateway match
       case BillingGateway.Helcim => helcimWorkflow.createBilling(user, normalized)
       case BillingGateway.Stripe => stripeWorkflow.createBilling(user, normalized)
+
+    provisioned.subflatMap(ensureGateway(gateway, _))
+
+  private def ensureGateway(
+      expected: BillingGateway,
+      info: BillingInfo
+  ): Either[SignupError, BillingInfo] =
+    if info.gateway == expected then Right(info)
+    else
+      val message = s"gateway mismatch: expected $expected but workflow returned ${info.gateway}"
+      L.error(
+        s"Billing workflow returned mismatched gateway for ${info.userId}: $message"
+      )
+      Left(SignupError.BillingFailed(message))
 
   private def selectGateway(country: String): BillingGateway =
     val normalized = Option(country).map(_.trim.toUpperCase).filter(_.nonEmpty)
