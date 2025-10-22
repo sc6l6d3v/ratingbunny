@@ -150,6 +150,7 @@ final class StripeBillingWorkflow[F[_]: Async](
     BillingInfo(
       userId = user.userid,
       gateway = BillingGateway.Stripe,
+      helcim = None,
       stripe = Some(
         StripeAccount(
           customerId = customer.id,

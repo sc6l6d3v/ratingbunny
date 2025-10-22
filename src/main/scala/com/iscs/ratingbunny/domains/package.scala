@@ -250,7 +250,10 @@ package object domains:
   )
 
   object BillingInfo:
-    given Codec[BillingInfo] = deriveCodec
+    private given encBillingInfo: Encoder.AsObject[BillingInfo] =
+      deriveEncoder[BillingInfo].mapJsonObject(_.filter { case (_, value) => !value.isNull })
+    private given decBillingInfo: Decoder[BillingInfo] = deriveDecoder[BillingInfo]
+    given Codec[BillingInfo] = io.circe.Codec.from(decBillingInfo, encBillingInfo)
 
   // ---------- request / response ----------
   final case class LoginRequest(email: String, password: String)
