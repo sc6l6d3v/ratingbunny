@@ -52,13 +52,11 @@ final class AuthCheckImpl[F[_]: Async](
       case Plan.Free => EitherT.rightT[F, SignupError](())
       case Plan.ProMonthly | Plan.ProYearly =>
         billing match
-          case Some(details) if details.gateway == BillingGateway.Helcim =>
+          case Some(details) =>
             for
               doc <- billingWorkflow.createBilling(user, details)
               _   <- EitherT.liftF(billingCol.insertOne(doc).void)
             yield ()
-          case Some(details) =>
-            EitherT.leftT[F, Unit](SignupError.BillingFailed(s"unsupported gateway: ${details.gateway}"))
           case None => EitherT.leftT[F, Unit](SignupError.BillingRequired)
 
   private def validatePw(pw: String): Either[SignupError, Unit] =
