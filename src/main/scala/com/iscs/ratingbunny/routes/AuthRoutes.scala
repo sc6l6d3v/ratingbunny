@@ -148,7 +148,11 @@ object AuthRoutes:
         bearer(req).fold(Forbidden())(tok => token.revoke(tok) *> NoContent())
     CORSSetup.methodConfig(svc)
 
-  def authedRoutes[F[_]: Async](userRepo: UserRepo[F], authMw: AuthMiddleware[F, String]): HttpRoutes[F] =
+  def authedRoutes[F[_]: Async](
+      userRepo: UserRepo[F],
+      trialService: TrialService[F],
+      authMw: AuthMiddleware[F, String]
+  ): HttpRoutes[F] =
     val dsl = Http4sDsl[F]
     import dsl.*
 
@@ -162,5 +166,17 @@ object AuthRoutes:
               Ok(info.asJson)
             case Some(_) => Forbidden()
             case None    => NotFound()
+      case POST -> Root / "auth" / "trial" / "cancel" as userId =>
+        trialService
+          .cancelTrial(userId)
+          .flatMap:
+            case Right(_) => NoContent()
+            case Left(CancelTrialFailure.UserNotFound) => NotFound(Json.obj("error" -> Json.fromString("user not found")))
+            case Left(CancelTrialFailure.NotTrialing) =>
+              BadRequest(Json.obj("error" -> Json.fromString("not in trial")))
+            case Left(CancelTrialFailure.TrialExpired) =>
+              BadRequest(Json.obj("error" -> Json.fromString("trial already ended")))
+            case Left(CancelTrialFailure.Billing(err)) =>
+              InternalServerError(Json.obj("error" -> Json.fromString(err.message)))
 
     CORSSetup.methodConfig(authMw(svc))

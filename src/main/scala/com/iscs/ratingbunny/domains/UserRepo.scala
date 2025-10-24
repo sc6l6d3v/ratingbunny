@@ -8,6 +8,7 @@ import mongo4cats.models.collection.IndexOptions
 import mongo4cats.operations.Index
 import org.mongodb.scala.model.Updates as JUpdates
 import com.iscs.ratingbunny.util.DeterministicHash
+import java.time.Instant
 
 trait UserRepo[F[_]]:
   def findByEmail(email: String): F[Option[UserDoc]]
@@ -15,6 +16,7 @@ trait UserRepo[F[_]]:
   def findByUserId(id: String): F[Option[UserDoc]]
   def findByVerificationToken(token: String): F[Option[UserDoc]]
   def markEmailVerified(uid: String): F[Unit]
+  def updateSubscription(uid: String, plan: Plan, status: SubscriptionStatus, trialEndsAt: Option[Instant]): F[Unit]
 
 class UserRepoImpl[F[_]: Async](collection: MongoCollection[F, UserDoc]) extends UserRepo[F] with QuerySetup:
   override def findByEmail(email: String): F[Option[UserDoc]] = collection.find(feq("email", email)).first
@@ -30,6 +32,19 @@ class UserRepoImpl[F[_]: Async](collection: MongoCollection[F, UserDoc]) extends
       JUpdates.set("emailVerified", true),
       JUpdates.unset("verificationTokenHash"),
       JUpdates.unset("verificationExpires")
+    )
+    collection.updateOne(feq("userid", uid), update).void
+
+  override def updateSubscription(
+      uid: String,
+      plan: Plan,
+      status: SubscriptionStatus,
+      trialEndsAt: Option[Instant]
+  ): F[Unit] =
+    val update = JUpdates.combine(
+      JUpdates.set("plan", plan),
+      JUpdates.set("status", status),
+      trialEndsAt.fold[JUpdates.Bson] (JUpdates.unset("trialEndsAt"))(inst => JUpdates.set("trialEndsAt", inst))
     )
     collection.updateOne(feq("userid", uid), update).void
 

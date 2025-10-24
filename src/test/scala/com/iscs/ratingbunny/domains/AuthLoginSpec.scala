@@ -43,7 +43,8 @@ class AuthLoginSpec extends CatsEffectSuite with EmbeddedMongo:
       email: String,
       pwd: String,
       status: SubscriptionStatus = SubscriptionStatus.Active,
-      verified: Boolean = true
+      verified: Boolean = true,
+      trialEndsAt: Option[Instant] = None
   ) =
     hasher
       .hash(pwd)
@@ -58,7 +59,8 @@ class AuthLoginSpec extends CatsEffectSuite with EmbeddedMongo:
             status = status,
             displayName = None,
             createdAt = Instant.now(),
-            emailVerified = verified
+            emailVerified = verified,
+            trialEndsAt = trialEndsAt
           )
         )
 
@@ -89,6 +91,22 @@ class AuthLoginSpec extends CatsEffectSuite with EmbeddedMongo:
         svc = new AuthLoginImpl[IO](users, hasher, stubToken)
         res <- svc.login(LoginRequest("inactive@ex.com", "Passw0rd!"))
       yield assertEquals(res, Left(LoginError.Inactive))
+
+  test("login succeeds for trialing status"):
+    withMongo: db =>
+      for
+        users <- db.getCollectionWithCodec[UserDoc]("users")
+        _ <- insertUser(
+          users,
+          "trial@ex.com",
+          "Passw0rd!",
+          SubscriptionStatus.Trialing,
+          verified = true,
+          trialEndsAt = Some(Instant.now.plusSeconds(3600))
+        )
+        svc = new AuthLoginImpl[IO](users, hasher, stubToken)
+        res <- svc.login(LoginRequest("trial@ex.com", "Passw0rd!"))
+      yield assert(res.exists(_.userid == "u1"))
 
   test("login fails for unknown email"):
     withMongo: db =>

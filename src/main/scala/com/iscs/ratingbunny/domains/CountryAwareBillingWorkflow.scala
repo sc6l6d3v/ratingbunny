@@ -3,16 +3,17 @@ package com.iscs.ratingbunny.domains
 import cats.data.EitherT
 import cats.effect.Async
 import cats.implicits.*
+import com.iscs.ratingbunny.config.{TrialConfig, TrialWindow}
 import com.typesafe.scalalogging.Logger
 import fs2.io.net.Network
 
 object CountryAwareBillingWorkflow:
   private val HelcimCountries: Set[String] = Set("US", "CA")
 
-  def make[F[_]: Async](using Network[F]): F[BillingWorkflow[F]] =
+  def make[F[_]: Async](trialConfig: TrialConfig)(using Network[F]): F[BillingWorkflow[F]] =
     for
-      helcim <- HelcimBillingWorkflow.make[F]
-      stripe <- StripeBillingWorkflow.make[F]
+      helcim <- HelcimBillingWorkflow.make[F](trialConfig)
+      stripe <- StripeBillingWorkflow.make[F](trialConfig)
     yield CountryAwareBillingWorkflow[F](helcim, stripe, HelcimCountries)
 
   def apply[F[_]: Async](
@@ -32,15 +33,24 @@ final class CountryAwareBillingWorkflow[F[_]: Async] private[
 
   private val L = Logger[CountryAwareBillingWorkflow[F]]
 
-  override def createBilling(user: UserDoc, details: SignupBilling): EitherT[F, SignupError, BillingInfo] =
+  override def createBilling(
+      user: UserDoc,
+      details: SignupBilling,
+      trialWindow: TrialWindow
+  ): EitherT[F, SignupError, BillingInfo] =
     val gateway    = selectGateway(details.address.country)
     val normalized = details.copy(gateway = gateway)
     L.debug(s"Selected $gateway gateway for ${user.email} (${details.address.country})")
     val provisioned = gateway match
-      case BillingGateway.Helcim => helcimWorkflow.createBilling(user, normalized)
-      case BillingGateway.Stripe => stripeWorkflow.createBilling(user, normalized)
+      case BillingGateway.Helcim => helcimWorkflow.createBilling(user, normalized, trialWindow)
+      case BillingGateway.Stripe => stripeWorkflow.createBilling(user, normalized, trialWindow)
 
     provisioned.subflatMap(ensureGateway(gateway, _))
+
+  override def cancelSubscription(info: BillingInfo): EitherT[F, CancelTrialError, BillingInfo] =
+    info.gateway match
+      case BillingGateway.Helcim => helcimWorkflow.cancelSubscription(info)
+      case BillingGateway.Stripe => stripeWorkflow.cancelSubscription(info)
 
   private def ensureGateway(
       expected: BillingGateway,

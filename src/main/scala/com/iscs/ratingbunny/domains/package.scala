@@ -103,7 +103,8 @@ package object domains:
       createdAt: Instant = Instant.now(),
       emailVerified: Boolean = false,
       verificationTokenHash: Option[String] = None,
-      verificationExpires: Option[Instant] = None // consider cron to clean up expired tokens
+      verificationExpires: Option[Instant] = None, // consider cron to clean up expired tokens
+      trialEndsAt: Option[Instant] = None
   )
 
   object UserDoc:
@@ -126,6 +127,7 @@ package object domains:
         emailVerified         <- c.downField("emailVerified").as[Option[Boolean]].map(_.getOrElse(false))
         verificationTokenHash <- c.downField("verificationTokenHash").as[Option[String]]
         verificationExpires   <- c.downField("verificationExpires").as[Option[Instant]]
+        trialEndsAt           <- c.downField("trialEndsAt").as[Option[Instant]]
       yield UserDoc(
         id,
         email,
@@ -139,7 +141,8 @@ package object domains:
         createdAt,
         emailVerified,
         verificationTokenHash,
-        verificationExpires
+        verificationExpires,
+        trialEndsAt
       )
     given Codec[UserDoc] = Codec.from(decUserDoc, encUserDoc)
 
@@ -246,6 +249,7 @@ package object domains:
       address: Address,
       subscription: Option[HelcimSubSnapshot] = None,
       stripeSubscription: Option[StripeSubSnapshot] = None,
+      trialEndsAt: Option[Instant] = None,
       updatedAt: Instant = Instant.now()
   )
 
