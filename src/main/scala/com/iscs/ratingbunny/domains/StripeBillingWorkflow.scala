@@ -15,6 +15,8 @@ import com.iscs.stripe4s.models.{
   Subscription
 }
 import com.typesafe.scalalogging.Logger
+import com.iscs.ratingbunny.config.{TrialConfig, TrialWindow}
+import java.time.Instant
 
 object StripeBillingWorkflow:
   final case class PriceIds(monthly: String, yearly: String)
@@ -53,23 +55,39 @@ object StripeBillingWorkflow:
             )
           )
 
-        override val subscriptions: StripeClient.Subscriptions[F] = (request: CreateSubscription) =>
-          Async[F].pure(
-            Subscription(
-              id = s"stub_sub_${request.priceId}",
-              status = "active",
-              currentPeriodStart = None,
-              currentPeriodEnd = None,
-              cancelAt = None,
-              collectionMethod = Some("charge_automatically"),
-              currency = Some("usd"),
-              amountCents = None,
-              metadata = request.metadata
+        override val subscriptions: StripeClient.Subscriptions[F] = new StripeClient.Subscriptions[F]:
+          override def create(request: CreateSubscription) =
+            Async[F].pure(
+              Subscription(
+                id = s"stub_sub_${request.priceId}",
+                status = if request.trialPeriodDays.exists(_ > 0) then "trialing" else "active",
+                currentPeriodStart = None,
+                currentPeriodEnd = None,
+                cancelAt = None,
+                collectionMethod = Some("charge_automatically"),
+                currency = Some("usd"),
+                amountCents = None,
+                metadata = request.metadata
+              )
             )
-          )
+
+          override def cancel(subscriptionId: String) =
+            Async[F].pure(
+              Subscription(
+                id = subscriptionId,
+                status = "canceled",
+                currentPeriodStart = None,
+                currentPeriodEnd = None,
+                cancelAt = None,
+                collectionMethod = Some("charge_automatically"),
+                currency = Some("usd"),
+                amountCents = None,
+                metadata = Map.empty
+              )
+            )
       )
 
-  def make[F[_]: Async]: F[BillingWorkflow[F]] =
+  def make[F[_]: Async](trialConfig: TrialConfig): F[BillingWorkflow[F]] =
     val mode          = readMode()
     val monthlyPrice  = readPriceId("STRIPE_PRO_MONTHLY_PRICE", DefaultMonthlyPrice)
     val yearlyPrice   = readPriceId("STRIPE_PRO_YEARLY_PRICE", DefaultYearlyPrice)
@@ -77,17 +95,22 @@ object StripeBillingWorkflow:
     val clientResource =
       if mode == "live" then StripeClientBuilder.resource[F](readConfig())
       else StubStripeClient.resource[F]
-    Async[F].pure(new StripeBillingWorkflow[F](clientResource, priceIds, mode))
+    Async[F].pure(new StripeBillingWorkflow[F](clientResource, priceIds, mode, trialConfig))
 
 final class StripeBillingWorkflow[F[_]: Async](
     clientResource: Resource[F, StripeClient[F]],
     priceIds: StripeBillingWorkflow.PriceIds,
-    mode: String
+    mode: String,
+    trialConfig: TrialConfig
 ) extends BillingWorkflow[F]:
 
   private val L = Logger[StripeBillingWorkflow[F]]
 
-  override def createBilling(user: UserDoc, details: SignupBilling): EitherT[F, SignupError, BillingInfo] =
+  override def createBilling(
+      user: UserDoc,
+      details: SignupBilling,
+      trialWindow: TrialWindow
+  ): EitherT[F, SignupError, BillingInfo] =
     val targetPrice = user.plan match
       case Plan.ProMonthly => priceIds.monthly
       case Plan.ProYearly  => priceIds.yearly
@@ -121,6 +144,7 @@ final class StripeBillingWorkflow[F[_]: Async](
           CreateSubscription(
             customerId = customer.id,
             priceId = targetPrice,
+            trialPeriodDays = trialWindow.periodDays,
             paymentBehavior = PaymentBehavior.AllowIncomplete,
             metadata = Map(
               "userId" -> user.userid,
@@ -128,7 +152,7 @@ final class StripeBillingWorkflow[F[_]: Async](
             )
           )
         )
-      yield buildBillingInfo(user, details, targetPrice, customer, subscription)
+      yield buildBillingInfo(user, details, targetPrice, customer, subscription, trialWindow)
 
     EitherT(
       provisioning.attempt.map {
@@ -145,7 +169,8 @@ final class StripeBillingWorkflow[F[_]: Async](
       details: SignupBilling,
       priceId: String,
       customer: Customer,
-      subscription: Subscription
+      subscription: Subscription,
+      trialWindow: TrialWindow
   ): BillingInfo =
     BillingInfo(
       userId = user.userid,
@@ -164,13 +189,31 @@ final class StripeBillingWorkflow[F[_]: Async](
         StripeSubSnapshot(
           subscriptionId = subscription.id,
           priceId = priceId,
-          status = subscription.status,
+          status = if trialWindow.isActive then "trialing" else subscription.status,
           currentPeriodStart = subscription.currentPeriodStart,
-          currentPeriodEnd = subscription.currentPeriodEnd,
+          currentPeriodEnd = trialWindow.endsAt.orElse(subscription.currentPeriodEnd),
           cancelAt = subscription.cancelAt,
           collectionMethod = subscription.collectionMethod,
           amountCents = subscription.amountCents,
           currency = subscription.currency
         )
-      )
+      ),
+      trialEndsAt = trialWindow.endsAt
     )
+
+  override def cancelSubscription(info: BillingInfo): EitherT[F, CancelTrialError, BillingInfo] =
+    info.stripeSubscription match
+      case None => EitherT.leftT[F, BillingInfo](CancelTrialError.MissingSubscription)
+      case Some(snapshot) =>
+        val program = clientResource.use: client => client.subscriptions.cancel(snapshot.subscriptionId)
+        EitherT(
+          program.attempt.map {
+            case Right(cancelled) =>
+              val now     = Instant.now()
+              val updated = snapshot.copy(status = cancelled.status, cancelAt = cancelled.cancelAt, currentPeriodEnd = cancelled.currentPeriodEnd)
+              Right(info.copy(stripeSubscription = Some(updated), trialEndsAt = None, updatedAt = now))
+            case Left(err) =>
+              val message = Option(err.getMessage).getOrElse(err.getClass.getSimpleName)
+              Left(CancelTrialError.GatewayFailure(message))
+          }
+        )

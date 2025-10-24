@@ -4,6 +4,7 @@ import cats.data.{EitherT, NonEmptyList}
 import cats.effect.*
 import cats.implicits.*
 import com.iscs.mail.EmailAttachment
+import com.iscs.ratingbunny.config.{TrialConfig, TrialWindow}
 import com.iscs.ratingbunny.testkit.{MockEmailService, TestHasher}
 import emil.Mail
 import jakarta.mail.SendFailedException
@@ -24,9 +25,10 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
   override def munitIOTimeout: Duration = 2.minutes
   private val hasher           = TestHasher.make[IO]
   private val stubEmailService = new MockEmailService[IO]()
+  private val trialConfig      = TrialConfig(enabled = false, lengthDays = 14, includeFreePlan = true)
 
   private val stubBillingWorkflow = new BillingWorkflow[IO]:
-    override def createBilling(user: UserDoc, details: SignupBilling) =
+    override def createBilling(user: UserDoc, details: SignupBilling, trialWindow: TrialWindow) =
       EitherT.rightT(
         BillingInfo(
           userId = user.userid,
@@ -50,9 +52,13 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
               amountCents = 1000L,
               currency = "USD"
             )
-          )
+          ),
+          trialEndsAt = trialWindow.endsAt
         )
       )
+
+    override def cancelSubscription(info: BillingInfo) =
+      EitherT.rightT(info)
 
   // ── helpers ──────────────────────────────────────────────────
   private def withMongo[A](f: MongoDatabase[IO] => IO[A]): Future[A] =
@@ -92,7 +98,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         users    <- db.getCollectionWithCodec[UserDoc]("users")
         prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
         billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
-        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, stubBillingWorkflow)
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, stubBillingWorkflow, trialConfig)
 
         res <- svc.signup(mkSignup())
         _   <- IO(assert(res.exists(_.userid.nonEmpty), s"expected Right but got $res"))
@@ -127,7 +133,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
             createdAt = Instant.now()
           )
         )
-        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, stubBillingWorkflow)
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, stubBillingWorkflow, trialConfig)
         res <- svc.signup(mkSignup(email = "dup@example.com"))
       yield assertEquals(res, Left(SignupError.EmailExists))
 
@@ -137,7 +143,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         users    <- db.getCollectionWithCodec[UserDoc]("users")
         prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
         billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
-        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, stubBillingWorkflow)
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, stubBillingWorkflow, trialConfig)
         res <- svc.signup(mkSignup(pwd = "short"))
       yield assertEquals(res, Left(SignupError.BadPassword))
 
@@ -180,7 +186,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
             sendEmailToMultiple(recipients, subject, textBody, htmlBody, Nil)
           override def send(mail: Mail[IO]): IO[NonEmptyList[String]] =
             IO.raiseError(new SendFailedException("bad address"))
-        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, failingEmailService, stubBillingWorkflow)
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, failingEmailService, stubBillingWorkflow, trialConfig)
         res <- svc.signup(mkSignup())
       yield assertEquals(res, Left(SignupError.BadEmail))
 
@@ -190,7 +196,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         users    <- db.getCollectionWithCodec[UserDoc]("users")
         prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
         billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
-        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, stubBillingWorkflow)
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, stubBillingWorkflow, trialConfig)
         res <- svc.signup(mkSignup(plan = Plan.ProMonthly))
         countU <- users.count
         countP <- prof.count
@@ -207,7 +213,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         users    <- db.getCollectionWithCodec[UserDoc]("users")
         prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
         billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
-        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, stubBillingWorkflow)
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, stubBillingWorkflow, trialConfig)
         res        <- svc.signup(mkSignup(plan = Plan.ProMonthly, billing = Some(mkBilling())))
         _          <- IO(assert(res.exists(_.userid.nonEmpty), s"expected success but got $res"))
         storedUser <- users.find(feq("email", "alice@example.com")).first
@@ -227,8 +233,9 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
         billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
         failingWorkflow = new BillingWorkflow[IO]:
-          override def createBilling(user: UserDoc, details: SignupBilling) =
+          override def createBilling(user: UserDoc, details: SignupBilling, trialWindow: TrialWindow) =
             EitherT.leftT(SignupError.BillingFailed("boom"))
-        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, failingWorkflow)
+          override def cancelSubscription(info: BillingInfo) = EitherT.rightT(info)
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubEmailService, failingWorkflow, trialConfig)
         res <- svc.signup(mkSignup(plan = Plan.ProMonthly, billing = Some(mkBilling())))
       yield assertEquals(res, Left(SignupError.BillingFailed("boom")))

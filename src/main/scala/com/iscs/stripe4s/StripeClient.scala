@@ -15,6 +15,7 @@ object StripeClient:
 
   trait Subscriptions[F[_]]:
     def create(request: CreateSubscription): F[Subscription]
+    def cancel(subscriptionId: String): F[Subscription]
 
 object StripeClientBuilder:
   def resource[F[_]: Async](config: StripeConfig): Resource[F, StripeClient[F]] =
@@ -46,8 +47,8 @@ final private class LiveStripeClient[F[_]](config: StripeConfig)(using F: Async[
     idempotencyKey.foreach(builder.setIdempotencyKey)
     builder.build()
 
-  override val customers: StripeClient.Customers[F] = (request: CreateCustomer) =>
-    val paramsBuilder = CustomerCreateParams.builder()
+    override val customers: StripeClient.Customers[F] = (request: CreateCustomer) =>
+      val paramsBuilder = CustomerCreateParams.builder()
     request.email.foreach(paramsBuilder.setEmail)
     request.name.foreach(paramsBuilder.setName)
     request.phone.foreach(paramsBuilder.setPhone)
@@ -69,33 +70,39 @@ final private class LiveStripeClient[F[_]](config: StripeConfig)(using F: Async[
       .blocking(StripeCustomer.create(paramsBuilder.build(), options))
       .map(mapCustomer)
 
-  override val subscriptions: StripeClient.Subscriptions[F] = (request: CreateSubscription) =>
-    val paramsBuilder = SubscriptionCreateParams
-      .builder()
-      .setCustomer(request.customerId)
+    override val subscriptions: StripeClient.Subscriptions[F] = new StripeClient.Subscriptions[F]:
+      override def create(request: CreateSubscription): F[Subscription] =
+        val paramsBuilder = SubscriptionCreateParams
+          .builder()
+          .setCustomer(request.customerId)
 
-    val itemBuilder = SubscriptionCreateParams.Item.builder().setPrice(request.priceId)
-    paramsBuilder.addItem(itemBuilder.build())
+        val itemBuilder = SubscriptionCreateParams.Item.builder().setPrice(request.priceId)
+        paramsBuilder.addItem(itemBuilder.build())
 
-    request.trialPeriodDays.foreach(days => paramsBuilder.setTrialPeriodDays(Long.box(days.toLong)))
+        request.trialPeriodDays.foreach(days => paramsBuilder.setTrialPeriodDays(Long.box(days.toLong)))
 
-    // Apply coupon as a discount
-    request.coupon.foreach: couponId =>
-      val discount = SubscriptionCreateParams.Discount
-        .builder()
-        .setCoupon(couponId)
-        .build()
-      paramsBuilder.addDiscount(discount)
+        // Apply coupon as a discount
+        request.coupon.foreach: couponId =>
+          val discount = SubscriptionCreateParams.Discount
+            .builder()
+            .setCoupon(couponId)
+            .build()
+          paramsBuilder.addDiscount(discount)
 
-    //      request.coupon.foreach(paramsBuilder.setCoupon)
-    request.defaultPaymentMethod.foreach(paramsBuilder.setDefaultPaymentMethod)
-    request.metadata.foreach((k, v) => paramsBuilder.putMetadata(k, v))
-    paramsBuilder.setPaymentBehavior(toStripePaymentBehavior(request.paymentBehavior))
+        request.defaultPaymentMethod.foreach(paramsBuilder.setDefaultPaymentMethod)
+        request.metadata.foreach((k, v) => paramsBuilder.putMetadata(k, v))
+        paramsBuilder.setPaymentBehavior(toStripePaymentBehavior(request.paymentBehavior))
 
-    val options = requestOptions(request.idempotencyKey)
-    Async[F]
-      .blocking(StripeSubscription.create(paramsBuilder.build(), options))
-      .map(mapSubscription)
+        val options = requestOptions(request.idempotencyKey)
+        Async[F]
+          .blocking(StripeSubscription.create(paramsBuilder.build(), options))
+          .map(mapSubscription)
+
+      override def cancel(subscriptionId: String): F[Subscription] =
+        val options = requestOptions(None)
+        Async[F]
+          .blocking(StripeSubscription.retrieve(subscriptionId, options).cancel(options))
+          .map(mapSubscription)
 
   private def toStripePaymentBehavior(behavior: PaymentBehavior): SubscriptionCreateParams.PaymentBehavior =
     behavior match

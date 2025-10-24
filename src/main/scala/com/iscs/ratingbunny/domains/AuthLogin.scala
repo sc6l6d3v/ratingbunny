@@ -29,7 +29,7 @@ final class AuthLoginImpl[F[_]: Async](
         case None =>
           LoginError.UserNotFound.asLeft.pure[F]
 
-        case Some(u) if u.status != SubscriptionStatus.Active =>
+        case Some(u) if !AuthLoginImpl.isLoginAllowed(u.status) =>
           LoginError.Inactive.asLeft.pure[F]
 
         case Some(u) if !u.emailVerified =>
@@ -42,3 +42,10 @@ final class AuthLoginImpl[F[_]: Async](
               case true  => tokenIssuer.issue(u).map(tp => LoginOK(u.userid, tp).asRight)
               case false => LoginError.BadPassword.asLeft.pure[F]
     yield result
+
+object AuthLoginImpl:
+  private[ratingbunny] def isLoginAllowed(status: SubscriptionStatus): Boolean =
+    status match
+      case SubscriptionStatus.Active   => true
+      case SubscriptionStatus.Trialing => true
+      case _                           => false

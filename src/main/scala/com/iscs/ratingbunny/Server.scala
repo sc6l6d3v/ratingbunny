@@ -5,6 +5,7 @@ import cats.effect.{Async, Resource, Sync}
 import cats.implicits.*
 import com.comcast.ip4s.*
 import com.iscs.mail.{EmailService, EmailServiceConfig}
+import com.iscs.ratingbunny.config.TrialConfig
 import com.iscs.ratingbunny.domains.{
   AuthCheck,
   AuthCheckImpl,
@@ -22,6 +23,8 @@ import com.iscs.ratingbunny.domains.{
   TitleRec,
   TokenIssuer,
   TokenIssuerImpl,
+  TrialService,
+  TrialServiceImpl,
   UserDoc,
   UserProfileDoc,
   UserRepo,
@@ -71,15 +74,21 @@ object Server:
   private val jwtSecretKey =
     sys.env.getOrElse("JWT_SECRET_KEY", throw new RuntimeException("JWT_SECRET_KEY environment variable must be set"))
 
-  private def getAuthSvc[F[_]: Async](db: MongoDatabase[F], emailService: EmailService[F])(using Network[F]): F[AuthCheck[F]] =
+  private val trialConfig = TrialConfig.fromEnv()
+
+  private def getAuthSvc[F[_]: Async](
+      db: MongoDatabase[F],
+      emailService: EmailService[F],
+      billingWorkflow: BillingWorkflow[F],
+      trialConfig: TrialConfig
+  ): F[AuthCheck[F]] =
     for
       userCollCodec     <- db.getCollectionWithCodec[UserDoc](usersCollection)
       userProfCollCodec <- db.getCollectionWithCodec[UserProfileDoc](userProfileCollection)
       billingCollCodec  <- db.getCollectionWithCodec[BillingInfo](billingCollection)
-      billingWorkflow   <- CountryAwareBillingWorkflow.make[F]
     yield
       val hasher = BcryptHasher.make[F](cost = 12)
-      new AuthCheckImpl(userCollCodec, userProfCollCodec, billingCollCodec, hasher, emailService, billingWorkflow)
+      new AuthCheckImpl(userCollCodec, userProfCollCodec, billingCollCodec, hasher, emailService, billingWorkflow, trialConfig)
 
   private def getLoginSvc[F[_]: Async](db: MongoDatabase[F], token: TokenIssuer[F]): F[AuthLogin[F]] =
     for userCollCodec <- db.getCollectionWithCodec[UserDoc](usersCollection)
@@ -92,6 +101,14 @@ object Server:
       userCollCodec <- db.getCollectionWithCodec[UserDoc](usersCollection)
       repo          <- UserRepoImpl.make[F](userCollCodec)
     yield repo
+
+  private def getTrialSvc[F[_]: Async](
+      db: MongoDatabase[F],
+      userRepo: UserRepo[F],
+      billingWorkflow: BillingWorkflow[F]
+  ): F[TrialService[F]] =
+    for billingCol <- db.getCollectionWithCodec[BillingInfo](billingCollection)
+    yield TrialServiceImpl.make(userRepo, billingCol, billingWorkflow)
 
   private def getTokenIssuerSvc[F[_]: Async](
       redis: RedisCommands[F, String, String],
@@ -123,10 +140,12 @@ object Server:
     for
       token        <- getTokenIssuerSvc(redis, db, jwtSecretKey)
       emailService <- EmailService.initialize(ServiceConfig)
-      authSvc      <- getAuthSvc(db, emailService)
+      billingWorkflow <- CountryAwareBillingWorkflow.make[F](trialConfig)
+      authSvc      <- getAuthSvc(db, emailService, billingWorkflow, trialConfig)
       loginSvc     <- getLoginSvc(db, token)
       emailSvc     <- getEmailSvc(db, emailService)
       userRepo     <- getUserRepoSvc(db)
+      trialSvc     <- getTrialSvc(db, userRepo, billingWorkflow)
       fetchSvc     <- Sync[F].delay(new FetchImage[F](imageHost, client))
       historyRepo  <- HistoryRepo.make(db)
       imdbSvc      <- getImdbSvc(db, client)
@@ -139,7 +158,7 @@ object Server:
             ImdbRoutes.publicRoutes(imdbSvc, historyRepo, jwtSecretKey) <+>
             PoolSvcRoutes.httpRoutes(poolSvc) <+>
             AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token) <+>
-            AuthRoutes.authedRoutes(userRepo, authMw)),
+            AuthRoutes.authedRoutes(userRepo, trialSvc, authMw)),
         s"/api/$apiVersion/pro" ->
           ImdbRoutes.authedRoutes(imdbSvc, historyRepo, userRepo, authMw)
       ).orNotFound

@@ -19,6 +19,7 @@ import com.iscs.ratingbunny.domains.{
   SubscriptionStatus,
   TokenIssuer,
   TokenPair,
+  TrialService,
   UserDoc,
   UserRepo
 }
@@ -48,7 +49,11 @@ class AuthRoutesSuite extends CatsEffectSuite:
 
   private val secret    = "test-secret"
   private val authMw    = JwtAuth.middleware[IO](secret)
-  private val authedSvc = AuthRoutes.authedRoutes[IO](repo, authMw)
+
+  private val stubTrialService = new TrialService[IO]:
+    def cancelTrial(userId: String) = IO.pure(Right(()))
+
+  private val authedSvc = AuthRoutes.authedRoutes[IO](repo, stubTrialService, authMw)
 
   private val stubCheck = new AuthCheck[IO]:
     def signup(req: SignupRequest) = IO.pure(Left(SignupError.BadEmail))
@@ -105,3 +110,11 @@ class AuthRoutesSuite extends CatsEffectSuite:
           .map: json =>
             assert(json.hcursor.get[String]("access").isRight)
             assert(json.hcursor.get[String]("refresh").isRight)
+
+  test("POST /auth/trial/cancel returns 204"):
+    val token = JwtCirce.encode(JwtClaim(subject = Some(user.userid)), secret, JwtAlgorithm.HS256)
+    val req = Request[IO](Method.POST, uri"/auth/trial/cancel")
+      .putHeaders(headers.Authorization(Credentials.Token(AuthScheme.Bearer, token)))
+    authedSvc.orNotFound
+      .run(req)
+      .map(resp => assertEquals(resp.status, Status.NoContent))

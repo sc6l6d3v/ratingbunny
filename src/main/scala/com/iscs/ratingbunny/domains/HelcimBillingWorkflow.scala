@@ -8,6 +8,8 @@ import com.iscs.helcim4s.core.{ClientBuilder, HelcimConfig}
 import com.iscs.helcim4s.customer.models.{Address as HelcimAddress, CreateCustomer}
 import com.iscs.helcim4s.recurring.models.CreateSubscription
 import com.iscs.helcim4s.testkit.HelcimTestkit
+import com.iscs.ratingbunny.config.TrialConfig
+import com.iscs.ratingbunny.config.TrialWindow
 import com.typesafe.scalalogging.Logger
 import fs2.io.net.Network
 import org.http4s.Uri
@@ -37,7 +39,7 @@ object HelcimBillingWorkflow:
   private def readToken(mode: String): String =
     sys.env.getOrElse("HELCIM_API_TOKEN", if mode == "stub" then "stub-token" else "")
 
-  def make[F[_]: Async](using Network[F]): F[BillingWorkflow[F]] =
+  def make[F[_]: Async](trialConfig: TrialConfig)(using Network[F]): F[BillingWorkflow[F]] =
     val mode          = sys.env.getOrElse("HELCIM4S_MODE", "stub")
     val monthlyPlanId = readPlanId("PROMONTHLY", DefaultMonthly)
     val yearlyPlanId  = readPlanId("PROANNUAL", DefaultAnnual)
@@ -63,19 +65,24 @@ object HelcimBillingWorkflow:
         HelcimTestkit.resourceFromClient(cfg, HelcimTestkit.stubClient[F])
 
     Async[F].pure(
-      new HelcimBillingWorkflow[F](clientResource, PlanIds(monthlyPlanId, yearlyPlanId), currency, mode)
+      new HelcimBillingWorkflow[F](clientResource, PlanIds(monthlyPlanId, yearlyPlanId), currency, mode, trialConfig)
     )
 
 final class HelcimBillingWorkflow[F[_]: Async](
     clientResource: Resource[F, HelcimClient[F]],
     planIds: HelcimBillingWorkflow.PlanIds,
     defaultCurrency: String,
-    mode: String
+    mode: String,
+    trialConfig: TrialConfig
 ) extends BillingWorkflow[F]:
 
   private val L = Logger[HelcimBillingWorkflow[F]]
 
-  override def createBilling(user: UserDoc, details: SignupBilling): EitherT[F, SignupError, BillingInfo] =
+  override def createBilling(
+      user: UserDoc,
+      details: SignupBilling,
+      trialWindow: TrialWindow
+  ): EitherT[F, SignupError, BillingInfo] =
     val targetPlan = user.plan match
       case Plan.ProMonthly => planIds.monthly
       case Plan.ProYearly  => planIds.yearly
@@ -112,7 +119,7 @@ final class HelcimBillingWorkflow[F[_]: Async](
                 .map(_.asInstanceOf[AnyRef])
             case None =>
               Async[F].raiseError[AnyRef](RuntimeException("missing Helcim customer id"))
-      yield buildBillingInfo(user, details, customer, subscription, targetPlan)
+      yield buildBillingInfo(user, details, customer, subscription, targetPlan, trialWindow)
 
     EitherT(
       provisioning.attempt.map {
@@ -129,7 +136,8 @@ final class HelcimBillingWorkflow[F[_]: Async](
       details: SignupBilling,
       customer: AnyRef,
       subscription: AnyRef,
-      planId: Long
+      planId: Long,
+      trialWindow: TrialWindow
   ): BillingInfo =
     val customerKey =
       extractString(customer, "customerCode").orElse(extractLong(customer, "customerId").map(_.toString)).getOrElse(
@@ -139,9 +147,13 @@ final class HelcimBillingWorkflow[F[_]: Async](
       extractString(subscription, "subscriptionId").orElse(extractLong(subscription, "subscriptionId").map(_.toString)).getOrElse(
         throw RuntimeException("Helcim subscription identifier missing")
       )
-    val status = extractString(subscription, "status").getOrElse("pending")
+    val status =
+      if trialWindow.isActive then "trialing"
+      else extractString(subscription, "status").getOrElse("pending")
     val nextBillAt =
-      extractInstant(subscription, "nextBillAt", "nextBillingAt", "nextBilling", "nextBillingDate", "nextBillDate")
+      trialWindow.endsAt.orElse(
+        extractInstant(subscription, "nextBillAt", "nextBillingAt", "nextBilling", "nextBillingDate", "nextBillDate")
+      )
     val amountCents =
       extractBigDecimal(subscription, "amount", "planAmount", "recurringAmount").flatMap(toCents).getOrElse(0L)
     val currency = extractString(subscription, "currency").getOrElse(defaultCurrency)
@@ -166,8 +178,26 @@ final class HelcimBillingWorkflow[F[_]: Async](
           amountCents = amountCents,
           currency = currency
         )
-      )
+      ),
+      trialEndsAt = trialWindow.endsAt
     )
+
+  override def cancelSubscription(info: BillingInfo): EitherT[F, CancelTrialError, BillingInfo] =
+    info.subscription match
+      case None => EitherT.leftT[F, BillingInfo](CancelTrialError.MissingSubscription)
+      case Some(snapshot) =>
+        val program = clientResource.use: _ => Async[F].unit
+        EitherT(
+          program.attempt.map {
+            case Right(_) =>
+              val now     = Instant.now()
+              val updated = snapshot.copy(status = "canceled", nextBillAt = None)
+              Right(info.copy(subscription = Some(updated), trialEndsAt = None, updatedAt = now))
+            case Left(err) =>
+              val message = Option(err.getMessage).getOrElse(err.getClass.getSimpleName)
+              Left(CancelTrialError.GatewayFailure(message))
+          }
+        )
 
   private def extractString(target: AnyRef, methodNames: String*): Option[String] =
     methodNames.toList.view

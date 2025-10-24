@@ -4,6 +4,7 @@ import cats.data.EitherT
 import cats.effect.IO
 import cats.effect.kernel.Ref
 import cats.implicits.*
+import com.iscs.ratingbunny.config.TrialWindow
 import munit.CatsEffectSuite
 
 import java.time.Instant
@@ -15,7 +16,7 @@ class CountryAwareBillingWorkflowSpec extends CatsEffectSuite:
       gateway: BillingGateway
   ): BillingWorkflow[IO] =
     new BillingWorkflow[IO]:
-      override def createBilling(user: UserDoc, details: SignupBilling): EitherT[IO, SignupError, BillingInfo] =
+      override def createBilling(user: UserDoc, details: SignupBilling, trialWindow: TrialWindow): EitherT[IO, SignupError, BillingInfo] =
         EitherT.liftF(ref.update(_ + 1)).as(
           BillingInfo(
             userId = user.userid,
@@ -26,9 +27,13 @@ class CountryAwareBillingWorkflowSpec extends CatsEffectSuite:
             stripe = gateway match
               case BillingGateway.Stripe => Some(StripeAccount("stub-stripe"))
               case _                     => None,
-            address = details.address
+            address = details.address,
+            trialEndsAt = trialWindow.endsAt
           )
         )
+
+      override def cancelSubscription(info: BillingInfo): EitherT[IO, CancelTrialError, BillingInfo] =
+        EitherT.rightT(info)
 
   private val baseUser = UserDoc(
     email = "test@example.com",
@@ -62,7 +67,7 @@ class CountryAwareBillingWorkflowSpec extends CatsEffectSuite:
         trackingWorkflow(stripeCount, BillingGateway.Stripe),
         Set("US", "CA")
       )
-      result <- workflow.createBilling(baseUser, billingDetails.copy(address = billingDetails.address.copy(country = "us"))).value
+      result <- workflow.createBilling(baseUser, billingDetails.copy(address = billingDetails.address.copy(country = "us")), TrialWindow.Disabled).value
       counts <- (helcimCount.get, stripeCount.get).tupled
     yield
       assertEquals(result.isRight, true)
@@ -78,7 +83,7 @@ class CountryAwareBillingWorkflowSpec extends CatsEffectSuite:
         trackingWorkflow(stripeCount, BillingGateway.Stripe),
         Set("US", "CA")
       )
-      result <- workflow.createBilling(baseUser, international).value
+      result <- workflow.createBilling(baseUser, international, TrialWindow.Disabled).value
       counts <- (helcimCount.get, stripeCount.get).tupled
     yield
       assertEquals(result.isRight, true)
@@ -91,18 +96,20 @@ class CountryAwareBillingWorkflowSpec extends CatsEffectSuite:
       workflow = CountryAwareBillingWorkflow[IO](
         trackingWorkflow(helcimCount, BillingGateway.Helcim),
         new BillingWorkflow[IO]:
-          override def createBilling(user: UserDoc, details: SignupBilling) =
+          override def createBilling(user: UserDoc, details: SignupBilling, trialWindow: TrialWindow) =
             EitherT.rightT(
               BillingInfo(
                 userId = user.userid,
                 gateway = BillingGateway.Helcim,
                 helcim = Some(HelcimAccount("stub-helcim")),
-                address = details.address
+                address = details.address,
+                trialEndsAt = trialWindow.endsAt
               )
             ),
+          override def cancelSubscription(info: BillingInfo) = EitherT.rightT(info),
         Set("US", "CA")
       )
-      result <- workflow.createBilling(baseUser, international).value
+      result <- workflow.createBilling(baseUser, international, TrialWindow.Disabled).value
       helcimInvocations <- helcimCount.get
     yield
       assertEquals(helcimInvocations, 0)

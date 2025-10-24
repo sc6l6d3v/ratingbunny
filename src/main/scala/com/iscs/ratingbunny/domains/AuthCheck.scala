@@ -5,6 +5,7 @@ import cats.effect.*
 import cats.effect.kernel.Ref
 import cats.implicits.*
 import com.iscs.mail.EmailService
+import com.iscs.ratingbunny.config.{TrialConfig, TrialWindow}
 import com.iscs.ratingbunny.util.{DeterministicHash, PasswordHasher}
 import com.mongodb.ErrorCategory.DUPLICATE_KEY
 import com.mongodb.MongoWriteException
@@ -41,21 +42,27 @@ final class AuthCheckImpl[F[_]: Async](
     billingCol: MongoCollection[F, BillingInfo],
     hasher: PasswordHasher[F],
     emailService: EmailService[F],
-    billingWorkflow: BillingWorkflow[F]
+    billingWorkflow: BillingWorkflow[F],
+    trialConfig: TrialConfig
 ) extends AuthCheck[F] with QuerySetup:
   private val docFail    = 121
   private val MINPWDLEN  = 8
   private val VERIFYHOST = sys.env.getOrElse("VERIFYHOST", "https://example.com/")
 
-  private def persistBilling(user: UserDoc, billing: Option[SignupBilling]): EitherT[F, SignupError, Unit] =
+  private def persistBilling(
+      user: UserDoc,
+      billing: Option[SignupBilling],
+      trialWindow: TrialWindow
+  ): EitherT[F, SignupError, Unit] =
     user.plan match
       case Plan.Free => EitherT.rightT[F, SignupError](())
       case Plan.ProMonthly | Plan.ProYearly =>
         billing match
           case Some(details) =>
             for
-              doc <- billingWorkflow.createBilling(user, details)
-              _   <- EitherT.liftF(billingCol.insertOne(doc).void)
+              doc <- billingWorkflow.createBilling(user, details, trialWindow)
+              enriched = doc.copy(trialEndsAt = trialWindow.endsAt)
+              _   <- EitherT.liftF(billingCol.insertOne(enriched).void)
             yield ()
           case None => EitherT.leftT[F, Unit](SignupError.BillingRequired)
 
@@ -96,20 +103,22 @@ final class AuthCheckImpl[F[_]: Async](
         token     <- EitherT.liftF(Sync[F].delay(UUID.randomUUID().toString))
         tokenHash <- EitherT.liftF(Sync[F].delay(DeterministicHash.sha256(token)))
         expiresAt <- EitherT.liftF(Sync[F].delay(Instant.now.plus(1, ChronoUnit.DAYS)))
+        trialWindow <- EitherT.liftF(Sync[F].delay(trialConfig.windowFor(req.plan, Instant.now())))
         user = UserDoc(
           email = req.email,
           email_norm = email_norm,
           passwordHash = hash,
           userid = uid,
           plan = req.plan,
-          status = SubscriptionStatus.Active,
+          status = trialWindow.statusDuringTrial,
           displayName = req.displayName,
           verificationTokenHash = Some(tokenHash),
-          verificationExpires = Some(expiresAt)
+          verificationExpires = Some(expiresAt),
+          trialEndsAt = trialWindow.endsAt
         )
         _ <- EitherT.liftF(usersCol.insertOne(user) *> userIdRef.set(Some(uid)))
         _ <- EitherT.liftF(userProfileCol.insertOne(UserProfileDoc(uid)).void)
-        _ <- persistBilling(user, req.billing)
+        _ <- persistBilling(user, req.billing, trialWindow)
         link = s"${VERIFYHOST}api/v3/auth/verify?token=$token"
         _ <- EitherT.liftF(Sync[F].delay(L.debug(s"saved $token with $tokenHash")))
         _ <- EitherT.liftF(emailService.sendEmail(req.email, "Verify your email", link, link).void)
