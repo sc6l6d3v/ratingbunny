@@ -96,8 +96,12 @@ class CountryAwareBillingWorkflowSpec extends CatsEffectSuite:
       workflow = CountryAwareBillingWorkflow[IO](
         trackingWorkflow(helcimCount, BillingGateway.Helcim),
         new BillingWorkflow[IO]:
-          override def createBilling(user: UserDoc, details: SignupBilling, trialWindow: TrialWindow) =
-            EitherT.rightT(
+          override def createBilling(
+              user: UserDoc,
+              details: SignupBilling,
+              trialWindow: TrialWindow
+          ): EitherT[IO, SignupError, BillingInfo] =
+            EitherT.rightT[IO, SignupError](
               BillingInfo(
                 userId = user.userid,
                 gateway = BillingGateway.Helcim,
