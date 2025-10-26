@@ -5,11 +5,11 @@ import com.iscs.ratingbunny.config.TrialWindow
 
 enum CancelTrialError:
   case MissingSubscription
-  case GatewayFailure(message: String)
+  case GatewayFailure(override val message: String)
 
   def message: String = this match
-    case MissingSubscription       => "subscription not found"
-    case GatewayFailure(reason)    => reason
+    case MissingSubscription    => "subscription not found"
+    case GatewayFailure(reason) => reason
 
 trait BillingWorkflow[F[_]]:
   def createBilling(

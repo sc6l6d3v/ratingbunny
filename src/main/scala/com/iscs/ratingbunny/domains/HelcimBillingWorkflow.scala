@@ -61,8 +61,7 @@ object HelcimBillingWorkflow:
         ClientBuilder
           .resource[F](cfg)
           .flatMap(raw => HelcimTestkit.resourceFromClient(cfg, raw))
-      else
-        HelcimTestkit.resourceFromClient(cfg, HelcimTestkit.stubClient[F])
+      else HelcimTestkit.resourceFromClient(cfg, HelcimTestkit.stubClient[F])
 
     Async[F].pure(
       new HelcimBillingWorkflow[F](clientResource, PlanIds(monthlyPlanId, yearlyPlanId), currency, mode, trialConfig)
@@ -140,13 +139,17 @@ final class HelcimBillingWorkflow[F[_]: Async](
       trialWindow: TrialWindow
   ): BillingInfo =
     val customerKey =
-      extractString(customer, "customerCode").orElse(extractLong(customer, "customerId").map(_.toString)).getOrElse(
-        throw RuntimeException("Helcim customer identifier missing")
-      )
+      extractString(customer, "customerCode")
+        .orElse(extractLong(customer, "customerId").map(_.toString))
+        .getOrElse(
+          throw RuntimeException("Helcim customer identifier missing")
+        )
     val subscriptionId =
-      extractString(subscription, "subscriptionId").orElse(extractLong(subscription, "subscriptionId").map(_.toString)).getOrElse(
-        throw RuntimeException("Helcim subscription identifier missing")
-      )
+      extractString(subscription, "subscriptionId")
+        .orElse(extractLong(subscription, "subscriptionId").map(_.toString))
+        .getOrElse(
+          throw RuntimeException("Helcim subscription identifier missing")
+        )
     val status =
       if trialWindow.isActive then "trialing"
       else extractString(subscription, "status").getOrElse("pending")
@@ -186,7 +189,8 @@ final class HelcimBillingWorkflow[F[_]: Async](
     info.subscription match
       case None => EitherT.leftT[F, BillingInfo](CancelTrialError.MissingSubscription)
       case Some(snapshot) =>
-        val program = clientResource.use: _ => Async[F].unit
+        val program = clientResource.use: _ =>
+          Async[F].unit
         EitherT(
           program.attempt.map {
             case Right(_) =>
@@ -223,11 +227,11 @@ final class HelcimBillingWorkflow[F[_]: Async](
     methodNames.toList.view
       .flatMap(name => invoke(target, name))
       .collectFirst {
-        case bd: BigDecimal        => bd
+        case bd: BigDecimal           => bd
         case bd: java.math.BigDecimal => BigDecimal(bd)
-        case d: Double             => BigDecimal(d)
-        case l: Long               => BigDecimal(l)
-        case i: Int                => BigDecimal(i)
+        case d: Double                => BigDecimal(d)
+        case l: Long                  => BigDecimal(l)
+        case i: Int                   => BigDecimal(i)
       }
 
   private def extractInstant(target: AnyRef, methodNames: String*): Option[Instant] =
@@ -237,11 +241,11 @@ final class HelcimBillingWorkflow[F[_]: Async](
 
   private def toInstant(value: Any): Option[Instant] =
     value match
-      case inst: Instant         => Some(inst)
-      case odt: OffsetDateTime   => Some(odt.toInstant)
-      case ldt: LocalDateTime    => Some(ldt.toInstant(ZoneOffset.UTC))
-      case s: String             => Try(Instant.parse(s)).toOption
-      case _                     => None
+      case inst: Instant       => Some(inst)
+      case odt: OffsetDateTime => Some(odt.toInstant)
+      case ldt: LocalDateTime  => Some(ldt.toInstant(ZoneOffset.UTC))
+      case s: String           => Try(Instant.parse(s)).toOption
+      case _                   => None
 
   private def toCents(amount: BigDecimal): Option[Long] =
     Try((amount * 100).setScale(0, RoundingMode.HALF_UP).toLongExact).toOption

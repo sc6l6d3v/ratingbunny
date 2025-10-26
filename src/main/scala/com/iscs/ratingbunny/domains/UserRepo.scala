@@ -44,7 +44,7 @@ class UserRepoImpl[F[_]: Async](collection: MongoCollection[F, UserDoc]) extends
     val update = JUpdates.combine(
       JUpdates.set("plan", plan),
       JUpdates.set("status", status),
-      trialEndsAt.fold[JUpdates.Bson] (JUpdates.unset("trialEndsAt"))(inst => JUpdates.set("trialEndsAt", inst))
+      trialEndsAt.fold(JUpdates.unset("trialEndsAt"))(inst => JUpdates.set("trialEndsAt", inst))
     )
     collection.updateOne(feq("userid", uid), update).void
 

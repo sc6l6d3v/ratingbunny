@@ -6,30 +6,7 @@ import cats.implicits.*
 import com.comcast.ip4s.*
 import com.iscs.mail.{EmailService, EmailServiceConfig}
 import com.iscs.ratingbunny.config.TrialConfig
-import com.iscs.ratingbunny.domains.{
-  AuthCheck,
-  AuthCheckImpl,
-  AuthLogin,
-  AuthLoginImpl,
-  BillingInfo,
-  CountryAwareBillingWorkflow,
-  ConnectionPool,
-  ConnectionPoolImpl,
-  EmailContact,
-  EmailContactImpl,
-  FetchImage,
-  ImdbQuery,
-  ImdbQueryImpl,
-  TitleRec,
-  TokenIssuer,
-  TokenIssuerImpl,
-  TrialService,
-  TrialServiceImpl,
-  UserDoc,
-  UserProfileDoc,
-  UserRepo,
-  UserRepoImpl
-}
+import com.iscs.ratingbunny.domains.{AuthCheck, AuthCheckImpl, AuthLogin, AuthLoginImpl, BillingInfo, BillingWorkflow, ConnectionPool, ConnectionPoolImpl, CountryAwareBillingWorkflow, EmailContact, EmailContactImpl, FetchImage, ImdbQuery, ImdbQueryImpl, TitleRec, TokenIssuer, TokenIssuerImpl, TrialService, TrialServiceImpl, UserDoc, UserProfileDoc, UserRepo, UserRepoImpl}
 import com.iscs.ratingbunny.repos.HistoryRepo
 import com.iscs.ratingbunny.routes.{AuthRoutes, EmailContactRoutes, FetchImageRoutes, ImdbRoutes, PoolSvcRoutes}
 import com.iscs.ratingbunny.security.JwtAuth

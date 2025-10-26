@@ -6,14 +6,7 @@ import cats.implicits.*
 import com.iscs.stripe4s.StripeClient
 import com.iscs.stripe4s.StripeClientBuilder
 import com.iscs.stripe4s.StripeConfig
-import com.iscs.stripe4s.models.{
-  Address as StripeAddress,
-  CreateCustomer,
-  CreateSubscription,
-  Customer,
-  PaymentBehavior,
-  Subscription
-}
+import com.iscs.stripe4s.models.{Address as StripeAddress, CreateCustomer, CreateSubscription, Customer, PaymentBehavior, Subscription}
 import com.typesafe.scalalogging.Logger
 import com.iscs.ratingbunny.config.{TrialConfig, TrialWindow}
 import java.time.Instant
@@ -88,10 +81,10 @@ object StripeBillingWorkflow:
       )
 
   def make[F[_]: Async](trialConfig: TrialConfig): F[BillingWorkflow[F]] =
-    val mode          = readMode()
-    val monthlyPrice  = readPriceId("STRIPE_PRO_MONTHLY_PRICE", DefaultMonthlyPrice)
-    val yearlyPrice   = readPriceId("STRIPE_PRO_YEARLY_PRICE", DefaultYearlyPrice)
-    val priceIds      = PriceIds(monthlyPrice, yearlyPrice)
+    val mode         = readMode()
+    val monthlyPrice = readPriceId("STRIPE_PRO_MONTHLY_PRICE", DefaultMonthlyPrice)
+    val yearlyPrice  = readPriceId("STRIPE_PRO_YEARLY_PRICE", DefaultYearlyPrice)
+    val priceIds     = PriceIds(monthlyPrice, yearlyPrice)
     val clientResource =
       if mode == "live" then StripeClientBuilder.resource[F](readConfig())
       else StubStripeClient.resource[F]
@@ -136,7 +129,7 @@ final class StripeBillingWorkflow[F[_]: Async](
             paymentToken = Option(details.cardToken).filter(_.nonEmpty),
             metadata = Map(
               "userId" -> user.userid,
-              "plan" -> user.plan.asString
+              "plan"   -> user.plan.asString
             )
           )
         )
@@ -148,7 +141,7 @@ final class StripeBillingWorkflow[F[_]: Async](
             paymentBehavior = PaymentBehavior.AllowIncomplete,
             metadata = Map(
               "userId" -> user.userid,
-              "plan" -> user.plan.asString
+              "plan"   -> user.plan.asString
             )
           )
         )
@@ -205,12 +198,14 @@ final class StripeBillingWorkflow[F[_]: Async](
     info.stripeSubscription match
       case None => EitherT.leftT[F, BillingInfo](CancelTrialError.MissingSubscription)
       case Some(snapshot) =>
-        val program = clientResource.use: client => client.subscriptions.cancel(snapshot.subscriptionId)
+        val program = clientResource.use: client =>
+          client.subscriptions.cancel(snapshot.subscriptionId)
         EitherT(
           program.attempt.map {
             case Right(cancelled) =>
-              val now     = Instant.now()
-              val updated = snapshot.copy(status = cancelled.status, cancelAt = cancelled.cancelAt, currentPeriodEnd = cancelled.currentPeriodEnd)
+              val now = Instant.now()
+              val updated =
+                snapshot.copy(status = cancelled.status, cancelAt = cancelled.cancelAt, currentPeriodEnd = cancelled.currentPeriodEnd)
               Right(info.copy(stripeSubscription = Some(updated), trialEndsAt = None, updatedAt = now))
             case Left(err) =>
               val message = Option(err.getMessage).getOrElse(err.getClass.getSimpleName)
