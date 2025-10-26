@@ -46,6 +46,12 @@ class AuthRoutesSuite extends CatsEffectSuite:
     def findByUserId(id: String): IO[Option[UserDoc]]               = IO.pure(if id == user.userid then Some(user) else None)
     def findByVerificationToken(token: String): IO[Option[UserDoc]] = IO.pure(Some(unverified))
     def markEmailVerified(uid: String): IO[Unit]                    = IO.unit
+    def updateSubscription(
+        uid: String,
+        plan: Plan,
+        status: SubscriptionStatus,
+        trialEndsAt: Option[java.time.Instant]
+    ): IO[Unit] = IO.unit
 
   private val secret    = "test-secret"
   private val authMw    = JwtAuth.middleware[IO](secret)
