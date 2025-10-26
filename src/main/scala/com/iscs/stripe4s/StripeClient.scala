@@ -83,10 +83,11 @@ final private class LiveStripeClient[F[_]](config: StripeConfig)(using F: Async[
 
       // Apply coupon as a discount
       request.coupon.foreach: couponId =>
-        val discount = SubscriptionCreateParams.Discount
-          .builder()
-          .setCoupon(couponId)
-          .build()
+        val discount =
+          SubscriptionCreateParams.Discount
+            .builder()
+            .setCoupon(couponId)
+            .build()
         paramsBuilder.addDiscount(discount)
 
       request.defaultPaymentMethod.foreach(paramsBuilder.setDefaultPaymentMethod)
