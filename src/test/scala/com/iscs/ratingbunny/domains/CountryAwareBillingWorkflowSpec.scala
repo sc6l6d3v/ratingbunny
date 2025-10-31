@@ -109,7 +109,7 @@ class CountryAwareBillingWorkflowSpec extends CatsEffectSuite:
                 address = details.address,
                 trialEndsAt = trialWindow.endsAt
               )
-            ),
+            )
           override def cancelSubscription(info: BillingInfo) = EitherT.rightT(info),
         Set("US", "CA")
       )
