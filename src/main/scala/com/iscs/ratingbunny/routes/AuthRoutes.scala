@@ -52,8 +52,8 @@ object AuthRoutes:
         for
           decoded <- req.attemptAs[SignupRequest].value
           resp <- decoded match
-            case Left(InvalidMessageBodyFailure(_, Some(df: DecodingFailure))) =>
-              BadRequest(s"Bad signup payload: ${df.message}")
+            case Left(InvalidMessageBodyFailure(details, Some(df: DecodingFailure))) =>
+              BadRequest(s"Bad signup payload: ${df.message} from $details")
 
             // Fallback for any DecodeFailure that *doesn't* carry a Circe cause
             case Left(other) => BadRequest(Json.obj("error" -> Json.fromString(other.getMessage)))
@@ -170,7 +170,7 @@ object AuthRoutes:
         trialService
           .cancelTrial(userId)
           .flatMap:
-            case Right(_) => NoContent()
+            case Right(_)                              => NoContent()
             case Left(CancelTrialFailure.UserNotFound) => NotFound(Json.obj("error" -> Json.fromString("user not found")))
             case Left(CancelTrialFailure.NotTrialing) =>
               BadRequest(Json.obj("error" -> Json.fromString("not in trial")))

@@ -62,7 +62,7 @@ final class AuthCheckImpl[F[_]: Async](
             for
               doc <- billingWorkflow.createBilling(user, details, trialWindow)
               enriched = doc.copy(trialEndsAt = trialWindow.endsAt)
-              _   <- EitherT.liftF(billingCol.insertOne(enriched).void)
+              _ <- EitherT.liftF(billingCol.insertOne(enriched).void)
             yield ()
           case None => EitherT.leftT[F, Unit](SignupError.BillingRequired)
 
@@ -86,51 +86,53 @@ final class AuthCheckImpl[F[_]: Async](
     loop(0)
 
   override def signup(req: SignupRequest): F[Either[SignupError, SignupOK]] =
-    Ref.of[F, Option[String]](None).flatMap: userIdRef =>
-      val program = (for
-        _ <- EitherT.fromEither[F](validatePw(req.password))
+    Ref
+      .of[F, Option[String]](None)
+      .flatMap: userIdRef =>
+        val program = for
+          _ <- EitherT.fromEither[F](validatePw(req.password))
 
-        email_norm = req.email.trim.toLowerCase
+          email_norm = req.email.trim.toLowerCase
 
-        _ <- EitherT:
-          usersCol
-            .count(feq("email_norm", email_norm))
-            .map:
-              case 0 => Right(())
-              case _ => Left(SignupError.EmailExists)
-        uid       <- EitherT.liftF(genUserId(req.email))
-        hash      <- EitherT.liftF(hasher.hash(req.password))
-        token     <- EitherT.liftF(Sync[F].delay(UUID.randomUUID().toString))
-        tokenHash <- EitherT.liftF(Sync[F].delay(DeterministicHash.sha256(token)))
-        expiresAt <- EitherT.liftF(Sync[F].delay(Instant.now.plus(1, ChronoUnit.DAYS)))
-        trialWindow <- EitherT.liftF(Sync[F].delay(trialConfig.windowFor(req.plan, Instant.now())))
-        user = UserDoc(
-          email = req.email,
-          email_norm = email_norm,
-          passwordHash = hash,
-          userid = uid,
-          plan = req.plan,
-          status = trialWindow.statusDuringTrial,
-          displayName = req.displayName,
-          verificationTokenHash = Some(tokenHash),
-          verificationExpires = Some(expiresAt),
-          trialEndsAt = trialWindow.endsAt
-        )
-        _ <- EitherT.liftF(usersCol.insertOne(user) *> userIdRef.set(Some(uid)))
-        _ <- EitherT.liftF(userProfileCol.insertOne(UserProfileDoc(uid)).void)
-        _ <- persistBilling(user, req.billing, trialWindow)
-        link = s"${VERIFYHOST}api/v3/auth/verify?token=$token"
-        _ <- EitherT.liftF(Sync[F].delay(L.debug(s"saved $token with $tokenHash")))
-        _ <- EitherT.liftF(emailService.sendEmail(req.email, "Verify your email", link, link).void)
-      yield SignupOK(uid))
+          _ <- EitherT:
+            usersCol
+              .count(feq("email_norm", email_norm))
+              .map:
+                case 0 => Right(())
+                case _ => Left(SignupError.EmailExists)
+          uid         <- EitherT.liftF(genUserId(req.email))
+          hash        <- EitherT.liftF(hasher.hash(req.password))
+          token       <- EitherT.liftF(Sync[F].delay(UUID.randomUUID().toString))
+          tokenHash   <- EitherT.liftF(Sync[F].delay(DeterministicHash.sha256(token)))
+          expiresAt   <- EitherT.liftF(Sync[F].delay(Instant.now.plus(1, ChronoUnit.DAYS)))
+          trialWindow <- EitherT.liftF(Sync[F].delay(trialConfig.windowFor(req.plan, Instant.now())))
+          user = UserDoc(
+            email = req.email,
+            email_norm = email_norm,
+            passwordHash = hash,
+            userid = uid,
+            plan = req.plan,
+            status = trialWindow.statusDuringTrial,
+            displayName = req.displayName,
+            verificationTokenHash = Some(tokenHash),
+            verificationExpires = Some(expiresAt),
+            trialEndsAt = trialWindow.endsAt
+          )
+          _ <- EitherT.liftF(usersCol.insertOne(user) *> userIdRef.set(Some(uid)))
+          _ <- EitherT.liftF(userProfileCol.insertOne(UserProfileDoc(uid)).void)
+          _ <- persistBilling(user, req.billing, trialWindow)
+          link = s"${VERIFYHOST}api/v3/auth/verify?token=$token"
+          _ <- EitherT.liftF(Sync[F].delay(L.debug(s"saved $token with $tokenHash")))
+          _ <- EitherT.liftF(emailService.sendEmail(req.email, "Verify your email", link, link).void)
+        yield SignupOK(uid)
 
-      program.value.attempt.flatMap:
-        case Left(e) =>
-          cleanupSignup(userIdRef) *> handleSignupException(e)
-        case Right(Left(err)) =>
-          cleanupSignup(userIdRef) *> (Left(err): Either[SignupError, SignupOK]).pure[F]
-        case Right(Right(ok)) =>
-          Right(ok).pure[F]
+        program.value.attempt.flatMap:
+          case Left(e) =>
+            cleanupSignup(userIdRef) *> handleSignupException(e)
+          case Right(Left(err)) =>
+            cleanupSignup(userIdRef) *> (Left(err): Either[SignupError, SignupOK]).pure[F]
+          case Right(Right(ok)) =>
+            Right(ok).pure[F]
 
   private def cleanupSignup(userIdRef: Ref[F, Option[String]]): F[Unit] =
     userIdRef.get.flatMap:
