@@ -14,6 +14,7 @@ import mongo4cats.collection.MongoCollection
 import org.http4s.circe.*
 import org.http4s.client.Client
 import org.http4s.{Method, Request, Uri}
+import org.mongodb.scala.model.Projections.{computed, fields, include}
 import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
 
@@ -134,7 +135,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
   override def getByName(name: String, rating: Double, params: ReqParams, sortField: SortField): Stream[F, TitleRec] =
     val projection = Some(
       fields(
-        computed(id, s"$$tconst"),
+        computed("_id", s"$$tconst"),
         include(
           "tconst",
           "nconst",
@@ -198,7 +199,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
   override def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec] =
     val projection = Some(
       fields(
-        computed(id, s"$$tconst"),
+        computed("_id", s"$$tconst"),
         include(
           "tconst",
           "nconst",
