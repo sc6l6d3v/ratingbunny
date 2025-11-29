@@ -26,8 +26,9 @@ trait ImdbQuery[F[_]]:
   def getAutosuggestName(titlePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoNameRec]
 
 class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
-    compFx: MongoCollection[F, TitleRec],
-    tbrFx: MongoCollection[F, TitleRec],
+    peopleFx: MongoCollection[F, AutoNameRec],
+    peopleTitlesFx: MongoCollection[F, TitleRec],
+    titlesFx: MongoCollection[F, TitleRec],
     imageHost: String,
     client: Option[Client[F]]
 ) extends ImdbQuery[F] with DecodeUtils with QuerySetup:
@@ -68,12 +69,34 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     * @return
     */
   override def getByTitle(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec] =
-    val queryPipeline = genTitleQueryPipeline(genTitleFilter(params, rating), isLimited = true, limit, sortField)
+    val projection = Some(
+      fields(
+        include(
+          "_id",
+          "titleType",
+          "primaryTitle",
+          "originalTitle",
+          "isAdult",
+          "startYear",
+          "endYear",
+          "runtimeMinutes",
+          "genres",
+          "rating",
+          "hasUS",
+          "hasEN",
+          "langs",
+          "langMask",
+          "usBoost"
+        )
+      )
+    )
+
+    val queryPipeline = genTitleQueryPipeline(genTitleFilter(params, rating), isLimited = true, limit, sortField, projection)
 
     for
       start  <- Stream.eval(Clock[F].monotonic)
       midRef <- Stream.eval(Ref.of[F, Long](0L))
-      resultStream <- tbrFx
+      resultStream <- titlesFx
         .aggregateWithCodec[TitleRec](queryPipeline)
         .stream
         .evalMap: result =>
@@ -109,12 +132,39 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     *   stream of object
     */
   override def getByName(name: String, rating: Double, params: ReqParams, sortField: SortField): Stream[F, TitleRec] =
-    val queryPipeline = genQueryPipeline(genNameFilter(name, rating, params), sortField = sortField)
+    val projection = Some(
+      fields(
+        computed(id, s"$$tconst"),
+        include(
+          "tconst",
+          "nconst",
+          "titleType",
+          "primaryTitle",
+          "originalTitle",
+          "isAdult",
+          "startYear",
+          "endYear",
+          "runtimeMinutes",
+          "genres",
+          "rating",
+          "hasUS",
+          "hasEN",
+          "langs",
+          "langMask",
+          "usBoost",
+          "characters",
+          "origCat",
+          "role"
+        )
+      )
+    )
+
+    val queryPipeline = genQueryPipeline(genNameFilter(name, rating, params), sortField = sortField, projection = projection)
 
     Stream
       .eval(Clock[F].monotonic)
       .flatMap: start =>
-        compFx
+        peopleTitlesFx
           .aggregateWithCodec[TitleRec](queryPipeline)
           .stream
           .onFinalize: // Ensure that logging operation happens once after all stream processing is complete
@@ -146,12 +196,40 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     *   stream object
     */
   override def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec] =
-    val queryPipeline = genQueryPipeline(genNameFilter(name, rating, params), isLimited = true, limit, sortField = sortField)
+    val projection = Some(
+      fields(
+        computed(id, s"$$tconst"),
+        include(
+          "tconst",
+          "nconst",
+          "titleType",
+          "primaryTitle",
+          "originalTitle",
+          "isAdult",
+          "startYear",
+          "endYear",
+          "runtimeMinutes",
+          "genres",
+          "rating",
+          "hasUS",
+          "hasEN",
+          "langs",
+          "langMask",
+          "usBoost",
+          "characters",
+          "origCat",
+          "role"
+        )
+      )
+    )
+
+    val queryPipeline = genQueryPipeline(genNameFilter(name, rating, params), isLimited = true, limit, sortField = sortField, proje
+ction = projection)
 
     Stream
       .eval(Clock[F].monotonic)
       .flatMap: start =>
-        compFx
+        peopleTitlesFx
           .aggregateWithCodec[TitleRec](queryPipeline)
           .stream
           .evalTap: result =>
@@ -175,12 +253,12 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     *   stream of object
     */
   override def getAutosuggestName(namePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoNameRec] =
-    val queryPipeline = genAutonameFilter(namePrefix, rating, params)
+    val queryPipeline = genAutonameFilter(namePrefix)
 
     Stream
       .eval(Clock[F].monotonic)
       .flatMap: start =>
-        compFx
+        peopleFx
           .aggregateWithCodec[AutoNameRec](queryPipeline)
           .stream
           .onFinalize: // Ensure that logging operation happens once after all stream processing is complete
@@ -205,7 +283,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     Stream
       .eval(Clock[F].monotonic)
       .flatMap: start =>
-        compFx
+        titlesFx
           .aggregateWithCodec[AutoTitleRec](queryPipeline)
           .stream
           .onFinalize: // Ensure that logging operation happens once after all stream processing is complete
@@ -228,10 +306,32 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     Stream
       .eval(Clock[F].monotonic)
       .flatMap: overallStart =>
-        val queryPipeline = genTitleQueryPipeline(genTitleFilter(params, rating), isLimited = true, limit, sortField)
+        val projection = Some(
+          fields(
+            include(
+              "_id",
+              "titleType",
+              "primaryTitle",
+              "originalTitle",
+              "isAdult",
+              "startYear",
+              "endYear",
+              "runtimeMinutes",
+              "genres",
+              "rating",
+              "hasUS",
+              "hasEN",
+              "langs",
+              "langMask",
+              "usBoost"
+            )
+          )
+        )
+
+        val queryPipeline = genTitleQueryPipeline(genTitleFilter(params, rating), isLimited = true, limit, sortField, projection)
 
         // connect the streams
-        val titleRecPathStream = tbrFx.aggregateWithCodec[TitleRecPath](queryPipeline).stream
+        val titleRecPathStream = titlesFx.aggregateWithCodec[TitleRecPath](queryPipeline).stream
         val enhancedStream     = getTitlePathsStream(titleRecPathStream, chunkSize)
 
         enhancedStream.onFinalize:
