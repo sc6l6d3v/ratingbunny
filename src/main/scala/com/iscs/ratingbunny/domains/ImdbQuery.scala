@@ -15,7 +15,6 @@ import org.http4s.circe.*
 import org.http4s.client.Client
 import org.http4s.{Method, Request, Uri}
 import org.mongodb.scala.model.Projections.{computed, fields, include}
-import scala.concurrent.duration.FiniteDuration
 import scala.language.implicitConversions
 
 trait ImdbQuery[F[_]]:
