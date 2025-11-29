@@ -32,6 +32,7 @@ trait QuerySetup:
   private val STREAMLIMIT      = 96
   private val AUTOSUGGESTLIMIT = 20
   private val AUTONAME_LIMIT   = 10
+  protected val autoSuggestLimit: Int = AUTOSUGGESTLIMIT
   private val EXACT            = "exact"
   private val GTE              = "$gte"
   private val LTE              = "$lte"
@@ -40,6 +41,8 @@ trait QuerySetup:
   private val OR               = "$or"
   private val REGX             = "$regex"
   private val BITSANY          = "$bitsAnySet"
+  private val autoTitleHint    = "auto_movie_genre_prefix_langMask"
+  private val topLangs         = List("en", "ja", "de", "fr")
   val L: Logger                = Logger[this.type]
 
   extension (b: Boolean) def toInt: Int = if b then 1 else 0
@@ -58,6 +61,11 @@ trait QuerySetup:
 
   private def prefixRange(fieldName: String, prefix: String): Document =
     Document(fieldName := Document(GTE := prefix.toLowerCase).add(LT := s"${prefix.toLowerCase}\uffff"))
+
+  private def optionalLangBit(lang: Option[String]): Option[Long] =
+    lang.flatMap: code =>
+      val idx = topLangs.indexOf(code.toLowerCase)
+      Option.when(idx >= 0)(1L << idx)
 
   private def mergeDocs(docs: List[Document]): Document = docs.foldLeft(Document())(_ merge _)
 
@@ -102,10 +110,16 @@ trait QuerySetup:
       params.query.flatMap(title => getOptFilters(params.query, params.searchType))
     ).flatten
 
-  def genAutonameFilter(namePrefix: String): Seq[Bson] =
-    val matchBson = prefixRange(nameLC, namePrefix)
-    val sortElt   = Sorts.ascending(nameLC)
-    val proj      = fields(include(id, primaryName, "birthYear", "deathYear", "primaryProfession"))
+  def genAutonameFilter(namePrefix: String, lowYear: Int, highYear: Int): Seq[Bson] =
+    val matchBson = mergeDocs(
+      List(
+        prefixRange(nameLC, namePrefix),
+        Document(OR := List(Document("birthYear" := Document(LTE := highYear)), Document("birthYear" := null))),
+        Document(OR := List(Document("deathYear" := Document(GTE := lowYear)), Document("deathYear" := null)))
+      )
+    )
+    val sortElt = Sorts.ascending(nameLC)
+    val proj    = fields(include(id, primaryName, "birthYear", "deathYear", "primaryProfession"))
 
     Seq(
       Aggregates.`match`(matchBson),
@@ -114,25 +128,26 @@ trait QuerySetup:
       Aggregates.limit(AUTONAME_LIMIT)
     )
 
-  def genAutotitleFilter(titlePrefix: String, rating: Double, params: ReqParams): Seq[Bson] =
-    val fuzzyParams = params.copy(query = None) // force to not parse primaryTitle
-    val titleElt    = prefixRange(primaryTitleLC, titlePrefix)
+  final case class AutotitleSpec(matchBson: Document, projectBson: Bson, sortBson: Bson, hint: String)
 
-    val matchBson: Document = mergeDocs(List(combineVotesWithRating(fuzzyParams, rating), titleElt) ::: getParamList(fuzzyParams))
+  def genAutotitleFilter(titlePrefix: String, lang: Option[String], rating: Double, votes: Int, params: ReqParams): AutotitleSpec =
+    val fuzzyParams   = params.copy(query = None) // force to not parse primaryTitle
+    val titleElt      = prefixRange(primaryTitleLC, titlePrefix)
+    val ratingFilter  = gte(averageRating, rating)
+    val votesFilter   = gte(numVotes, votes.toDouble)
+    val langMaskMatch = optionalLangBit(lang).map(bit => Document(langMask := Document(BITSANY := bit)))
+
+    val matchBson: Document = mergeDocs(
+      List(titleElt, ratingFilter, votesFilter) ::: langMaskMatch.toList ::: getParamList(fuzzyParams)
+    )
 
     val sortBson = Sorts.ascending(primaryTitle)
 
     val projectBson = fields(
-      include(primaryTitle, startYear, "rating"),
-      computed(id, s"$$$id")
+      include(id, primaryTitle, startYear, "rating")
     )
 
-    Seq(
-      Aggregates.`match`(matchBson),
-      Aggregates.project(projectBson),
-      Aggregates.sort(sortBson),
-      Aggregates.limit(AUTOSUGGESTLIMIT)
-    )
+    AutotitleSpec(matchBson, projectBson, sortBson, autoTitleHint)
 
   def genNameFilter(nm: String, rating: Double, params: ReqParams, langBit: Option[Long] = None): Document =
     val langMaskFilter = langBit.map(bit => Document(langMask := Document(BITSANY := bit)))

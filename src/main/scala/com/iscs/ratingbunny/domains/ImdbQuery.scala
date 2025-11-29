@@ -22,8 +22,8 @@ trait ImdbQuery[F[_]]:
   def getByTitlePath(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRecPath]
   def getByName(name: String, rating: Double, params: ReqParams, sortField: SortField): Stream[F, TitleRec]
   def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec]
-  def getAutosuggestTitle(titlePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoTitleRec]
-  def getAutosuggestName(titlePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoNameRec]
+  def getAutosuggestTitle(titlePrefix: String, lang: Option[String], rating: Double, votes: Int, params: ReqParams): Stream[F, AutoTitleRec]
+  def getAutosuggestName(namePrefix: String, lowYear: Int, highYear: Int): Stream[F, AutoNameRec]
 
 class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     peopleFx: MongoCollection[F, AutoNameRec],
@@ -252,8 +252,8 @@ ction = projection)
     * @return
     *   stream of object
     */
-  override def getAutosuggestName(namePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoNameRec] =
-    val queryPipeline = genAutonameFilter(namePrefix)
+  override def getAutosuggestName(namePrefix: String, lowYear: Int, highYear: Int): Stream[F, AutoNameRec] =
+    val queryPipeline = genAutonameFilter(namePrefix, lowYear, highYear)
 
     Stream
       .eval(Clock[F].monotonic)
@@ -261,7 +261,7 @@ ction = projection)
         peopleFx
           .aggregateWithCodec[AutoNameRec](queryPipeline)
           .stream
-          .onFinalize: // Ensure that logging operation happens once after all stream processing is complete
+          .onFinalize:
             for
               end <- Clock[F].monotonic
               _   <- Sync[F].delay(L.info(s"getAutosuggestName took {} ms", (end - start).toMillis))
@@ -277,16 +277,21 @@ ction = projection)
     * @return
     *   stream of object
     */
-  override def getAutosuggestTitle(titlePrefix: String, rating: Double, params: ReqParams): Stream[F, AutoTitleRec] =
-    val queryPipeline = genAutotitleFilter(titlePrefix, rating, params)
+  override def getAutosuggestTitle(titlePrefix: String, lang: Option[String], rating: Double, votes: Int, params: ReqParams): Stream[F, AutoTitleRec] =
+    val AutotitleSpec(matchBson, projectBson, sortBson, hint) =
+      genAutotitleFilter(titlePrefix, lang, rating, votes, params)
 
     Stream
       .eval(Clock[F].monotonic)
       .flatMap: start =>
         titlesFx
-          .aggregateWithCodec[AutoTitleRec](queryPipeline)
+          .find[AutoTitleRec](matchBson)
+          .projection(projectBson)
+          .sort(sortBson)
+          .hint(hint)
+          .limit(autoSuggestLimit)
           .stream
-          .onFinalize: // Ensure that logging operation happens once after all stream processing is complete
+          .onFinalize:
             for
               end <- Clock[F].monotonic
               _   <- Sync[F].delay(L.info(s"getAutosuggestTitle took {} ms", (end - start).toMillis))
