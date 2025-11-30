@@ -291,7 +291,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
       .eval(Clock[F].monotonic)
       .flatMap: start =>
         autoTitlesFx
-          .find[AutoTitleRec](matchBson)
+          .find(matchBson)
           .projection(projectBson)
           .sort(sortBson)
           .hint(hint)
