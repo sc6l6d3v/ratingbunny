@@ -29,6 +29,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     peopleFx: MongoCollection[F, AutoNameRec],
     peopleTitlesFx: MongoCollection[F, TitleRec],
     titlesFx: MongoCollection[F, TitleRec],
+    autoTitlesFx: MongoCollection[F, AutoTitleRec],
     imageHost: String,
     client: Option[Client[F]]
 ) extends ImdbQuery[F] with DecodeUtils with QuerySetup:
@@ -289,7 +290,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     Stream
       .eval(Clock[F].monotonic)
       .flatMap: start =>
-        titlesFx
+        autoTitlesFx
           .find[AutoTitleRec](matchBson)
           .projection(projectBson)
           .sort(sortBson)

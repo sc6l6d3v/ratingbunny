@@ -2,9 +2,10 @@ package com.iscs.ratingbunny.domains
 
 import com.iscs.ratingbunny.model.Requests.ReqParams
 import com.typesafe.scalalogging.Logger
-import mongo4cats.bson.{BsonValueEncoder, Document}
+import mongo4cats.bson.{BsonValue, BsonValueEncoder, Document}
 import mongo4cats.bson.BsonValueEncoder.*
 import mongo4cats.bson.syntax.*
+import org.bson.BsonNull
 import org.bson.conversions.Bson
 import org.mongodb.scala.model.Projections.{computed, exclude, fields, include}
 import org.mongodb.scala.model.{Aggregates, Projections, Sorts}
@@ -50,6 +51,7 @@ trait QuerySetup:
   given BsonValueEncoder[Int]    = BsonValueEncoder.intEncoder
   given BsonValueEncoder[Double] = BsonValueEncoder.doubleEncoder
   given BsonValueEncoder[Long]   = BsonValueEncoder.longEncoder
+  given BsonValueEncoder[BsonNull] = _ => BsonValue.Null
 
   private def gte[A](fieldName: String, a: A)(using encoder: BsonValueEncoder[A]) = Document(fieldName := Document(GTE := a))
   def feq[A](fieldName: String, a: A)(using encoder: BsonValueEncoder[A])         = Document(fieldName := a)
@@ -114,8 +116,8 @@ trait QuerySetup:
     val matchBson = mergeDocs(
       List(
         prefixRange(nameLC, namePrefix),
-        Document(OR := List(Document("birthYear" := Document(LTE := highYear)), Document("birthYear" := null))),
-        Document(OR := List(Document("deathYear" := Document(GTE := lowYear)), Document("deathYear" := null)))
+        Document(OR := List(Document("birthYear" := Document(LTE := highYear)), Document("birthYear" := BsonNull.VALUE))),
+        Document(OR := List(Document("deathYear" := Document(GTE := lowYear)), Document("deathYear" := BsonNull.VALUE)))
       )
     )
     val sortElt = Sorts.ascending(nameLC)

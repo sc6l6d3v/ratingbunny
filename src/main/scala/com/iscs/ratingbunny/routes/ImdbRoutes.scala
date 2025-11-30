@@ -17,6 +17,7 @@ import org.http4s.*
 import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder}
 import org.http4s.circe.*
 import org.http4s.dsl.*
+import org.http4s.dsl.impl.{OptionalMultiQueryParamDecoderMatcher, OptionalQueryParamDecoderMatcher, QueryParamDecoderMatcher}
 import org.http4s.headers.`Content-Type`
 import org.http4s.server.AuthMiddleware
 import com.iscs.ratingbunny.security.JwtAuth
@@ -164,8 +165,8 @@ object ImdbRoutes extends DecodeUtils:
             +& IsAdultParamMatcher(isAdult) =>
           val params = ReqParams(
             query = Some(title),
-            genre = genres.filter(_.nonEmpty),
-            titleType = titleTypes.filter(_.nonEmpty),
+            genre = genres.toOption.filter(_.nonEmpty),
+            titleType = titleTypes.toOption.filter(_.nonEmpty),
             isAdult = isAdult.map(_ != 0)
           )
 
