@@ -223,8 +223,13 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
       )
     )
 
-    val queryPipeline = genQueryPipeline(genNameFilter(name, rating, params), isLimited = true, limit, sortField = sortField, proje
-ction = projection)
+      val queryPipeline = genQueryPipeline(
+        genNameFilter(name, rating, params),
+        isLimited = true,
+        limit,
+        sortField = sortField,
+        projection = projection
+      )
 
     Stream
       .eval(Clock[F].monotonic)
