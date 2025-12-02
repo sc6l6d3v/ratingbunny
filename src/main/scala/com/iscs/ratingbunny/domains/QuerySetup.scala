@@ -12,6 +12,9 @@ import org.mongodb.scala.model.{Aggregates, Projections, Sorts}
 import scala.language.implicitConversions
 
 trait QuerySetup:
+  enum SearchDomain:
+    case Title, Name
+
   private val id               = "_id"
   private val averageRating    = "rating.average"
   private val numVotes         = "rating.votes"
@@ -97,19 +100,22 @@ trait QuerySetup:
 
   private def limitBson(limit: Int): Bson = Aggregates.limit(limit)
 
-  private def getOptFilters(optTitle: Option[String], searchType: Option[String]): Option[Document] =
-    optTitle.map: title =>
-      searchType match
-        case Some(EXACT) => Document(primaryTitle := title)
-        case _           => prefixRange(primaryTitleLC, title)
+  private def getOptFilters(optTitle: Option[String], searchType: Option[String], domain: SearchDomain): Option[Document] =
+    domain match
+      case SearchDomain.Title =>
+        optTitle.map: title =>
+          searchType match
+            case Some(EXACT) => Document(primaryTitle := title)
+            case _           => prefixRange(primaryTitleLC, title)
+      case SearchDomain.Name => None
 
-  private def getParamList(params: ReqParams): List[Document] =
+  private def getParamList(params: ReqParams, domain: SearchDomain = SearchDomain.Title): List[Document] =
     List(
       params.isAdult.map(isAdlt => Document(isAdult := isAdlt.toInt)),
       params.year.map(yr => between(startYear, yr.head, yr.last)),
       params.genre.map(genre => Document(genres := Document(IN := genre))),
       params.titleType.map(tt => Document(titleType := Document(IN := tt))),
-      params.query.flatMap(title => getOptFilters(params.query, params.searchType))
+      params.query.flatMap(title => getOptFilters(params.query, params.searchType, domain))
     ).flatten
 
   def genAutonameFilter(namePrefix: String, lowYear: Int, highYear: Int): Seq[Bson] =
@@ -154,7 +160,7 @@ trait QuerySetup:
   def genNameFilter(nm: String, rating: Double, params: ReqParams, langBit: Option[Long] = None): Document =
     val langMaskFilter = langBit.map(bit => Document(langMask := Document(BITSANY := bit)))
     val filters = List(Some(feq(nconst, nm)), langMaskFilter, Some(combineVotesWithRating(params, rating))) :::
-      getParamList(params).map(Some(_))
+      getParamList(params, SearchDomain.Name).map(Some(_))
     mergeDocs(filters.flatten)
 
   def genTitleFilter(params: ReqParams, rating: Double, langBit: Option[Long] = None): Document =
