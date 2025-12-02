@@ -39,7 +39,7 @@ package object domains:
     val titleType: Option[String]
     val primaryTitle: Option[String]
     val originalTitle: Option[String]
-    val isAdult: Option[Double]
+    val isAdult: Option[Int]
     val startYear: Option[Double]
     val endYear: Option[Double]
     val runtimeMinutes: Option[Double]
@@ -61,7 +61,7 @@ package object domains:
       titleType: Option[String] = None,
       primaryTitle: Option[String] = None,
       originalTitle: Option[String] = None,
-      isAdult: Option[Double] = None,
+      isAdult: Option[Int] = None,
       startYear: Option[Double] = None,
       endYear: Option[Double] = None,
       runtimeMinutes: Option[Double] = None,
@@ -84,7 +84,7 @@ package object domains:
       titleType: Option[String] = None,
       primaryTitle: Option[String] = None,
       originalTitle: Option[String] = None,
-      isAdult: Option[Double] = None,
+      isAdult: Option[Int] = None,
       startYear: Option[Double] = None,
       endYear: Option[Double] = None,
       runtimeMinutes: Option[Double] = None,
