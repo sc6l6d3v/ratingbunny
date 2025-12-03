@@ -169,7 +169,7 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
         imdbQuery    = new ImdbQueryImpl[IO](compFx, tbrFx, "localhost", mockHttpClient)
         params       = ReqParams( /* parameters setup here */ )
         titlePrefix  = "Gone with the"
-        resultStream = imdbQuery.getAutosuggestTitle(titlePrefix, 7.0, params)
+        resultStream = imdbQuery.getAutosuggestTitle(titlePrefix, None, 7.0, 0, params)
         results <- resultStream.compile.toList
       yield
         assert(results.nonEmpty)
@@ -193,7 +193,7 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
         imdbQuery    = new ImdbQueryImpl[IO](compFx, tbrFx, "localhost", mockHttpClient)
         params       = ReqParams( /* parameters setup here */ )
         namePrefix   = "John Cra"
-        resultStream = imdbQuery.getAutosuggestName(namePrefix, 5.0, params)
+        resultStream = imdbQuery.getAutosuggestName(namePrefix, Int.MinValue, Int.MaxValue)
         results <- resultStream.compile.toList
       yield
         assert(results.nonEmpty)

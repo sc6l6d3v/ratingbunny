@@ -6,7 +6,7 @@ import cats.implicits.*
 import com.comcast.ip4s.*
 import com.iscs.mail.{EmailService, EmailServiceConfig}
 import com.iscs.ratingbunny.config.TrialConfig
-import com.iscs.ratingbunny.domains.{AuthCheck, AuthCheckImpl, AuthLogin, AuthLoginImpl, BillingInfo, BillingWorkflow, ConnectionPool, ConnectionPoolImpl, CountryAwareBillingWorkflow, EmailContact, EmailContactImpl, FetchImage, ImdbQuery, ImdbQueryImpl, TitleRec, TokenIssuer, TokenIssuerImpl, TrialService, TrialServiceImpl, UserDoc, UserProfileDoc, UserRepo, UserRepoImpl}
+import com.iscs.ratingbunny.domains.{AuthCheck, AuthCheckImpl, AuthLogin, AuthLoginImpl, AutoNameRec, AutoTitleRec, BillingInfo, BillingWorkflow, ConnectionPool, ConnectionPoolImpl, CountryAwareBillingWorkflow, EmailContact, EmailContactImpl, FetchImage, ImdbQuery, ImdbQueryImpl, TitleRec, TokenIssuer, TokenIssuerImpl, TrialService, TrialServiceImpl, UserDoc, UserProfileDoc, UserRepo, UserRepoImpl}
 import com.iscs.ratingbunny.repos.HistoryRepo
 import com.iscs.ratingbunny.routes.{AuthRoutes, EmailContactRoutes, FetchImageRoutes, ImdbRoutes, PoolSvcRoutes}
 import com.iscs.ratingbunny.security.JwtAuth
@@ -40,9 +40,10 @@ object Server:
     debug = sys.env.getOrElse("DEBUG", "false").toBoolean
   )
 
-  private val compositeCollection   = "title_principals_namerating"
+  private val peopleCollection      = "people"
+  private val peopleTitlesCollection = "people_titles"
   private val emailCollection       = "email_contact"
-  private val tbrCollection         = "title_basics_ratings"
+  private val tbrCollection         = "titles"
   private val usersCollection       = "users"
   private val userProfileCollection = "user_profile"
   private val billingCollection     = "billing_info"
@@ -97,9 +98,11 @@ object Server:
 
   private def getImdbSvc[F[_]: Async: Parallel](db: MongoDatabase[F], client: Client[F]): F[ImdbQuery[F]] =
     for
-      compCollCodec <- db.getCollectionWithCodec[TitleRec](compositeCollection)
-      tbrCollCodec  <- db.getCollectionWithCodec[TitleRec](tbrCollection)
-    yield new ImdbQueryImpl[F](compCollCodec, tbrCollCodec, imageHost, Some(client))
+      peopleCollCodec       <- db.getCollectionWithCodec[AutoNameRec](peopleCollection)
+      peopleTitlesCollCodec <- db.getCollectionWithCodec[TitleRec](peopleTitlesCollection)
+      titlesCollCodec       <- db.getCollectionWithCodec[TitleRec](tbrCollection)
+      autoTitlesCollCodec   <- db.getCollectionWithCodec[AutoTitleRec](tbrCollection)
+    yield new ImdbQueryImpl[F](peopleCollCodec, peopleTitlesCollCodec, titlesCollCodec, autoTitlesCollCodec, imageHost, Some(client))
 
   private def getPoolStatsSvc[F[_]: Async: Parallel](db: MongoDatabase[F]): F[ConnectionPool[F]] =
     Sync[F].delay(new ConnectionPoolImpl[F](db))

@@ -15,50 +15,90 @@ package object domains:
 
   trait AutoRecBase
 
-  final case class AutoNameRec(firstName: String, lastName: Option[String]) extends AutoRecBase
+  final case class AutoNameRec(
+      _id: String,
+      primaryName: String,
+      birthYear: Option[Int] = None,
+      deathYear: Option[Int] = None,
+      primaryProfession: Option[List[String]] = None
+  ) extends AutoRecBase
 
-  final case class AutoTitleRec(primaryTitle: Option[String]) extends AutoRecBase
+  final case class AutoTitleRec(
+      _id: String,
+      primaryTitle: String,
+      startYear: Option[Int] = None,
+      rating: Option[TitleRating] = None
+  ) extends AutoRecBase
+
+  final case class TitleRating(average: Option[Double] = None, votes: Option[Double] = None)
 
   trait TitleRecBase:
     val _id: String
-    val averageRating: Option[Double]
-    val numVotes: Option[Int]
-    val titleType: String
-    val primaryTitle: String
-    val originalTitle: String
-    val isAdult: Int
-    val startYear: Int
-    val endYear: Int
-    val runtimeMinutes: Option[Int]
-    val genresList: Option[List[String]]
+    val tconst: Option[String]
+    val nconst: Option[String]
+    val titleType: Option[String]
+    val primaryTitle: Option[String]
+    val originalTitle: Option[String]
+    val isAdult: Option[Int]
+    val startYear: Option[Double]
+    val endYear: Option[Double]
+    val runtimeMinutes: Option[Double]
+    val genres: Option[List[String]]
+    val rating: Option[TitleRating]
+    val hasUS: Option[Boolean]
+    val hasEN: Option[Boolean]
+    val langs: Option[List[String]]
+    val langMask: Option[Long]
+    val usBoost: Option[Double]
+    val characters: Option[List[String]]
+    val origCat: Option[String]
+    val role: Option[String]
 
   final case class TitleRec(
       _id: String,
-      averageRating: Option[Double],
-      numVotes: Option[Int],
-      titleType: String,
-      primaryTitle: String,
-      originalTitle: String,
-      isAdult: Int,
-      startYear: Int,
-      endYear: Int,
-      runtimeMinutes: Option[Int],
-      genresList: Option[List[String]]
+      tconst: Option[String] = None,
+      nconst: Option[String] = None,
+      titleType: Option[String] = None,
+      primaryTitle: Option[String] = None,
+      originalTitle: Option[String] = None,
+      isAdult: Option[Int] = None,
+      startYear: Option[Double] = None,
+      endYear: Option[Double] = None,
+      runtimeMinutes: Option[Double] = None,
+      genres: Option[List[String]] = None,
+      rating: Option[TitleRating] = None,
+      hasUS: Option[Boolean] = None,
+      hasEN: Option[Boolean] = None,
+      langs: Option[List[String]] = None,
+      langMask: Option[Long] = None,
+      usBoost: Option[Double] = None,
+      characters: Option[List[String]] = None,
+      origCat: Option[String] = None,
+      role: Option[String] = None
   ) extends TitleRecBase
 
   final case class TitleRecPath(
       _id: String,
-      averageRating: Option[Double],
-      numVotes: Option[Int],
-      titleType: String,
-      primaryTitle: String,
-      originalTitle: String,
-      isAdult: Int,
-      startYear: Int,
-      endYear: Int,
-      runtimeMinutes: Option[Int],
-      genresList: Option[List[String]],
-      posterPath: Option[String]
+      tconst: Option[String] = None,
+      nconst: Option[String] = None,
+      titleType: Option[String] = None,
+      primaryTitle: Option[String] = None,
+      originalTitle: Option[String] = None,
+      isAdult: Option[Int] = None,
+      startYear: Option[Double] = None,
+      endYear: Option[Double] = None,
+      runtimeMinutes: Option[Double] = None,
+      genres: Option[List[String]] = None,
+      rating: Option[TitleRating] = None,
+      hasUS: Option[Boolean] = None,
+      hasEN: Option[Boolean] = None,
+      langs: Option[List[String]] = None,
+      langMask: Option[Long] = None,
+      usBoost: Option[Double] = None,
+      characters: Option[List[String]] = None,
+      origCat: Option[String] = None,
+      role: Option[String] = None,
+      posterPath: Option[String] = None
   ) extends TitleRecBase
 
   final case class UserHistory(
