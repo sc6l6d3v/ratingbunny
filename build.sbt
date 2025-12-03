@@ -7,6 +7,11 @@ ThisBuild / name             := "ratingbunny"
 ThisBuild / organizationName := "com.iscs"
 ThisBuild / javacOptions ++= Seq("--release", "21") // For Java 21
 
+reStart / javaOptions ++= Seq(
+  "-Djavax.net.ssl.trustStore=client-truststore.jks",
+  "-Djavax.net.ssl.trustStorePassword=changeit"
+)
+
 lazy val root = (project in file("."))
   .settings(
     name := "ratingbunny",

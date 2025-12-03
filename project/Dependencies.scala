@@ -4,7 +4,7 @@ object Dependencies {
   object V {
     val bcryptVersion     = "4.3.0"
     val circeVersion      = "0.14.15"
-    val emailSvc          = "1.0"
+    val emailSvc          = "1.1"
     val fs2Version        = "3.12.2"
     val helcim4sVersion   = "1.0"
     val Http4sVersion     = "0.23.32"
