@@ -53,6 +53,12 @@ GET http://localhost:8080/reldate/YYYY/MM/rating
 
 where rating is a double ranging from 1 to 10.
 
+### Autosuggest and search examples
+
+Postman-ready cURL samples for autosuggest (`/api/v3/autoname`, `/api/v3/autotitle`) are in
+[`docs/autosuggest-endpoints.md`](docs/autosuggest-endpoints.md). Full-response name/title search
+examples live in [`docs/search-endpoints.md`](docs/search-endpoints.md).
+
 ## Billing integrations
 
 Paid signups trigger an automated Helcim provisioning flow powered by
