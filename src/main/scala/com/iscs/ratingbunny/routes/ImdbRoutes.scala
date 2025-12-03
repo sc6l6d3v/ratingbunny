@@ -17,6 +17,7 @@ import org.http4s.*
 import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder}
 import org.http4s.circe.*
 import org.http4s.dsl.*
+import org.http4s.dsl.impl.{OptionalMultiQueryParamDecoderMatcher, OptionalQueryParamDecoderMatcher, QueryParamDecoderMatcher}
 import org.http4s.headers.`Content-Type`
 import org.http4s.server.AuthMiddleware
 import com.iscs.ratingbunny.security.JwtAuth
@@ -31,6 +32,16 @@ object ImdbRoutes extends DecodeUtils:
   private val rowSpacer    = 64
   private val columnSpacer = 64
   private val apiVersion   = "v3"
+
+  private object QParamMatcher          extends QueryParamDecoderMatcher[String]("q")
+  private object LangParamMatcher       extends OptionalQueryParamDecoderMatcher[String]("lang")
+  private object RatingParamMatcher     extends OptionalQueryParamDecoderMatcher[Double]("rating")
+  private object VotesParamMatcher      extends OptionalQueryParamDecoderMatcher[Int]("votes")
+  private object GenreParamMatcher      extends OptionalMultiQueryParamDecoderMatcher[String]("genre")
+  private object TitleTypeParamMatcher  extends OptionalMultiQueryParamDecoderMatcher[String]("titletype")
+  private object IsAdultParamMatcher    extends OptionalQueryParamDecoderMatcher[Int]("isadult")
+  private object LowYearParamMatcher    extends OptionalQueryParamDecoderMatcher[Int]("lowyear")
+  private object HighYearParamMatcher   extends OptionalQueryParamDecoderMatcher[Int]("highyear")
 
   // ---------- helpers (unchanged) ------------------------------------------------
   private def rowsPerPage(height: Int, spacer: Int, cardHeight: Int): Int =
@@ -126,13 +137,46 @@ object ImdbRoutes extends DecodeUtils:
             +& OffsetQUeryParameterMatcher(off) =>
           commonTitle(req, page, rating, ws, wh, cs, ch, off, I.getByTitlePath, "pathtitle")
 
-        case req @ POST -> Root / "autotitle" / title / rating =>
+        case req @ GET -> Root / "autoname"
+            :? QParamMatcher(q)
+            +& LowYearParamMatcher(lowYear)
+            +& HighYearParamMatcher(highYear) =>
+          val low  = lowYear.getOrElse(Int.MinValue)
+          val high = highYear.getOrElse(Int.MaxValue)
+          val params = ReqParams(
+            query = Some(q),
+            year = Some(List(low, high))
+          )
+
           for
-            p       <- req.as[ReqParams]
-            rtg     <- getRating(rating)
             userOpt <- JwtAuth.userFromRequest(req, jwtSecret)
-            lst     <- I.getAutosuggestTitle(title, rtg, p).compile.toList
-            _       <- hx.log(userOpt.getOrElse("guest"), p).start
+            lst     <- I.getAutosuggestName(q, low, high).compile.toList
+            _       <- hx.log(userOpt.getOrElse("guest"), params).start
+            res     <- Ok(lst)
+          yield res
+
+        case req @ GET -> Root / "autotitle"
+            :? QParamMatcher(title)
+            +& LangParamMatcher(lang)
+            +& RatingParamMatcher(rtg)
+            +& VotesParamMatcher(vts)
+            +& GenreParamMatcher(genres)
+            +& TitleTypeParamMatcher(titleTypes)
+            +& IsAdultParamMatcher(isAdult) =>
+          val params = ReqParams(
+            query = Some(title),
+            genre = genres.toOption.filter(_.nonEmpty),
+            titleType = titleTypes.toOption.filter(_.nonEmpty),
+            isAdult = isAdult.map(_ != 0)
+          )
+
+          val minRating = rtg.getOrElse(0.0)
+          val minVotes  = vts.getOrElse(0)
+
+          for
+            userOpt <- JwtAuth.userFromRequest(req, jwtSecret)
+            lst     <- I.getAutosuggestTitle(title, lang, minRating, minVotes, params).compile.toList
+            _       <- hx.log(userOpt.getOrElse("guest"), params).start
             res     <- Ok(lst)
           yield res
       .map(
@@ -199,16 +243,6 @@ object ImdbRoutes extends DecodeUtils:
             yield res
           }
 
-        case authreq @ POST -> Root / "autoname" / name / rating as user =>
-          ensureVerified(user) {
-            for
-              p   <- authreq.req.as[ReqParams]
-              rtg <- getRating(rating)
-              lst <- I.getAutosuggestName(name, rtg, p).compile.toList
-              _   <- hx.log(user, p).start
-              res <- Ok(lst)
-            yield res
-          }
       .map(
         _.withContentType(`Content-Type`(org.http4s.MediaType.application.json))
       )
