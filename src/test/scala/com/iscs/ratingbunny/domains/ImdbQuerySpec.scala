@@ -247,12 +247,11 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
         else
           collection
             .createIndex(
-              Index.compound(
-                Index.ascending("titleType"),
-                Index.ascending("genres"),
-                Index.ascending("primaryTitleLC"),
-                Index.ascending("langMask")
-              ),
+              Index
+                .ascending("titleType")
+                .ascending("genres")
+                .ascending("primaryTitleLC")
+                .ascending("langMask"),
               IndexOptions(
                 name = autoTitleIndexName,
                 background = true,
