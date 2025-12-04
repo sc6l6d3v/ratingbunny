@@ -26,6 +26,7 @@ package object domains:
   final case class AutoTitleRec(
       _id: String,
       primaryTitle: String,
+      startYear: Option[Double] = None,
       rating: Option[TitleRating] = None
   ) extends AutoRecBase
 

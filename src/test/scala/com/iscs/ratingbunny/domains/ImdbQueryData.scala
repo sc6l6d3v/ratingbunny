@@ -299,11 +299,13 @@ object ImdbQueryData:
     AutoTitleRec(
       _id = "tt27881481",
       primaryTitle = "Gone with the Boat",
+      startYear = Some(2023d),
       rating = Some(TitleRating(average = Some(7.5d), votes = Some(59d)))
     ),
     AutoTitleRec(
       _id = "tt1111111",
       primaryTitle = "Gone with the Wind",
+      startYear = Some(1939d),
       rating = Some(TitleRating(average = Some(8.2d), votes = Some(813000d)))
     )
   )
