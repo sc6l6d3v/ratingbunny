@@ -152,7 +152,7 @@ trait QuerySetup:
     val sortBson = Sorts.ascending(primaryTitle)
 
     val projectBson = fields(
-      include(id, primaryTitle, startYear, "rating")
+      include(id, primaryTitle, "rating")
     )
 
     AutotitleSpec(matchBson, projectBson, sortBson, autoTitleHint)

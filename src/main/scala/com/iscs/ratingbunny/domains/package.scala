@@ -27,7 +27,6 @@ package object domains:
   final case class AutoTitleRec(
       _id: String,
       primaryTitle: String,
-      startYear: Option[Int] = None,
       rating: Option[TitleRating] = None,
       primaryTitleLC: Option[String] = None,
       langMask: Option[Long] = None
