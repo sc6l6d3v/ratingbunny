@@ -282,6 +282,7 @@ object ImdbQueryData:
       "_id" := "tt27881481",
       "primaryTitle" := "Gone with the Boat",
       "primaryTitleLC" := "gone with the boat",
+      "isAdult" := 0,
       "startYear" := 2023d,
       "rating" := Document("average" := 7.5d, "votes" := 59d)
     ),
@@ -289,6 +290,7 @@ object ImdbQueryData:
       "_id" := "tt1111111",
       "primaryTitle" := "Gone with the Wind",
       "primaryTitleLC" := "gone with the wind",
+      "isAdult" := 0,
       "startYear" := 1939d,
       "rating" := Document("average" := 8.2d, "votes" := 813000d)
     )
