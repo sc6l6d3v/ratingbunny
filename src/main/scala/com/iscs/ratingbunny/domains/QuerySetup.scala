@@ -21,6 +21,8 @@ trait QuerySetup:
   private val genres           = "genres"
   private val primaryName      = "primaryName"
   private val primaryTitle     = "primaryTitle"
+  private val primaryTitleLC   = "primaryTitleLC"
+  private val nameLC           = "nameLC"
   private val isAdult          = "isAdult"
   private val startYear        = "startYear"
   private val endYear          = "endYear"
@@ -44,6 +46,7 @@ trait QuerySetup:
   private val REGX             = "$regex"
   private val BITSANY          = "$bitsAnySet"
   private val autoTitleHint    = "auto_movie_genre_prefix_langMask"
+  private val topLangs         = List("en", "ja", "de", "fr")
   val L: Logger                = Logger[this.type]
 
   extension (b: Boolean) def toInt: Int = if b then 1 else 0
@@ -64,10 +67,12 @@ trait QuerySetup:
   private def prefixRange(fieldName: String, prefix: String): Document =
     Document(fieldName := Document(GTE := prefix.toLowerCase).add(LT := s"${prefix.toLowerCase}\uffff"))
 
-  private def mergeDocs(docs: List[Document]): Document = docs.foldLeft(Document())(_ merge _)
+  private def optionalLangBit(lang: Option[String]): Option[Long] =
+    lang.flatMap: code =>
+      val idx = topLangs.indexOf(code.toLowerCase)
+      Option.when(idx >= 0)(1L << idx)
 
-  private def prefixRegex(fieldName: String, prefix: String): Document =
-    Document(fieldName := Document(REGX := s"^$prefix").add("options" := "i"))
+  private def mergeDocs(docs: List[Document]): Document = docs.foldLeft(Document())(_ merge _)
 
   /** Produce a sort Bson based on the enum choice. */
   private def buildSort(sortField: SortField): Bson = sortField match
@@ -101,7 +106,7 @@ trait QuerySetup:
         optTitle.map: title =>
           searchType match
             case Some(EXACT) => Document(primaryTitle := title)
-            case _           => prefixRegex(primaryTitle, title)
+            case _           => prefixRange(primaryTitleLC, title)
       case SearchDomain.Name => None
 
   private def getParamList(params: ReqParams, domain: SearchDomain = SearchDomain.Title): List[Document] =
@@ -116,12 +121,12 @@ trait QuerySetup:
   def genAutonameFilter(namePrefix: String, lowYear: Int, highYear: Int): Seq[Bson] =
     val matchBson = mergeDocs(
       List(
-        prefixRegex(primaryName, namePrefix),
+        prefixRange(nameLC, namePrefix),
         Document(OR := List(Document("birthYear" := Document(LTE := highYear)), Document("birthYear" := BsonNull.VALUE))),
         Document(OR := List(Document("deathYear" := Document(GTE := lowYear)), Document("deathYear" := BsonNull.VALUE)))
       )
     )
-    val sortElt = Sorts.ascending(primaryName)
+    val sortElt = Sorts.ascending(nameLC)
     val proj    = fields(include(id, primaryName, "birthYear", "deathYear", "primaryProfession"))
 
     Seq(
@@ -134,17 +139,20 @@ trait QuerySetup:
   final case class AutotitleSpec(matchBson: Document, projectBson: Bson, sortBson: Bson, hint: String)
 
   def genAutotitleFilter(titlePrefix: String, lang: Option[String], rating: Double, votes: Int, params: ReqParams): AutotitleSpec =
-    val fuzzyParams  = params.copy(query = None) // force to not parse primaryTitle
-    val titleElt     = prefixRegex(primaryTitle, titlePrefix)
-    val ratingFilter = gte(averageRating, rating)
-    val votesFilter  = gte(numVotes, votes.toDouble)
+    val fuzzyParams   = params.copy(query = None) // force to not parse primaryTitle
+    val titleElt      = prefixRange(primaryTitleLC, titlePrefix)
+    val ratingFilter  = gte(averageRating, rating)
+    val votesFilter   = gte(numVotes, votes.toDouble)
+    val langMaskMatch = optionalLangBit(lang).map(bit => Document(langMask := Document(BITSANY := bit)))
 
-    val matchBson: Document = mergeDocs(List(titleElt, ratingFilter, votesFilter) ::: getParamList(fuzzyParams))
+    val matchBson: Document = mergeDocs(
+      List(titleElt, ratingFilter, votesFilter) ::: langMaskMatch.toList ::: getParamList(fuzzyParams)
+    )
 
     val sortBson = Sorts.ascending(primaryTitle)
 
     val projectBson = fields(
-      include(id, primaryTitle, "startYear", "rating")
+      include(id, primaryTitle, startYear, "rating")
     )
 
     AutotitleSpec(matchBson, projectBson, sortBson, autoTitleHint)
