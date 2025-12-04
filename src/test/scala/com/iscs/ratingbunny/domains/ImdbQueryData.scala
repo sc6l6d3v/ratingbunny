@@ -277,18 +277,20 @@ object ImdbQueryData:
     )
   )
 
-  val autosuggestTitleRecs: List[AutoTitleRec] = List(
-    AutoTitleRec(
-      _id = "tt27881481",
-      primaryTitle = "Gone with the Boat",
-      startYear = Some(2023),
-      rating = Some(TitleRating(average = Some(7.5d), votes = Some(59d)))
+  val autosuggestTitleRecs: List[Document] = List(
+    Document(
+      "_id" := "tt27881481",
+      "primaryTitle" := "Gone with the Boat",
+      "primaryTitleLC" := "gone with the boat",
+      "startYear" := 2023d,
+      "rating" := Document("average" := 7.5d, "votes" := 59d)
     ),
-    AutoTitleRec(
-      _id = "tt1111111",
-      primaryTitle = "Gone with the Wind",
-      startYear = Some(1939),
-      rating = Some(TitleRating(average = Some(8.2d), votes = Some(813000d)))
+    Document(
+      "_id" := "tt1111111",
+      "primaryTitle" := "Gone with the Wind",
+      "primaryTitleLC" := "gone with the wind",
+      "startYear" := 1939d,
+      "rating" := Document("average" := 8.2d, "votes" := 813000d)
     )
   )
 

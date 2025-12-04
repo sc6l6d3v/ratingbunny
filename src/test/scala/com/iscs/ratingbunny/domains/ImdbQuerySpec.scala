@@ -174,8 +174,9 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
         peopleFx      <- setupAutoNameCollection(db, peopleCollection)
         peopleTitlesFx <- setupTitleCollection(db, peopleTitlesCollection)
         titlesFx      <- setupTitleCollection(db, titlesCollection)
-        autoTitlesFx  <- setupAutoTitleCollection(db, titlesCollection)
-        _ <- autoTitlesFx
+        autoTitlesDocsFx <- setupDocumentCollection(db, titlesCollection)
+        autoTitlesFx   <- setupAutoTitleCollection(db, titlesCollection)
+        _ <- autoTitlesDocsFx
           .insertMany(autosuggestTitleRecs)
           .attempt
           .flatMap:
