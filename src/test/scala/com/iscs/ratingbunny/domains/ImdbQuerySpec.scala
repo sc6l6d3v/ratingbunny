@@ -21,6 +21,9 @@ import mongo4cats.collection.MongoCollection
 import mongo4cats.database.MongoDatabase
 import mongo4cats.embedded.EmbeddedMongo
 import mongo4cats.bson.Document
+import mongo4cats.bson.syntax.*
+import mongo4cats.models.collection.IndexOptions
+import mongo4cats.operations.Index
 import munit.CatsEffectSuite
 import org.http4s.*
 import org.http4s.circe.*
@@ -40,6 +43,7 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
   private val peopleCollection = "people"
   private val peopleTitlesCollection = "people_titles"
   private val titlesCollection = "titles"
+  private val autoTitleIndexName     = "auto_movie_genre_prefix_langMask"
 
   test("getByTitle should return results for valid title"):
     withEmbeddedMongoClient: mongoclient =>
@@ -184,6 +188,7 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
               IO(L.error(s"failed to insert ${autosuggestTitleRecs.mkString}")) >> IO.raiseError(e)
             case Right(_) =>
               IO(L.info(s"succeeded inserts ${autosuggestTitleRecs.mkString}"))
+        _ <- ensureAutoTitleIndex(autoTitlesDocsFx)
         imdbQuery    = new ImdbQueryImpl[IO](peopleFx, peopleTitlesFx, titlesFx, autoTitlesFx, "localhost", mockHttpClient)
         params       = ReqParams()
         titlePrefix  = "Gone with the"
@@ -232,6 +237,30 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
 
   def setupTitleCollection(db: MongoDatabase[IO], name: String): IO[MongoCollection[IO, TitleRec]] =
     db.getCollectionWithCodec[TitleRec](name)
+
+  private def ensureAutoTitleIndex(collection: MongoCollection[IO, Document]): IO[Unit] =
+    for
+      idxDocs <- collection.listIndexes
+      existing = idxDocs.flatMap(_.getString("name").toList).toSet
+      _ <-
+        if existing(autoTitleIndexName) then IO.unit
+        else
+          collection
+            .createIndex(
+              Index.compound(
+                Index.ascending("titleType"),
+                Index.ascending("genres"),
+                Index.ascending("primaryTitleLC"),
+                Index.ascending("langMask")
+              ),
+              IndexOptions(
+                name = autoTitleIndexName,
+                background = true,
+                partialFilterExpression = Some(Document("isAdult" := 0))
+              )
+            )
+            .void
+    yield ()
 
   def withEmbeddedMongoClient[A](test: MongoClient[IO] => IO[A]): Future[A] =
     withRunningEmbeddedMongo:
