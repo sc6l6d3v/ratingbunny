@@ -22,7 +22,6 @@ import mongo4cats.database.MongoDatabase
 import mongo4cats.embedded.EmbeddedMongo
 import mongo4cats.bson.Document
 import mongo4cats.bson.syntax.*
-import mongo4cats.models.collection.IndexOptions
 import mongo4cats.operations.Index
 import munit.CatsEffectSuite
 import org.http4s.*
@@ -30,6 +29,7 @@ import org.http4s.circe.*
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
 import org.http4s.client.Client
 import org.http4s.dsl.io.*
+import com.mongodb.client.model.{Filters, IndexOptions as JIndexOptions}
 
 import scala.concurrent.Future
 import scala.concurrent.duration.*
@@ -245,6 +245,10 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
       _ <-
         if existing(autoTitleIndexName) then IO.unit
         else
+          val options = new JIndexOptions()
+            .name(autoTitleIndexName)
+            .background(true)
+            .partialFilterExpression(Filters.eq("isAdult", Int.box(0)))
           collection
             .createIndex(
               Index
@@ -252,11 +256,7 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
                 .ascending("genres")
                 .ascending("primaryTitleLC")
                 .ascending("langMask"),
-              IndexOptions(
-                name = autoTitleIndexName,
-                background = true,
-                partialFilterExpression = Some(Document("isAdult" := 0))
-              )
+              options
             )
             .void
     yield ()
