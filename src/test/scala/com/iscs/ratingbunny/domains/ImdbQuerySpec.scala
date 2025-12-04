@@ -20,6 +20,7 @@ import mongo4cats.client.MongoClient
 import mongo4cats.collection.MongoCollection
 import mongo4cats.database.MongoDatabase
 import mongo4cats.embedded.EmbeddedMongo
+import mongo4cats.bson.Document
 import munit.CatsEffectSuite
 import org.http4s.*
 import org.http4s.circe.*
@@ -42,10 +43,11 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
       for
         db            <- setupTestDatabase("test", mongoclient)
         peopleFx      <- setupAutoNameCollection(db, "autoNameRecords")
-        peopleTitlesFx <- setupTestCollection(db, "peopleTitleRecords")
-        titlesFx      <- setupTestCollection(db, "titleRecords")
+        peopleTitlesFx <- setupTitleCollection(db, "peopleTitleRecords")
+        titlesDocsFx  <- setupDocumentCollection(db, "titleRecords")
+        titlesFx      <- setupTitleCollection(db, "titleRecords")
         autoTitlesFx  <- setupAutoTitleCollection(db, "autoTitleRecords")
-        _ <- titlesFx
+        _ <- titlesDocsFx
           .insertMany(titleRecs)
           .attempt
           .flatMap:
@@ -78,10 +80,11 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
       for
         db            <- setupTestDatabase("test", mongoclient)
         peopleFx      <- setupAutoNameCollection(db, "autoNameRecords")
-        peopleTitlesFx <- setupTestCollection(db, "peopleTitleRecords")
-        titlesFx      <- setupTestCollection(db, "titleRecords")
+        peopleTitlesFx <- setupTitleCollection(db, "peopleTitleRecords")
+        titlesDocsFx  <- setupDocumentCollection(db, "titleRecords")
+        titlesFx      <- setupTitleCollection(db, "titleRecords")
         autoTitlesFx  <- setupAutoTitleCollection(db, "autoTitleRecords")
-        _ <- titlesFx
+        _ <- titlesDocsFx
           .insertMany(titlePathRecs)
           .attempt
           .flatMap:
@@ -104,10 +107,12 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
       for
         db            <- setupTestDatabase("test", mongoclient)
         peopleFx      <- setupAutoNameCollection(db, "autoNameRecords")
-        peopleTitlesFx <- setupTestCollection(db, "title_principals_namerating")
-        titlesFx      <- setupTestCollection(db, "nameRecords")
+        peopleTitlesDocsFx <- setupDocumentCollection(db, "title_principals_namerating")
+        peopleTitlesFx <- setupTitleCollection(db, "title_principals_namerating")
+        titlesDocsFx  <- setupDocumentCollection(db, "nameRecords")
+        titlesFx      <- setupTitleCollection(db, "nameRecords")
         autoTitlesFx  <- setupAutoTitleCollection(db, "autoTitleRecords")
-        _ <- peopleTitlesFx
+        _ <- peopleTitlesDocsFx
           .insertMany(nameCompRecs)
           .attempt
           .flatMap:
@@ -115,7 +120,7 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
               IO(L.error(s"failed to insert ${nameCompRecs.mkString}")) >> IO.raiseError(e)
             case Right(_) =>
               IO(L.info(s"succeeded inserts ${nameCompRecs.mkString}"))
-        _ <- titlesFx
+        _ <- titlesDocsFx
           .insertMany(nameRecs)
           .attempt
           .flatMap:
@@ -138,10 +143,11 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
       for
         db            <- setupTestDatabase("test", mongoclient)
         peopleFx      <- setupAutoNameCollection(db, "autoNameRecords")
-        peopleTitlesFx <- setupTestCollection(db, "title_principals_namerating")
-        titlesFx      <- setupTestCollection(db, "enhancedNameRecords")
+        peopleTitlesDocsFx <- setupDocumentCollection(db, "title_principals_namerating")
+        peopleTitlesFx <- setupTitleCollection(db, "title_principals_namerating")
+        titlesFx      <- setupTitleCollection(db, "enhancedNameRecords")
         autoTitlesFx  <- setupAutoTitleCollection(db, "autoTitleRecords")
-        _ <- peopleTitlesFx
+        _ <- peopleTitlesDocsFx
           .insertMany(enhancedNameCompRecs)
           .attempt
           .flatMap:
@@ -163,8 +169,8 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
       for
         db            <- setupTestDatabase("test", mongoclient)
         peopleFx      <- setupAutoNameCollection(db, "autoNameRecords")
-        peopleTitlesFx <- setupTestCollection(db, "title_principals_namerating")
-        titlesFx      <- setupTestCollection(db, "enhancedNameRecords")
+        peopleTitlesFx <- setupTitleCollection(db, "title_principals_namerating")
+        titlesFx      <- setupTitleCollection(db, "enhancedNameRecords")
         autoTitlesFx  <- setupAutoTitleCollection(db, "autoTitleRecords")
         _ <- autoTitlesFx
           .insertMany(autosuggestTitleRecs)
@@ -188,8 +194,8 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
       for
         db            <- setupTestDatabase("test", mongoclient)
         peopleFx      <- setupAutoNameCollection(db, "autoNameRecords")
-        peopleTitlesFx <- setupTestCollection(db, "title_principals_namerating")
-        titlesFx      <- setupTestCollection(db, "nameRecords")
+        peopleTitlesFx <- setupTitleCollection(db, "title_principals_namerating")
+        titlesFx      <- setupTitleCollection(db, "nameRecords")
         autoTitlesFx  <- setupAutoTitleCollection(db, "autoTitleRecords")
         _ <- peopleFx
           .insertMany(autosuggestNameRecs)
@@ -217,7 +223,10 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
   def setupAutoTitleCollection(db: MongoDatabase[IO], name: String): IO[MongoCollection[IO, AutoTitleRec]] =
     db.getCollectionWithCodec[AutoTitleRec](name)
 
-  def setupTestCollection(db: MongoDatabase[IO], name: String): IO[MongoCollection[IO, TitleRec]] =
+  def setupDocumentCollection(db: MongoDatabase[IO], name: String): IO[MongoCollection[IO, Document]] =
+    db.getCollectionWithCodec[Document](name)
+
+  def setupTitleCollection(db: MongoDatabase[IO], name: String): IO[MongoCollection[IO, TitleRec]] =
     db.getCollectionWithCodec[TitleRec](name)
 
   def withEmbeddedMongoClient[A](test: MongoClient[IO] => IO[A]): Future[A] =

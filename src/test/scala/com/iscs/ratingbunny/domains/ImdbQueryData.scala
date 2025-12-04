@@ -1,5 +1,6 @@
 package com.iscs.ratingbunny.domains
 
+import mongo4cats.bson.Document
 import mongo4cats.bson.syntax.*
 
 object ImdbQueryData:
@@ -8,290 +9,254 @@ object ImdbQueryData:
     Some("/t1wm4PgOQ8e4z1C6tk1yDNrps4T.jpg"),
     Some("/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg")
   )
-  val titlePathRecs: List[TitleRec] = List(
-    TitleRec(
-      _id = "tt0234215",
-      tconst = Some("tt0234215"),
-      titleType = Some("movie"),
-      primaryTitle = Some("The Matrix Reloaded"),
-      originalTitle = Some("The Matrix Reloaded"),
-      isAdult = Some(0),
-      startYear = Some(2003d),
-      endYear = Some(2005d),
-      runtimeMinutes = Some(138d),
-      genres = Some(List("Action", "Sci-Fi")),
-      rating = Some(TitleRating(average = Some(7.2d), votes = Some(637431d)))
+  val titlePathRecs: List[Document] = List(
+    Document(
+      "_id" := "tt0234215",
+      "tconst" := "tt0234215",
+      "titleType" := "movie",
+      "primaryTitle" := "The Matrix Reloaded",
+      "originalTitle" := "The Matrix Reloaded",
+      "isAdult" := 0,
+      "startYear" := 2003d,
+      "endYear" := 2005d,
+      "runtimeMinutes" := 138d,
+      "genres" := List("Action", "Sci-Fi"),
+      "rating" := Document("average" := 7.2d, "votes" := 637431d)
     ),
-    TitleRec(
-      _id = "tt0242653",
-      tconst = Some("tt0242653"),
-      titleType = Some("movie"),
-      primaryTitle = Some("The Matrix Revolutions"),
-      originalTitle = Some("The Matrix Revolutions"),
-      isAdult = Some(0),
-      startYear = Some(2003d),
-      endYear = Some(2005d),
-      runtimeMinutes = Some(129d),
-      genres = Some(List("Action", "Sci-Fi")),
-      rating = Some(TitleRating(average = Some(6.7d), votes = Some(548968d)))
+    Document(
+      "_id" := "tt0242653",
+      "tconst" := "tt0242653",
+      "titleType" := "movie",
+      "primaryTitle" := "The Matrix Revolutions",
+      "originalTitle" := "The Matrix Revolutions",
+      "isAdult" := 0,
+      "startYear" := 2003d,
+      "endYear" := 2005d,
+      "runtimeMinutes" := 129d,
+      "genres" := List("Action", "Sci-Fi"),
+      "rating" := Document("average" := 6.7d, "votes" := 548968d)
     ),
-    TitleRec(
-      _id = "tt0133093",
-      tconst = Some("tt0133093"),
-      titleType = Some("movie"),
-      primaryTitle = Some("The Matrix"),
-      originalTitle = Some("The Matrix"),
-      isAdult = Some(0),
-      startYear = Some(1999d),
-      endYear = Some(2005d),
-      runtimeMinutes = Some(136d),
-      genres = Some(List("Action", "Sci-Fi")),
-      rating = Some(TitleRating(average = Some(8.7d), votes = Some(2083121d)))
+    Document(
+      "_id" := "tt0133093",
+      "tconst" := "tt0133093",
+      "titleType" := "movie",
+      "primaryTitle" := "The Matrix",
+      "originalTitle" := "The Matrix",
+      "isAdult" := 0,
+      "startYear" := 1999d,
+      "endYear" := 2005d,
+      "runtimeMinutes" := 136d,
+      "genres" := List("Action", "Sci-Fi"),
+      "rating" := Document("average" := 8.7d, "votes" := 2083121d)
     )
   )
 
-  val titleRecs: List[TitleRec] = List(
-    TitleRec(
-      _id = "tt0111161",
-      tconst = Some("tt0111161"),
-      titleType = Some("movie"),
-      primaryTitle = Some("The Shawshank Redemption"),
-      originalTitle = Some("The Shawshank Redemption"),
-      isAdult = Some(0),
-      startYear = Some(1994d),
-      endYear = Some(2005d),
-      runtimeMinutes = Some(142d),
-      genres = Some(List("Drama")),
-      rating = Some(TitleRating(average = Some(9.3d), votes = Some(2500000d)))
+  val titleRecs: List[Document] = List(
+    Document(
+      "_id" := "tt0111161",
+      "tconst" := "tt0111161",
+      "titleType" := "movie",
+      "primaryTitle" := "The Shawshank Redemption",
+      "originalTitle" := "The Shawshank Redemption",
+      "isAdult" := 0,
+      "startYear" := 1994d,
+      "endYear" := 2005d,
+      "runtimeMinutes" := 142d,
+      "genres" := List("Drama"),
+      "rating" := Document("average" := 9.3d, "votes" := 2500000d)
     ),
-    TitleRec(
-      _id = "tt0068646",
-      tconst = Some("tt0068646"),
-      titleType = Some("movie"),
-      primaryTitle = Some("The Godfather"),
-      originalTitle = Some("The Godfather"),
-      isAdult = Some(0),
-      startYear = Some(1972d),
-      endYear = Some(2005d),
-      runtimeMinutes = Some(175d),
-      genres = Some(List("Crime", "Drama")),
-      rating = Some(TitleRating(average = Some(9.2d), votes = Some(1700000d)))
+    Document(
+      "_id" := "tt0068646",
+      "tconst" := "tt0068646",
+      "titleType" := "movie",
+      "primaryTitle" := "The Godfather",
+      "originalTitle" := "The Godfather",
+      "isAdult" := 0,
+      "startYear" := 1972d,
+      "endYear" := 2005d,
+      "runtimeMinutes" := 175d,
+      "genres" := List("Crime", "Drama"),
+      "rating" := Document("average" := 9.2d, "votes" := 1700000d)
     )
   )
-  val nameRecs: List[TitleRec] = List(
-    TitleRec(
-      _id = "tt4244998",
-      tconst = Some("tt4244998"),
-      titleType = Some("movie"),
-      primaryTitle = Some("Alpha"),
-      originalTitle = Some("Alpha"),
-      isAdult = Some(0),
-      startYear = Some(2018d),
-      endYear = Some(2005d),
-      runtimeMinutes = Some(96d),
-      genres = Some(
-        List(
-          "Action",
-          "Adventure",
-          "Drama"
-        )
-      ),
-      rating = Some(TitleRating(average = Some(6.6d), votes = Some(67187d)))
+  val nameRecs: List[Document] = List(
+    Document(
+      "_id" := "tt4244998",
+      "tconst" := "tt4244998",
+      "titleType" := "movie",
+      "primaryTitle" := "Alpha",
+      "originalTitle" := "Alpha",
+      "isAdult" := 0,
+      "startYear" := 2018d,
+      "endYear" := 2005d,
+      "runtimeMinutes" := 96d,
+      "genres" := List("Action", "Adventure", "Drama"),
+      "rating" := Document("average" := 6.6d, "votes" := 67187d)
     ),
-    TitleRec(
-      _id = "tt5523010",
-      tconst = Some("tt5523010"),
-      titleType = Some("movie"),
-      primaryTitle = Some("The Nutcracker and the Four Realms"),
-      originalTitle = Some("The Nutcracker and the Four Realms"),
-      isAdult = Some(0),
-      startYear = Some(2018d),
-      endYear = Some(2005d),
-      runtimeMinutes = Some(99d),
-      genres = Some(
-        List(
-          "Adventure",
-          "Family",
-          "Fantasy"
-        )
-      ),
-      rating = Some(TitleRating(average = Some(5.6d), votes = Some(37761d)))
+    Document(
+      "_id" := "tt5523010",
+      "tconst" := "tt5523010",
+      "titleType" := "movie",
+      "primaryTitle" := "The Nutcracker and the Four Realms",
+      "originalTitle" := "The Nutcracker and the Four Realms",
+      "isAdult" := 0,
+      "startYear" := 2018d,
+      "endYear" := 2005d,
+      "runtimeMinutes" := 99d,
+      "genres" := List("Adventure", "Family", "Fantasy"),
+      "rating" := Document("average" := 5.6d, "votes" := 37761d)
     ),
-    TitleRec(
-      _id = "tt5852632",
-      tconst = Some("tt5852632"),
-      titleType = Some("movie"),
-      primaryTitle = Some("March of the Penguins 2: The Next Step"),
-      originalTitle = Some("L'empereur"),
-      isAdult = Some(0),
-      startYear = Some(2017d),
-      endYear = Some(2005d),
-      runtimeMinutes = Some(76d),
-      genres = Some(
-        List(
-          "Adventure",
-          "Comedy",
-          "Documentary"
-        )
-      ),
-      rating = Some(TitleRating(average = Some(6.6d), votes = Some(868d)))
+    Document(
+      "_id" := "tt5852632",
+      "tconst" := "tt5852632",
+      "titleType" := "movie",
+      "primaryTitle" := "March of the Penguins 2: The Next Step",
+      "originalTitle" := "L'empereur",
+      "isAdult" := 0,
+      "startYear" := 2017d,
+      "endYear" := 2005d,
+      "runtimeMinutes" := 76d,
+      "genres" := List("Adventure", "Comedy", "Documentary"),
+      "rating" := Document("average" := 6.6d, "votes" := 868d)
     ),
-    TitleRec(
-      _id = "tt3110958",
-      tconst = Some("tt3110958"),
-      titleType = Some("movie"),
-      primaryTitle = Some("Now You See Me 2"),
-      originalTitle = Some("Now You See Me 2"),
-      isAdult = Some(0),
-      startYear = Some(2016d),
-      endYear = Some(2005d),
-      runtimeMinutes = Some(129d),
-      genres = Some(
-        List(
-          "Action",
-          "Adventure",
-          "Comedy"
-        )
-      ),
-      rating = Some(TitleRating(average = Some(6.4d), votes = Some(326263d)))
+    Document(
+      "_id" := "tt3110958",
+      "tconst" := "tt3110958",
+      "titleType" := "movie",
+      "primaryTitle" := "Now You See Me 2",
+      "originalTitle" := "Now You See Me 2",
+      "isAdult" := 0,
+      "startYear" := 2016d,
+      "endYear" := 2005d,
+      "runtimeMinutes" := 129d,
+      "genres" := List("Action", "Adventure", "Comedy"),
+      "rating" := Document("average" := 6.4d, "votes" := 326263d)
     ),
-    TitleRec(
-      _id = "tt2638144",
-      tconst = Some("tt2638144"),
-      titleType = Some("movie"),
-      primaryTitle = Some("Ben-Hur"),
-      originalTitle = Some("Ben-Hur"),
-      isAdult = Some(0),
-      startYear = Some(2016d),
-      endYear = Some(2005d),
-      runtimeMinutes = Some(123d),
-      genres = Some(
-        List(
-          "Action",
-          "Adventure",
-          "Drama"
-        )
-      ),
-      rating = Some(TitleRating(average = Some(5.7d), votes = Some(47227d)))
+    Document(
+      "_id" := "tt2638144",
+      "tconst" := "tt2638144",
+      "titleType" := "movie",
+      "primaryTitle" := "Ben-Hur",
+      "originalTitle" := "Ben-Hur",
+      "isAdult" := 0,
+      "startYear" := 2016d,
+      "endYear" := 2005d,
+      "runtimeMinutes" := 123d,
+      "genres" := List("Action", "Adventure", "Drama"),
+      "rating" := Document("average" := 5.7d, "votes" := 47227d)
     ),
-    TitleRec(
-      _id = "tt1483013",
-      tconst = Some("tt1483013"),
-      titleType = Some("movie"),
-      primaryTitle = Some("Oblivion"),
-      originalTitle = Some("Oblivion"),
-      isAdult = Some(0),
-      startYear = Some(2013d),
-      endYear = Some(2005d),
-      runtimeMinutes = Some(124d),
-      genres = Some(
-        List(
-          "Action",
-          "Adventure",
-          "Sci-Fi"
-        )
-      ),
-      rating = Some(TitleRating(average = Some(7.0d), votes = Some(558257d)))
+    Document(
+      "_id" := "tt1483013",
+      "tconst" := "tt1483013",
+      "titleType" := "movie",
+      "primaryTitle" := "Oblivion",
+      "originalTitle" := "Oblivion",
+      "isAdult" := 0,
+      "startYear" := 2013d,
+      "endYear" := 2005d,
+      "runtimeMinutes" := 124d,
+      "genres" := List("Action", "Adventure", "Sci-Fi"),
+      "rating" := Document("average" := 7.0d, "votes" := 558257d)
     )
   )
 
-  val nameCompRecs: List[TitleRec] = List(
-    TitleRec(
-      _id = "tt4244998-9",
-      tconst = Some("tt4244998"),
-      nconst = Some("nm0000151"),
-      titleType = Some("movie"),
-      primaryTitle = Some("Alpha"),
-      originalTitle = Some("Alpha"),
-      isAdult = Some(0),
-      startYear = Some(2018d),
-      runtimeMinutes = Some(96d),
-      genres = Some(List("Action", "Adventure", "Drama")),
-      rating = Some(TitleRating(average = Some(6.6d), votes = Some(67198d))),
-      characters = Some(List("Narrator")),
-      origCat = Some("actor"),
-      role = Some("actor")
+  val nameCompRecs: List[Document] = List(
+    Document(
+      "_id" := "tt4244998-9",
+      "tconst" := "tt4244998",
+      "nconst" := "nm0000151",
+      "titleType" := "movie",
+      "primaryTitle" := "Alpha",
+      "originalTitle" := "Alpha",
+      "isAdult" := 0,
+      "startYear" := 2018d,
+      "runtimeMinutes" := 96d,
+      "genres" := List("Action", "Adventure", "Drama"),
+      "rating" := Document("average" := 6.6d, "votes" := 67198d),
+      "characters" := List("Narrator"),
+      "origCat" := "actor",
+      "role" := "actor"
     ),
-    TitleRec(
-      _id = "tt1245526-3",
-      tconst = Some("tt1245526"),
-      nconst = Some("nm0000151"),
-      titleType = Some("movie"),
-      primaryTitle = Some("RED"),
-      originalTitle = Some("RED"),
-      isAdult = Some(0),
-      startYear = Some(2010d),
-      runtimeMinutes = Some(111d),
-      genres = Some(List("Action", "Comedy", "Crime")),
-      rating = Some(TitleRating(average = Some(7.0d), votes = Some(327181d))),
-      characters = Some(List("Joe Matheson")),
-      origCat = Some("actor"),
-      role = Some("actor")
+    Document(
+      "_id" := "tt1245526-3",
+      "tconst" := "tt1245526",
+      "nconst" := "nm0000151",
+      "titleType" := "movie",
+      "primaryTitle" := "RED",
+      "originalTitle" := "RED",
+      "isAdult" := 0,
+      "startYear" := 2010d,
+      "runtimeMinutes" := 111d,
+      "genres" := List("Action", "Comedy", "Crime"),
+      "rating" := Document("average" := 7.0d, "votes" := 327181d),
+      "characters" := List("Joe Matheson"),
+      "origCat" := "actor",
+      "role" := "actor"
     ),
-    TitleRec(
-      _id = "tt1483013-2",
-      tconst = Some("tt1483013"),
-      nconst = Some("nm0000151"),
-      titleType = Some("movie"),
-      primaryTitle = Some("Oblivion"),
-      originalTitle = Some("Oblivion"),
-      isAdult = Some(0),
-      startYear = Some(2013d),
-      runtimeMinutes = Some(124d),
-      genres = Some(List("Action", "Adventure", "Sci-Fi")),
-      rating = Some(TitleRating(average = Some(7.0d), votes = Some(558329d))),
-      characters = Some(List("Beech")),
-      origCat = Some("actor"),
-      role = Some("actor")
+    Document(
+      "_id" := "tt1483013-2",
+      "tconst" := "tt1483013",
+      "nconst" := "nm0000151",
+      "titleType" := "movie",
+      "primaryTitle" := "Oblivion",
+      "originalTitle" := "Oblivion",
+      "isAdult" := 0,
+      "startYear" := 2013d,
+      "runtimeMinutes" := 124d,
+      "genres" := List("Action", "Adventure", "Sci-Fi"),
+      "rating" := Document("average" := 7.0d, "votes" := 558329d),
+      "characters" := List("Beech"),
+      "origCat" := "actor",
+      "role" := "actor"
     )
   )
 
-  val enhancedNameCompRecs: List[TitleRec] = List(
-    TitleRec(
-      _id = "tt2361317-16",
-      tconst = Some("tt2361317"),
-      nconst = Some("nm0000138"),
-      titleType = Some("movie"),
-      primaryTitle = Some("Live by Night"),
-      originalTitle = Some("Live by Night"),
-      isAdult = Some(0),
-      startYear = Some(2016d),
-      runtimeMinutes = Some(129d),
-      genres = Some(List("Action", "Crime", "Drama")),
-      rating = Some(TitleRating(average = Some(6.4d), votes = Some(60210d))),
-      origCat = Some("producer"),
-      role = Some("producer")
+  val enhancedNameCompRecs: List[Document] = List(
+    Document(
+      "_id" := "tt2361317-16",
+      "tconst" := "tt2361317",
+      "nconst" := "nm0000138",
+      "titleType" := "movie",
+      "primaryTitle" := "Live by Night",
+      "originalTitle" := "Live by Night",
+      "isAdult" := 0,
+      "startYear" := 2016d,
+      "runtimeMinutes" := 129d,
+      "genres" := List("Action", "Crime", "Drama"),
+      "rating" := Document("average" := 6.4d, "votes" := 60210d),
+      "origCat" := "producer",
+      "role" := "producer"
     ),
-    TitleRec(
-      _id = "tt1663202-1",
-      tconst = Some("tt1663202"),
-      nconst = Some("nm0000138"),
-      titleType = Some("movie"),
-      primaryTitle = Some("The Revenant"),
-      originalTitle = Some("The Revenant"),
-      isAdult = Some(0),
-      startYear = Some(2015d),
-      runtimeMinutes = Some(156d),
-      genres = Some(List("Action", "Adventure", "Drama")),
-      rating = Some(TitleRating(average = Some(8.0d), votes = Some(886424d))),
-      characters = Some(List("Hugh Glass")),
-      origCat = Some("actor"),
-      role = Some("actor")
+    Document(
+      "_id" := "tt1663202-1",
+      "tconst" := "tt1663202",
+      "nconst" := "nm0000138",
+      "titleType" := "movie",
+      "primaryTitle" := "The Revenant",
+      "originalTitle" := "The Revenant",
+      "isAdult" := 0,
+      "startYear" := 2015d,
+      "runtimeMinutes" := 156d,
+      "genres" := List("Action", "Adventure", "Drama"),
+      "rating" := Document("average" := 8.0d, "votes" := 886424d),
+      "characters" := List("Hugh Glass"),
+      "origCat" := "actor",
+      "role" := "actor"
     ),
-    TitleRec(
-      _id = "tt4532826-16",
-      tconst = Some("tt4532826"),
-      nconst = Some("nm0000138"),
-      titleType = Some("movie"),
-      primaryTitle = Some("Robin Hood"),
-      originalTitle = Some("Robin Hood"),
-      isAdult = Some(0),
-      startYear = Some(2018d),
-      runtimeMinutes = Some(116d),
-      genres = Some(List("Action", "Adventure", "Drama")),
-      rating = Some(TitleRating(average = Some(5.3d), votes = Some(80324d))),
-      origCat = Some("producer"),
-      role = Some("producer")
+    Document(
+      "_id" := "tt4532826-16",
+      "tconst" := "tt4532826",
+      "nconst" := "nm0000138",
+      "titleType" := "movie",
+      "primaryTitle" := "Robin Hood",
+      "originalTitle" := "Robin Hood",
+      "isAdult" := 0,
+      "startYear" := 2018d,
+      "runtimeMinutes" := 116d,
+      "genres" := List("Action", "Adventure", "Drama"),
+      "rating" := Document("average" := 5.3d, "votes" := 80324d),
+      "origCat" := "producer",
+      "role" := "producer"
     )
   )
 
