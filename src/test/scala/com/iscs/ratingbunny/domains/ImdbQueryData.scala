@@ -299,13 +299,11 @@ object ImdbQueryData:
     AutoTitleRec(
       _id = "tt27881481",
       primaryTitle = "Gone with the Boat",
-      primaryTitleLC = Some("gone with the boat"),
       rating = Some(TitleRating(average = Some(7.5d), votes = Some(59d)))
     ),
     AutoTitleRec(
       _id = "tt1111111",
       primaryTitle = "Gone with the Wind",
-      primaryTitleLC = Some("gone with the wind"),
       rating = Some(TitleRating(average = Some(8.2d), votes = Some(813000d)))
     )
   )
@@ -315,14 +313,12 @@ object ImdbQueryData:
       _id = "nm10937834",
       primaryName = "John Crane",
       birthYear = Some(1980),
-      primaryProfession = Some(List("self")),
-      nameLC = Some("john crane")
+      primaryProfession = Some(List("self"))
     ),
     AutoNameRec(
       _id = "nm0186835",
       primaryName = "John Crawford",
       birthYear = Some(1975),
-      primaryProfession = Some(List("cinematographer")),
-      nameLC = Some("john crawford")
+      primaryProfession = Some(List("cinematographer"))
     )
   )
