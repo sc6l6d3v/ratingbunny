@@ -20,14 +20,17 @@ package object domains:
       primaryName: String,
       birthYear: Option[Int] = None,
       deathYear: Option[Int] = None,
-      primaryProfession: Option[List[String]] = None
+      primaryProfession: Option[List[String]] = None,
+      nameLC: Option[String] = None
   ) extends AutoRecBase
 
   final case class AutoTitleRec(
       _id: String,
       primaryTitle: String,
       startYear: Option[Int] = None,
-      rating: Option[TitleRating] = None
+      rating: Option[TitleRating] = None,
+      primaryTitleLC: Option[String] = None,
+      langMask: Option[Long] = None
   ) extends AutoRecBase
 
   final case class TitleRating(average: Option[Double] = None, votes: Option[Double] = None)
