@@ -5,8 +5,10 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import com.iscs.mail.EmailAttachment
 import com.iscs.ratingbunny.testkit.MockEmailService
+import com.typesafe.scalalogging.Logger
 import jakarta.mail.SendFailedException
 import mongo4cats.bson.Document
+import mongo4cats.bson.syntax.*
 import mongo4cats.client.MongoClient
 import mongo4cats.collection.MongoCollection
 import mongo4cats.database.MongoDatabase
@@ -19,6 +21,8 @@ import org.scalatest.wordspec.AsyncWordSpec
 import scala.concurrent.Future
 
 class EmailContactSpec extends AsyncWordSpec with Matchers with EmbeddedMongo:
+
+  private val L = Logger[this.type]
 
   override val mongoPort: Int = 12348
   private val field_id        = "_id"
@@ -33,6 +37,20 @@ class EmailContactSpec extends AsyncWordSpec with Matchers with EmbeddedMongo:
           for
             db      <- setupTestDatabase("test", client)
             emailFx <- setupTestCollection(db, "mock")
+            emailDoc = Document(
+              "name" := "John Doe",
+              "_id" := "john.doe@example.com",
+              "subject" := "Test Subject",
+              "msg" := "This is a test message."
+            )
+            _ <- emailFx
+              .insertOne(emailDoc)
+              .attempt
+              .flatMap:
+                case Left(e) =>
+                  IO(L.error(s"failed to insert $emailDoc")) >> IO.raiseError(e)
+                case Right(_) =>
+                  IO(L.info(s"succeeded insert $emailDoc"))
             emailContact = new EmailContactImpl[IO](emailFx, mockEmailService)
             name         = "John Doe"
             email        = "john.doe@example.com"
