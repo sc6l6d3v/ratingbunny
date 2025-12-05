@@ -33,7 +33,7 @@ class MockEmailService[F[_]](
       attachments: List[EmailAttachment[F]] = List.empty
   ): F[NonEmptyList[String]] =
     sentEmails = sentEmails :+ SentEmail(List(to), subject, textBody, htmlBody, attachments)
-    F.pure(NonEmptyList.of(s"mock-message-id-${System.currentTimeMillis()}"))
+    F.pure(NonEmptyList.of(s"mock-message-id-$to-${System.currentTimeMillis()}"))
 
   override def sendEmailToMultiple(
       recipients: List[String],
@@ -43,7 +43,9 @@ class MockEmailService[F[_]](
       attachments: List[EmailAttachment[F]] = List.empty
   ): F[List[NonEmptyList[String]]] =
     sentEmails = sentEmails :+ SentEmail(recipients, subject, textBody, htmlBody, attachments)
-    recipients.traverse(_ => F.pure(NonEmptyList.of(s"mock-message-id-${System.currentTimeMillis()}"))).map(_.toList)
+    recipients
+      .traverse(recipient => F.pure(NonEmptyList.of(s"mock-message-id-$recipient-${System.currentTimeMillis()}")))
+      .map(_.toList)
 
   override def sendEmail(to: String, subject: String, textBody: String, htmlBody: String): F[NonEmptyList[String]] =
     sendEmail(to, subject, textBody, htmlBody, List.empty)
