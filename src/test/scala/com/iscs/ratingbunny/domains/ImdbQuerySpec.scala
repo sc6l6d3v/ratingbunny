@@ -136,15 +136,15 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
             case Right(_) =>
               IO(L.info(s"succeeded inserts ${nameRecs.mkString}"))
 
-          imdbQuery = new ImdbQueryImpl[IO](peopleFx, peopleTitlesFx, titlesFx, autoTitlesFx, "localhost", mockHttpClient)
-          params       = ReqParams(sortType = Some("rating"))
-          // name         = "Morgan Freeman"
-          name         = "nm0000151"
-          resultStream = imdbQuery.getByName(name, 6.5, params, SortField.from(params.sortType))
-          results <- resultStream.compile.toList
-        yield
-          assert(results.nonEmpty)
-          assert(results.forall(_.primaryTitle.nonEmpty))
+        imdbQuery = new ImdbQueryImpl[IO](peopleFx, peopleTitlesFx, titlesFx, autoTitlesFx, "localhost", mockHttpClient)
+        params       = ReqParams(sortType = Some("rating"))
+        // name         = "Morgan Freeman"
+        name         = "nm0000151"
+        resultStream = imdbQuery.getByName(name, 6.5, params, SortField.from(params.sortType))
+        results <- resultStream.compile.toList
+      yield
+        assert(results.nonEmpty)
+        assert(results.forall(_.primaryTitle.nonEmpty))
 
   test("getByEnhancedName should return enhanced results for valid name"):
     withEmbeddedMongoClient: mongoclient =>
