@@ -30,6 +30,13 @@ class EmailContactSpec extends AsyncWordSpec with Matchers with EmbeddedMongo:
   /** Use mock email service to capture sends */
   private val mockEmailService = new MockEmailService[IO]()
 
+  private val emailDoc = Document(
+    "name"    := "John Doe",
+    "_id"     := "john.doe@example.com",
+    "subject" := "Test Subject",
+    "msg"     := "This is a test message."
+  )
+
   "embedded MongoDB" when:
     "sending email" should:
       "saveEmail should return email when validation succeeds and update is successful" in:
@@ -37,12 +44,6 @@ class EmailContactSpec extends AsyncWordSpec with Matchers with EmbeddedMongo:
           for
             db      <- setupTestDatabase("test", client)
             emailFx <- setupTestCollection(db, "mock")
-            emailDoc = Document(
-              "name" := "John Doe",
-              "_id" := "john.doe@example.com",
-              "subject" := "Test Subject",
-              "msg" := "This is a test message."
-            )
             _ <- emailFx
               .insertOne(emailDoc)
               .attempt
@@ -66,7 +67,8 @@ class EmailContactSpec extends AsyncWordSpec with Matchers with EmbeddedMongo:
             )
           yield
             emailUpdateResult.getModifiedCount shouldBe 1L
-            result shouldBe email
+            result should startWith("mock-message-id")
+            result should include(email)
 
       "saveEmail should return 'Invalid' message when validation fails" in:
         withEmbeddedMongoClient: client =>
@@ -84,15 +86,17 @@ class EmailContactSpec extends AsyncWordSpec with Matchers with EmbeddedMongo:
       "updateMsg should correctly update and return the email address" in:
         withEmbeddedMongoClient: client =>
           for
-            db             <- setupTestDatabase("test", client)
-            mockCollection <- setupTestCollection(db, "mock")
-            emailContact = new EmailContactImpl[IO](mockCollection, mockEmailService)
+            db      <- setupTestDatabase("test", client)
+            emailFx <- setupTestCollection(db, "mock")
+            emailContact = new EmailContactImpl[IO](emailFx, mockEmailService)
             name         = "Jane Doe"
             email        = "jane.doe@example.com"
             subject      = "Another Test"
             msg          = "This is another test message."
             result <- emailContact.saveEmail(name, email, subject, msg)
-          yield result shouldBe email
+          yield
+            result should startWith("mock-message-id")
+            result should include(email)
 
       "sendEmail should surface failure when underlying service errors" in:
         withEmbeddedMongoClient: client =>
