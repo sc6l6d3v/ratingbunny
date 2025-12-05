@@ -296,17 +296,19 @@ object ImdbQueryData:
     )
   )
 
-  val autosuggestNameRecs: List[AutoNameRec] = List(
-    AutoNameRec(
-      _id = "nm10937834",
-      primaryName = "John Crane",
-      birthYear = Some(1980),
-      primaryProfession = Some(List("self"))
+  val autosuggestNameRecs: List[Document] = List(
+    Document(
+      "_id" := "nm10937834",
+      "primaryName" := "John Crane",
+      "nameLC" := "john crane",
+      "birthYear" := 1980,
+      "primaryProfession" := List("self")
     ),
-    AutoNameRec(
-      _id = "nm0186835",
-      primaryName = "John Crawford",
-      birthYear = Some(1975),
-      primaryProfession = Some(List("cinematographer"))
+    Document(
+      "_id" := "nm0186835",
+      "primaryName" := "John Crawford",
+      "nameLC" := "john crawford",
+      "birthYear" := 1975,
+      "primaryProfession" := List("cinematographer")
     )
   )

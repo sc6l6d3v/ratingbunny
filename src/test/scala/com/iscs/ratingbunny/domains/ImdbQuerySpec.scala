@@ -201,12 +201,13 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
   test("getAutosuggestName should return suggestions based on name prefix"):
     withEmbeddedMongoClient: mongoclient =>
       for
-        db            <- setupTestDatabase("test", mongoclient)
-        peopleFx      <- setupAutoNameCollection(db, peopleCollection)
+        db             <- setupTestDatabase("test", mongoclient)
+        peopleDocsFx   <- setupDocumentCollection(db, peopleCollection)
+        peopleFx       <- setupAutoNameCollection(db, peopleCollection)
         peopleTitlesFx <- setupTitleCollection(db, peopleTitlesCollection)
-        titlesFx      <- setupTitleCollection(db, titlesCollection)
-        autoTitlesFx  <- setupAutoTitleCollection(db, titlesCollection)
-        _ <- peopleFx
+        titlesFx       <- setupTitleCollection(db, titlesCollection)
+        autoTitlesFx   <- setupAutoTitleCollection(db, titlesCollection)
+        _ <- peopleDocsFx
           .insertMany(autosuggestNameRecs)
           .attempt
           .flatMap:
