@@ -137,24 +137,6 @@ object ImdbRoutes extends DecodeUtils:
             +& OffsetQUeryParameterMatcher(off) =>
           commonTitle(req, page, rating, ws, wh, cs, ch, off, I.getByTitlePath, "pathtitle")
 
-        case req @ GET -> Root / "autoname"
-            :? QParamMatcher(q)
-            +& LowYearParamMatcher(lowYear)
-            +& HighYearParamMatcher(highYear) =>
-          val low  = lowYear.getOrElse(Int.MinValue)
-          val high = highYear.getOrElse(Int.MaxValue)
-          val params = ReqParams(
-            query = Some(q),
-            year = Some(List(low, high))
-          )
-
-          for
-            userOpt <- JwtAuth.userFromRequest(req, jwtSecret)
-            lst     <- I.getAutosuggestName(q, low, high).compile.toList
-            _       <- hx.log(userOpt.getOrElse("guest"), params).start
-            res     <- Ok(lst)
-          yield res
-
         case req @ GET -> Root / "autotitle"
             :? QParamMatcher(title)
             +& LangParamMatcher(lang)
@@ -209,6 +191,25 @@ object ImdbRoutes extends DecodeUtils:
               rtg <- getRating(rating)
               lst <- I.getByName(name, rtg, p, SortField.from(p.sortType)).compile.toList
               _   <- hx.log(user, p).start
+              res <- Ok(lst)
+            yield res
+          }
+
+        case authreq @ GET -> Root / "autoname"
+            :? QParamMatcher(q)
+            +& LowYearParamMatcher(lowYear)
+            +& HighYearParamMatcher(highYear) as user =>
+          ensureVerified(user) {
+            val low  = lowYear.getOrElse(Int.MinValue)
+            val high = highYear.getOrElse(Int.MaxValue)
+            val params = ReqParams(
+              query = Some(q),
+              year = Some(List(low, high))
+            )
+
+            for
+              lst <- I.getAutosuggestName(q, low, high).compile.toList
+              _   <- hx.log(user, params).start
               res <- Ok(lst)
             yield res
           }
