@@ -33,15 +33,15 @@ object ImdbRoutes extends DecodeUtils:
   private val columnSpacer = 64
   private val apiVersion   = "v3"
 
-  private object QParamMatcher          extends QueryParamDecoderMatcher[String]("q")
-  private object LangParamMatcher       extends OptionalQueryParamDecoderMatcher[String]("lang")
-  private object RatingParamMatcher     extends OptionalQueryParamDecoderMatcher[Double]("rating")
-  private object VotesParamMatcher      extends OptionalQueryParamDecoderMatcher[Int]("votes")
-  private object GenreParamMatcher      extends OptionalMultiQueryParamDecoderMatcher[String]("genre")
-  private object TitleTypeParamMatcher  extends OptionalMultiQueryParamDecoderMatcher[String]("titletype")
-  private object IsAdultParamMatcher    extends OptionalQueryParamDecoderMatcher[Int]("isadult")
-  private object LowYearParamMatcher    extends OptionalQueryParamDecoderMatcher[Int]("lowyear")
-  private object HighYearParamMatcher   extends OptionalQueryParamDecoderMatcher[Int]("highyear")
+  private object QParamMatcher         extends QueryParamDecoderMatcher[String]("q")
+  private object LangParamMatcher      extends OptionalQueryParamDecoderMatcher[String]("lang")
+  private object RatingParamMatcher    extends OptionalQueryParamDecoderMatcher[Double]("rating")
+  private object VotesParamMatcher     extends OptionalQueryParamDecoderMatcher[Int]("votes")
+  private object GenreParamMatcher     extends OptionalMultiQueryParamDecoderMatcher[String]("genre")
+  private object TitleTypeParamMatcher extends OptionalMultiQueryParamDecoderMatcher[String]("titletype")
+  private object IsAdultParamMatcher   extends OptionalQueryParamDecoderMatcher[Int]("isadult")
+  private object LowYearParamMatcher   extends OptionalQueryParamDecoderMatcher[Int]("lowyear")
+  private object HighYearParamMatcher  extends OptionalQueryParamDecoderMatcher[Int]("highyear")
 
   // ---------- helpers (unchanged) ------------------------------------------------
   private def rowsPerPage(height: Int, spacer: Int, cardHeight: Int): Int =
@@ -165,8 +165,8 @@ object ImdbRoutes extends DecodeUtils:
             +& IsAdultParamMatcher(isAdult) =>
           val params = ReqParams(
             query = Some(title),
-            genre = genres.toOption.filter(_.nonEmpty),
-            titleType = titleTypes.toOption.filter(_.nonEmpty),
+            genre = genres.toOption.map(_.flatMap(_.split(","))).filter(_.nonEmpty),
+            titleType = titleTypes.toOption.map(_.flatMap(_.split(","))).filter(_.nonEmpty),
             isAdult = isAdult.map(_ != 0)
           )
 
@@ -242,7 +242,6 @@ object ImdbRoutes extends DecodeUtils:
               )
             yield res
           }
-
       .map(
         _.withContentType(`Content-Type`(org.http4s.MediaType.application.json))
       )
