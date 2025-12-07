@@ -223,6 +223,7 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
       yield
         assert(results.nonEmpty)
         assert(results.forall(_.primaryName.startsWith("John")))
+        assert(results.forall(_.primaryName.contains("|")))
 
   def setupTestDatabase(name: String, client: MongoClient[IO]): IO[MongoDatabase[IO]] =
     client.getDatabase(name)

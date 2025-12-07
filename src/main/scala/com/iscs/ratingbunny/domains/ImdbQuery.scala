@@ -267,6 +267,8 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
         peopleFx
           .aggregateWithCodec[AutoNameRec](queryPipeline)
           .stream
+          .map: autoNameRec =>
+            autoNameRec.copy(primaryName = s"${autoNameRec.primaryName}|${autoNameRec._id}")
           .onFinalize:
             for
               end <- Clock[F].monotonic
