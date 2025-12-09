@@ -106,7 +106,7 @@ trait QuerySetup:
       case SearchDomain.Title =>
         optTitle.map: title =>
           searchType match
-            case Some(EXACT) => Document(primaryTitle := title)
+            case Some(EXACT) => Document(primaryTitleLC := title.toLowerCase.trim)
             case _           => prefixRange(primaryTitleLC, title)
       case SearchDomain.Name => None
 
