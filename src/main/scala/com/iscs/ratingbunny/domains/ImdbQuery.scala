@@ -92,7 +92,13 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
       )
     )
 
-    val queryPipeline = genTitleQueryPipeline(genTitleFilter(params, rating), isLimited = true, limit, sortField, projection)
+    val queryPipeline = genTitleQueryPipeline(
+      genTitleFilter(params, rating, optionalLangBit(params.lang)),
+      isLimited = true,
+      limit,
+      sortField,
+      projection
+    )
 
     for
       start  <- Stream.eval(Clock[F].monotonic)
@@ -341,7 +347,13 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
           )
         )
 
-        val queryPipeline = genTitleQueryPipeline(genTitleFilter(params, rating), isLimited = true, limit, sortField, projection)
+        val queryPipeline = genTitleQueryPipeline(
+          genTitleFilter(params, rating, optionalLangBit(params.lang)),
+          isLimited = true,
+          limit,
+          sortField,
+          projection
+        )
 
         // connect the streams
         val titleRecPathStream = titlesFx.aggregateWithCodec[TitleRecPath](queryPipeline).stream
