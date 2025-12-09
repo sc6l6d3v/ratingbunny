@@ -2,58 +2,59 @@ package com.iscs.ratingbunny.domains
 
 import com.iscs.ratingbunny.model.Requests.ReqParams
 import com.typesafe.scalalogging.Logger
-import mongo4cats.bson.{BsonValue, BsonValueEncoder, Document}
 import mongo4cats.bson.BsonValueEncoder.*
 import mongo4cats.bson.syntax.*
+import mongo4cats.bson.{BsonValue, BsonValueEncoder, Document}
 import org.bson.BsonNull
 import org.bson.conversions.Bson
-import org.mongodb.scala.model.Projections.{computed, exclude, fields, include}
+import org.mongodb.scala.model.Projections.{fields, include}
 import org.mongodb.scala.model.{Aggregates, Projections, Sorts}
+
 import scala.language.implicitConversions
 
 trait QuerySetup:
   enum SearchDomain:
     case Title, Name
 
-  private val id               = "_id"
-  private val averageRating    = "rating.average"
-  private val numVotes         = "rating.votes"
-  private val genres           = "genres"
-  private val primaryName      = "primaryName"
-  private val primaryTitle     = "primaryTitle"
-  private val primaryTitleLC   = "primaryTitleLC"
-  private val nameLC           = "nameLC"
-  private val isAdult          = "isAdult"
-  private val startYear        = "startYear"
-  private val endYear          = "endYear"
-  private val runtimeMinutes   = "runtimeMinutes"
-  private val titleType        = "titleType"
-  private val langMask         = "langMask"
-  private val role             = "role"
-  private val nconst           = "nconst"
-  private val hasUS            = "hasUS"
-  private val hasEN            = "hasEN"
-  private val STREAMLIMIT      = 96
-  private val AUTOSUGGESTLIMIT = 20
-  private val AUTONAME_LIMIT   = 10
+  private val id                      = "_id"
+  private val averageRating           = "rating.average"
+  private val numVotes                = "rating.votes"
+  private val genres                  = "genres"
+  private val primaryName             = "primaryName"
+  private val primaryTitle            = "primaryTitle"
+  private val primaryTitleLC          = "primaryTitleLC"
+  private val nameLC                  = "nameLC"
+  private val isAdult                 = "isAdult"
+  private val startYear               = "startYear"
+  private val endYear                 = "endYear"
+  private val runtimeMinutes          = "runtimeMinutes"
+  private val titleType               = "titleType"
+  private val langMask                = "langMask"
+  private val role                    = "role"
+  private val nconst                  = "nconst"
+  private val hasUS                   = "hasUS"
+  private val hasEN                   = "hasEN"
+  private val STREAMLIMIT             = 96
+  private val AUTOSUGGESTLIMIT        = 20
+  private val AUTONAME_LIMIT          = 10
   protected val autoSuggestLimit: Int = AUTOSUGGESTLIMIT
-  private val EXACT            = "exact"
-  private val GTE              = "$gte"
-  private val LTE              = "$lte"
-  private val LT               = "$lt"
-  private val IN               = "$in"
-  private val OR               = "$or"
-  private val REGX             = "$regex"
-  private val BITSANY          = "$bitsAnySet"
-  private val autoTitleHint    = "auto_movie_genre_prefix_langMask"
-  private val topLangs         = List("en", "ja", "de", "fr")
-  val L: Logger                = Logger[this.type]
+  private val EXACT                   = "exact"
+  private val GTE                     = "$gte"
+  private val LTE                     = "$lte"
+  private val LT                      = "$lt"
+  private val IN                      = "$in"
+  private val OR                      = "$or"
+  private val REGX                    = "$regex"
+  private val BITSANY                 = "$bitsAnySet"
+  private val autoTitleHint           = "auto_movie_genre_prefix_langMask"
+  private val topLangs                = List("en", "ja", "de", "fr")
+  val L: Logger                       = Logger[this.type]
 
   extension (b: Boolean) def toInt: Int = if b then 1 else 0
 
-  given BsonValueEncoder[Int]    = BsonValueEncoder.intEncoder
-  given BsonValueEncoder[Double] = BsonValueEncoder.doubleEncoder
-  given BsonValueEncoder[Long]   = BsonValueEncoder.longEncoder
+  given BsonValueEncoder[Int]      = BsonValueEncoder.intEncoder
+  given BsonValueEncoder[Double]   = BsonValueEncoder.doubleEncoder
+  given BsonValueEncoder[Long]     = BsonValueEncoder.longEncoder
   given BsonValueEncoder[BsonNull] = _ => BsonValue.Null
 
   private def gte[A](fieldName: String, a: A)(using encoder: BsonValueEncoder[A]) = Document(fieldName := Document(GTE := a))
@@ -67,7 +68,7 @@ trait QuerySetup:
   private def prefixRange(fieldName: String, prefix: String): Document =
     Document(fieldName := Document(GTE := prefix.toLowerCase).add(LT := s"${prefix.toLowerCase}\uffff"))
 
-  private def optionalLangBit(lang: Option[String]): Option[Long] =
+  protected def optionalLangBit(lang: Option[String]): Option[Long] =
     lang.flatMap: code =>
       val idx = topLangs.indexOf(code.toLowerCase)
       Option.when(idx >= 0)(1L << idx)
@@ -165,7 +166,7 @@ trait QuerySetup:
 
   def genTitleFilter(params: ReqParams, rating: Double, langBit: Option[Long] = None): Document =
     val langMaskFilter = langBit.map(bit => Document(langMask := Document(BITSANY := bit)))
-    mergeDocs((langMaskFilter.toList ::: List(combineVotesWithRating(params, rating)) ::: getParamList(params)))
+    mergeDocs(langMaskFilter.toList ::: List(combineVotesWithRating(params, rating)) ::: getParamList(params))
 
   private def combineVotesWithRating(params: ReqParams, rating: Double): Document =
     params.votes match

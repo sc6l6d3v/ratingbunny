@@ -10,7 +10,7 @@ import com.iscs.ratingbunny.repos.HistoryRepo
 import com.iscs.ratingbunny.util.DecodeUtils
 import com.typesafe.scalalogging.Logger
 import fs2.Stream
-import io.circe.Encoder
+import io.circe.{Encoder, Json}
 import io.circe.syntax.EncoderOps
 import io.circe.generic.auto.*
 import org.http4s.*
@@ -72,19 +72,30 @@ object ImdbRoutes extends DecodeUtils:
   private def remain(pg: Int, pgs: Int, total: Int): Int =
     math.max(total - (pg * pgs), 0)
 
-  implicit val encodeAutoRecBase: Encoder[AutoRecBase] = Encoder.instance:
+  private def scrubInternal(j: Json): Json =
+    j.mapObject(
+      _.remove("hasUS")
+        .remove("hasEN")
+        .remove("langs")
+        .remove("langMask")
+        .remove("usBoost")
+        // add more internal keys here as needed:
+        // .remove("someOtherInternalField")
+    ).deepDropNullValues
+
+  given encodeAutoRecBase: Encoder[AutoRecBase] = Encoder.instance:
     case autoNameRec: AutoNameRec   => autoNameRec.asJson
     case autoTitleRec: AutoTitleRec => autoTitleRec.asJson
 
-  implicit val encodeTitleRecBase: Encoder[TitleRecBase] = Encoder.instance:
-    case titleRec: TitleRec         => titleRec.asJson
-    case titleRecPath: TitleRecPath => titleRecPath.asJson
+  given encodeTitleRecBase: Encoder[TitleRecBase] = Encoder.instance:
+    case titleRec: TitleRec         => scrubInternal(titleRec.asJson)
+    case titleRecPath: TitleRecPath => scrubInternal(titleRecPath.asJson)
 
   // ---------- public TITLE routes -----------------------------------------------
   def publicRoutes[F[_]: Async](I: ImdbQuery[F], hx: HistoryRepo[F], jwtSecret: String): HttpRoutes[F] =
     val dsl = Http4sDsl[F]; import dsl.*
 
-    def commonTitle(
+    def commonTitle[T <: TitleRecBase](
         req: Request[F],
         page: String,
         rating: String,
@@ -127,7 +138,7 @@ object ImdbRoutes extends DecodeUtils:
             +& CardWidthQueryParameterMatcher(cs)
             +& CardHeightQueryParameterMatcher(ch)
             +& OffsetQUeryParameterMatcher(off) =>
-          commonTitle(req, page, rating, ws, wh, cs, ch, off, I.getByTitle, "title")
+          commonTitle[TitleRec](req, page, rating, ws, wh, cs, ch, off, I.getByTitle, "title")
 
         case req @ POST -> Root / "pathtitle" / page / rating
             :? WindowWidthQueryParameterMatcher(ws)
@@ -135,7 +146,7 @@ object ImdbRoutes extends DecodeUtils:
             +& CardWidthQueryParameterMatcher(cs)
             +& CardHeightQueryParameterMatcher(ch)
             +& OffsetQUeryParameterMatcher(off) =>
-          commonTitle(req, page, rating, ws, wh, cs, ch, off, I.getByTitlePath, "pathtitle")
+          commonTitle[TitleRecPath](req, page, rating, ws, wh, cs, ch, off, I.getByTitlePath, "pathtitle")
 
         case req @ GET -> Root / "autotitle"
             :? QParamMatcher(title)
