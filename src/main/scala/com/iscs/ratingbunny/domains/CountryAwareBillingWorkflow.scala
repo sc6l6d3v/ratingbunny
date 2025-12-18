@@ -38,12 +38,11 @@ final class CountryAwareBillingWorkflow[F[_]: Async] private[
       details: SignupBilling,
       trialWindow: TrialWindow
   ): EitherT[F, SignupError, BillingInfo] =
-    val gateway    = selectGateway(details.address.country)
-    val normalized = details.copy(gateway = gateway)
+    val gateway = selectGateway(details.address.country)
     L.debug(s"Selected $gateway gateway for ${user.email} (${details.address.country})")
     val provisioned = gateway match
-      case BillingGateway.Helcim => helcimWorkflow.createBilling(user, normalized, trialWindow)
-      case BillingGateway.Stripe => stripeWorkflow.createBilling(user, normalized, trialWindow)
+      case BillingGateway.Helcim => helcimWorkflow.createBilling(user, details, trialWindow)
+      case BillingGateway.Stripe => stripeWorkflow.createBilling(user, details, trialWindow)
 
     provisioned.subflatMap(ensureGateway(gateway, _))
 
