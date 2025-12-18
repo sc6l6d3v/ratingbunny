@@ -32,7 +32,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
       EitherT.rightT(
         BillingInfo(
           userId = user.userid,
-          gateway = details.gateway,
+          gateway = BillingGateway.Helcim,
           helcim = Some(
             HelcimAccount(
               customerId = "cust-123",

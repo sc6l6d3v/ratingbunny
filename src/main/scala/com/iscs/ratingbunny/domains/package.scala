@@ -114,8 +114,7 @@ package object domains:
   final case class SignupBilling(
       fullName: String,
       address: Address,
-      cardToken: String,
-      gateway: BillingGateway = BillingGateway.Helcim
+      cardToken: String
   )
 
   object SignupBilling:
