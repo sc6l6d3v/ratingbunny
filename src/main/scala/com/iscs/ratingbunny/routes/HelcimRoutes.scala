@@ -7,6 +7,7 @@ import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import io.circe.parser.parse
 import io.circe.syntax.*
 import io.circe.{Decoder, Encoder, HCursor, Json, Printer}
+import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
 import org.http4s.circe.{jsonEncoderOf, jsonOf}
 import org.http4s.dsl.Http4sDsl
 import org.http4s.{EntityDecoder, EntityEncoder, Header, Headers, HttpRoutes, Method, Request}
