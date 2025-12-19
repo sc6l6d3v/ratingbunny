@@ -1,14 +1,14 @@
 package com.iscs.ratingbunny
 
 import cats.Parallel
-import cats.effect.{Async, Resource, Sync}
+import cats.effect.{Async, Ref, Resource, Sync}
 import cats.implicits.*
 import com.comcast.ip4s.*
 import com.iscs.mail.{EmailService, EmailServiceConfig}
 import com.iscs.ratingbunny.config.TrialConfig
 import com.iscs.ratingbunny.domains.{AuthCheck, AuthCheckImpl, AuthLogin, AuthLoginImpl, AutoNameRec, AutoTitleRec, BillingInfo, BillingWorkflow, ConnectionPool, ConnectionPoolImpl, CountryAwareBillingWorkflow, EmailContact, EmailContactImpl, FetchImage, ImdbQuery, ImdbQueryImpl, TitleRec, TokenIssuer, TokenIssuerImpl, TrialService, TrialServiceImpl, UserDoc, UserProfileDoc, UserRepo, UserRepoImpl}
 import com.iscs.ratingbunny.repos.HistoryRepo
-import com.iscs.ratingbunny.routes.{AuthRoutes, EmailContactRoutes, FetchImageRoutes, ImdbRoutes, PoolSvcRoutes}
+import com.iscs.ratingbunny.routes.{AuthRoutes, EmailContactRoutes, FetchImageRoutes, HelcimRoutes, ImdbRoutes, PoolSvcRoutes}
 import com.iscs.ratingbunny.security.JwtAuth
 import com.iscs.ratingbunny.util.BcryptHasher
 import com.typesafe.scalalogging.Logger
@@ -48,6 +48,8 @@ object Server:
   private val userProfileCollection = "user_profile"
   private val billingCollection     = "billing_info"
   private val apiVersion            = "v3"
+  private val helcimApiToken =
+    sys.env.getOrElse("HELCIM_API_TOKEN", throw new RuntimeException("HELCIM_API_TOKEN environment variable must be set"))
 
   private val jwtSecretKey =
     sys.env.getOrElse("JWT_SECRET_KEY", throw new RuntimeException("JWT_SECRET_KEY environment variable must be set"))
@@ -130,10 +132,12 @@ object Server:
       historyRepo  <- HistoryRepo.make(db)
       imdbSvc      <- getImdbSvc(db, client)
       poolSvc      <- getPoolStatsSvc(db)
+      helcimSecrets <- Ref.of[F, Map[String, HelcimRoutes.StoredSecret]](Map.empty)
       authMw = JwtAuth.middleware(jwtSecretKey)
       httpApp = Router(
         s"/api/$apiVersion" ->
           (FetchImageRoutes.httpRoutes(fetchSvc) <+>
+            HelcimRoutes.httpRoutes(client, helcimApiToken, helcimSecrets) <+>
             EmailContactRoutes.httpRoutes(emailSvc) <+>
             ImdbRoutes.publicRoutes(imdbSvc, historyRepo, jwtSecretKey) <+>
             PoolSvcRoutes.httpRoutes(poolSvc) <+>

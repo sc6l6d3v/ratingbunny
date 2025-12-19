@@ -61,7 +61,7 @@ object JwtAuth:
                 L.debug("JWT validation failed")
                 Left("Invalid JWT token")
           case None =>
-            L.debug("No Bearer token found")
+            // Public/optional routes often omit Authorization; avoid noisy logs in that case.
             Sync[F].pure(Left("No Authorization header"))
 
     AuthMiddleware(authUser, onFailure)

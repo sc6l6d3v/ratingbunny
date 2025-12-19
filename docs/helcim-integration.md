@@ -112,3 +112,10 @@ token emitted by HelcimPay.js.
 * Override `PROMONTHLY`/`PROANNUAL` to match IDs from your Helcim account.
 * Set `HELCIM_DEFAULT_CURRENCY` if your plans bill in a currency other than
   USD.
+* If you run with a custom truststore (the project defaults to
+  `client-truststore.jks` via `build.sbt`), regenerate it whenever you need to
+  trust additional endpoints. The `scripts/update-truststore.sh` helper seeds
+  the truststore with the JVM defaults and imports both
+  `vps.iscs-i.com:465` (mail delivery) and `api.helcim.com:443` (Helcim REST
+  API). Run the script and restart the app to avoid `PKIX path building failed`
+  SSL handshake errors when calling Helcim.
