@@ -21,7 +21,7 @@ import java.time.Instant
 
 object HelcimRoutes:
 
-  final case class InitFrontendRequest(currency: String)
+  final case class InitFrontendRequest(paymentType: String, amount: BigDecimal, currency: String, paymentMethod: String)
   object InitFrontendRequest:
     given Decoder[InitFrontendRequest] = deriveDecoder
 
@@ -70,20 +70,20 @@ object HelcimRoutes:
   def httpRoutes[F[_]: Async](client: Client[F], helcimApiToken: String, secrets: Ref[F, Map[String, StoredSecret]]): HttpRoutes[F] =
     val dsl = Http4sDsl[F]; import dsl.*
 
-    given EntityDecoder[F, InitFrontendRequest]            = jsonOf
-    given EntityEncoder[F, HelcimInitializeRequest]        = jsonEncoderOf
-    given EntityDecoder[F, HelcimInitializeResponse]       = jsonOf
-    given EntityDecoder[F, ConfirmTokenRequest]            = jsonOf
+    given EntityDecoder[F, InitFrontendRequest]      = jsonOf
+    given EntityEncoder[F, HelcimInitializeRequest]  = jsonEncoderOf
+    given EntityDecoder[F, HelcimInitializeResponse] = jsonOf
+    given EntityDecoder[F, ConfirmTokenRequest]      = jsonOf
 
     val initRoutes = HttpRoutes.of[F]:
       case req @ POST -> Root / "helcim" / "initialize" =>
         for
-          in <- req.as[InitFrontendRequest].handleError(_ => InitFrontendRequest("USD"))
+          in <- req.as[InitFrontendRequest].handleError(_ => InitFrontendRequest("purchase", 0.0d, "USD", "cc"))
           helcimBody = HelcimInitializeRequest(
-            paymentType = "verify",
-            amount = BigDecimal(0),
+            paymentType = in.paymentType,
+            amount = in.amount,
             currency = in.currency,
-            paymentMethod = Some("cc")
+            paymentMethod = Some(in.paymentMethod)
           )
           helcimReq = Request[F](
             method = Method.POST,
@@ -100,20 +100,20 @@ object HelcimRoutes:
           exp = Instant.now().plusSeconds(60 * 60)
           _ <- secrets.update(_ + (helcimResp.checkoutToken -> StoredSecret(helcimResp.secretToken, exp)))
 
-          out  = Json.obj("checkoutToken" -> helcimResp.checkoutToken.asJson)
+          out = Json.obj("secretToken" -> helcimResp.secretToken.asJson, "checkoutToken" -> helcimResp.checkoutToken.asJson)
           resp <- Ok(out)
         yield resp
 
     val confirmRoutes = HttpRoutes.of[F]:
       case req @ POST -> Root / "helcim" / "confirm-token" =>
         (for
-          in <- req.as[ConfirmTokenRequest]
+          in        <- req.as[ConfirmTokenRequest]
           storedOpt <- secrets.get.map(_.get(in.checkoutToken))
           stored <- Async[F].fromOption(
             storedOpt.filter(_.expiresAt.isAfter(Instant.now())),
             new RuntimeException("Unknown/expired checkoutToken")
           )
-          msgJson <- Async[F].fromEither(parse(in.eventMessage).leftMap(err => new RuntimeException(err.message)))
+          msgJson               <- Async[F].fromEither(parse(in.eventMessage).leftMap(err => new RuntimeException(err.message)))
           (txnJson, helcimHash) <- Async[F].fromEither(extractTxnDataAndHash(msgJson).leftMap(new RuntimeException(_)))
           cleanedTxn = Printer.noSpaces.print(txnJson)
           yourHash   = sha256Hex(cleanedTxn + stored.secretToken)
@@ -123,7 +123,7 @@ object HelcimRoutes:
           _ <- Async[F].fromEither(
             txnJson.hcursor.get[String]("cardToken").leftMap(df => new RuntimeException(df.message))
           )
-          _ <- secrets.update(_ - in.checkoutToken)
+          _    <- secrets.update(_ - in.checkoutToken)
           resp <- Ok(Json.obj("ok" -> true.asJson, "cardTokenStored" -> true.asJson))
         yield resp).handleErrorWith(e => BadRequest(Json.obj("error" -> e.getMessage.asJson)))
 

@@ -23,9 +23,7 @@ object CountryAwareBillingWorkflow:
   ): BillingWorkflow[F] =
     new CountryAwareBillingWorkflow[F](helcim, stripe, helcimCountries.map(_.trim.toUpperCase))
 
-final class CountryAwareBillingWorkflow[F[_]: Async] private[
-    domains
-] (
+final class CountryAwareBillingWorkflow[F[_]: Async] private[domains] (
     helcimWorkflow: BillingWorkflow[F],
     stripeWorkflow: BillingWorkflow[F],
     helcimCountries: Set[String]
