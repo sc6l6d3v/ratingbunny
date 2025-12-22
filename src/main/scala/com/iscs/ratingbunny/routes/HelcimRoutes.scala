@@ -3,6 +3,7 @@ package com.iscs.ratingbunny.routes
 import cats.effect.kernel.Ref
 import cats.effect.Async
 import cats.implicits.*
+import com.typesafe.scalalogging.Logger
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
 import io.circe.syntax.*
 import io.circe.{Decoder, Encoder, Json, Printer}
@@ -19,6 +20,8 @@ import java.security.MessageDigest
 import java.time.Instant
 
 object HelcimRoutes:
+
+  private val L = Logger[this.type]
 
   final case class InitFrontendRequest(paymentType: String, amount: BigDecimal, currency: String, paymentMethod: String)
   object InitFrontendRequest:
@@ -95,6 +98,7 @@ object HelcimRoutes:
             new RuntimeException("Unknown/expired checkoutToken")
           )
           cleanedTxn = Printer.noSpaces.print(in.data)
+          _         <- Async[F].delay(L.info(s""""request" helcimConfirm=$cleanedTxn"""))
           yourHash   = sha256Hex(cleanedTxn + stored.secretToken)
           _ <- Async[F].raiseWhen(!yourHash.equalsIgnoreCase(in.hash))(
             new RuntimeException("Invalid Helcim hash")
