@@ -127,4 +127,4 @@ object HelcimRoutes:
           resp <- Ok(Json.obj("ok" -> true.asJson, "cardTokenStored" -> true.asJson))
         yield resp).handleErrorWith(e => BadRequest(Json.obj("error" -> e.getMessage.asJson)))
 
-    initRoutes <+> confirmRoutes
+    CORSSetup.methodConfig(initRoutes <+> confirmRoutes)

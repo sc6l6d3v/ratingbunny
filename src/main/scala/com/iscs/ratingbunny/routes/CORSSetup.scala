@@ -36,6 +36,7 @@ object CORSSetup:
     .withAllowCredentials(true)
     .withMaxAge(1.day)
     .withAllowMethodsIn(methods)
+    .withAllowHeadersIn(Set(ci"Content-Type", ci"Authorization", ci"Accept"))
     .withAllowOriginHost(checkOrigin)
     .withExposeHeadersIn(Set(ci"X-Remaining-Count"))
     .apply(svc)
