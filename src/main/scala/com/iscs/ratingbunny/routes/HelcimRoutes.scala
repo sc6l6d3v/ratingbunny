@@ -3,10 +3,10 @@ package com.iscs.ratingbunny.routes
 import cats.effect.kernel.Ref
 import cats.effect.Async
 import cats.implicits.*
+import com.typesafe.scalalogging.Logger
 import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
-import io.circe.parser.parse
 import io.circe.syntax.*
-import io.circe.{Decoder, Encoder, HCursor, Json, Printer}
+import io.circe.{Decoder, Encoder, Json, Printer}
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
 import org.http4s.circe.{jsonEncoderOf, jsonOf}
 import org.http4s.dsl.Http4sDsl
@@ -20,6 +20,8 @@ import java.security.MessageDigest
 import java.time.Instant
 
 object HelcimRoutes:
+
+  private val L = Logger[this.type]
 
   final case class InitFrontendRequest(paymentType: String, amount: BigDecimal, currency: String, paymentMethod: String)
   object InitFrontendRequest:
@@ -38,7 +40,7 @@ object HelcimRoutes:
   object HelcimInitializeResponse:
     given Decoder[HelcimInitializeResponse] = deriveDecoder
 
-  final case class ConfirmTokenRequest(checkoutToken: String, eventMessage: String)
+  final case class ConfirmTokenRequest(checkoutToken: String, data: Json, hash: String)
   object ConfirmTokenRequest:
     given Decoder[ConfirmTokenRequest] = deriveDecoder
 
@@ -48,24 +50,6 @@ object HelcimRoutes:
     val md    = MessageDigest.getInstance("SHA-256")
     val bytes = md.digest(s.getBytes(StandardCharsets.UTF_8))
     bytes.map("%02x".format(_)).mkString
-
-  private def extractTxnDataAndHash(eventMsgJson: Json): Either[String, (Json, String)] =
-    val c: HCursor = eventMsgJson.hcursor
-
-    val shapeA =
-      for
-        dataObj <- c.downField("data").focus.toRight("missing data")
-        txn     <- dataObj.hcursor.downField("data").focus.toRight("missing data.data")
-        hash    <- dataObj.hcursor.get[String]("hash").leftMap(_.message)
-      yield (txn, hash)
-
-    val shapeB =
-      for
-        txn  <- c.downField("data").focus.toRight("missing data")
-        hash <- c.get[String]("hash").leftMap(_.message)
-      yield (txn, hash)
-
-    shapeA.orElse(shapeB)
 
   def httpRoutes[F[_]: Async](client: Client[F], helcimApiToken: String, secrets: Ref[F, Map[String, StoredSecret]]): HttpRoutes[F] =
     val dsl = Http4sDsl[F]; import dsl.*
@@ -113,15 +97,14 @@ object HelcimRoutes:
             storedOpt.filter(_.expiresAt.isAfter(Instant.now())),
             new RuntimeException("Unknown/expired checkoutToken")
           )
-          msgJson               <- Async[F].fromEither(parse(in.eventMessage).leftMap(err => new RuntimeException(err.message)))
-          (txnJson, helcimHash) <- Async[F].fromEither(extractTxnDataAndHash(msgJson).leftMap(new RuntimeException(_)))
-          cleanedTxn = Printer.noSpaces.print(txnJson)
+          cleanedTxn = Printer.noSpaces.print(in.data)
+          _         <- Async[F].delay(L.info(s""""request" helcimConfirm=$cleanedTxn"""))
           yourHash   = sha256Hex(cleanedTxn + stored.secretToken)
-          _ <- Async[F].raiseWhen(!yourHash.equalsIgnoreCase(helcimHash))(
+          _ <- Async[F].raiseWhen(!yourHash.equalsIgnoreCase(in.hash))(
             new RuntimeException("Invalid Helcim hash")
           )
           _ <- Async[F].fromEither(
-            txnJson.hcursor.get[String]("cardToken").leftMap(df => new RuntimeException(df.message))
+            in.data.hcursor.get[String]("cardToken").leftMap(df => new RuntimeException(df.message))
           )
           _    <- secrets.update(_ - in.checkoutToken)
           resp <- Ok(Json.obj("ok" -> true.asJson, "cardTokenStored" -> true.asJson))
