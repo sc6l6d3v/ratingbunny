@@ -25,11 +25,9 @@ object CORSSetup:
   L.info(s"got origins: ${reactDeploys.mkString(",")}")
   private val methods = Set(Method.GET, Method.POST)
   private val checkOrigin: Origin.Host => Boolean = host =>
-    val ok = reactDeploys.exists: curHosts =>
-      val res = curHosts == host
-      L.debug(s"compare ${curHosts.renderString} to ${host.renderString}: $res")
-      res
-    L.debug(s"origin ${host.renderString} accepted? $ok")
+    val ok = reactDeploys.contains(host)
+    if !ok then L.debug(s"origin ${host.renderString} NOT accepted (not in ${reactDeploys.size} allowed origins)")
+    else L.debug(s"origin ${host.renderString} accepted")
     ok
 
   def methodConfig[F[_]: Async](svc: HttpRoutes[F]): HttpRoutes[F] = CORS.policy
