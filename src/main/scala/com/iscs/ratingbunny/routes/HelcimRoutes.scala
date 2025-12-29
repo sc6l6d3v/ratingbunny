@@ -100,7 +100,7 @@ object HelcimRoutes:
           json <- redis
             .get(in.checkoutToken)
             .flatMap(opt => Async[F].fromOption(opt, new RuntimeException("Unknown/expired checkoutToken")))
-          stored <- Async[F].fromEither(decode[StoredSecret](json).leftMap(df => new RuntimeException(df.message)))
+          stored <- Async[F].fromEither(decode[StoredSecret](json).leftMap(df => new RuntimeException(df.getMessage)))
           _ <- Async[F].raiseWhen(stored.expiresAt.isBefore(Instant.now()))(
             new RuntimeException("Unknown/expired checkoutToken")
           )
@@ -112,7 +112,7 @@ object HelcimRoutes:
             new RuntimeException("Invalid Helcim hash")
           )
           _ <- Async[F].fromEither(
-            in.data.hcursor.get[String]("cardToken").leftMap(df => new RuntimeException(df.message))
+            in.data.hcursor.get[String]("cardToken").leftMap(df => new RuntimeException(df.getMessage))
           )
           _    <- redis.del(in.checkoutToken).void
           resp <- Ok(Json.obj("ok" -> true.asJson, "cardTokenStored" -> true.asJson))
