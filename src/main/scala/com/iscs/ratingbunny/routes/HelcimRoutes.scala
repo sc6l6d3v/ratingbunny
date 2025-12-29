@@ -98,8 +98,9 @@ object HelcimRoutes:
             new RuntimeException("Unknown/expired checkoutToken")
           )
           cleanedTxn = Printer.noSpaces.print(in.data)
-          _         <- Async[F].delay(L.info(s""""request" helcimConfirm=$cleanedTxn"""))
-          yourHash   = sha256Hex(cleanedTxn + stored.secretToken)
+          token      = stored.secretToken
+          _ <- Async[F].delay(L.info(s""""request" helcimConfirm=$cleanedTxn secretToken=$token"""))
+          yourHash = sha256Hex(cleanedTxn + token)
           _ <- Async[F].raiseWhen(!yourHash.equalsIgnoreCase(in.hash))(
             new RuntimeException("Invalid Helcim hash")
           )
