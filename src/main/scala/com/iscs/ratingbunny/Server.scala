@@ -1,7 +1,7 @@
 package com.iscs.ratingbunny
 
 import cats.Parallel
-import cats.effect.{Async, Ref, Resource, Sync}
+import cats.effect.{Async, Resource, Sync}
 import cats.implicits.*
 import com.comcast.ip4s.*
 import com.iscs.mail.{EmailService, EmailServiceConfig}
@@ -132,12 +132,11 @@ object Server:
       historyRepo  <- HistoryRepo.make(db)
       imdbSvc      <- getImdbSvc(db, client)
       poolSvc      <- getPoolStatsSvc(db)
-      helcimSecrets <- Ref.of[F, Map[String, HelcimRoutes.StoredSecret]](Map.empty)
       authMw = JwtAuth.middleware(jwtSecretKey)
       httpApp = Router(
         s"/api/$apiVersion" ->
           (FetchImageRoutes.httpRoutes(fetchSvc) <+>
-            HelcimRoutes.httpRoutes(client, helcimApiToken, helcimSecrets) <+>
+            HelcimRoutes.httpRoutes(client, helcimApiToken, redis) <+>
             EmailContactRoutes.httpRoutes(emailSvc) <+>
             ImdbRoutes.publicRoutes(imdbSvc, historyRepo, jwtSecretKey) <+>
             PoolSvcRoutes.httpRoutes(poolSvc) <+>
