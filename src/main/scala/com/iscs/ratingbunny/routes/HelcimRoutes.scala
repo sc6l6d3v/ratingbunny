@@ -1,12 +1,13 @@
 package com.iscs.ratingbunny.routes
 
-import cats.effect.kernel.Ref
 import cats.effect.Async
 import cats.implicits.*
 import com.typesafe.scalalogging.Logger
-import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder}
+import dev.profunktor.redis4cats.RedisCommands
+import io.circe.generic.semiauto.{deriveDecoder, deriveEncoder, deriveCodec}
 import io.circe.syntax.*
-import io.circe.{Decoder, Encoder, Json, Printer}
+import io.circe.{Codec, Decoder, Encoder, Json, Printer}
+import io.circe.parser.decode
 import org.http4s.circe.CirceEntityCodec.circeEntityEncoder
 import org.http4s.circe.{jsonEncoderOf, jsonOf}
 import org.http4s.dsl.Http4sDsl
@@ -18,6 +19,7 @@ import org.typelevel.ci.CIString
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.time.Instant
+import scala.concurrent.duration.*
 
 object HelcimRoutes:
 
@@ -45,13 +47,15 @@ object HelcimRoutes:
     given Decoder[ConfirmTokenRequest] = deriveDecoder
 
   final case class StoredSecret(secretToken: String, expiresAt: Instant)
+  object StoredSecret:
+    given Codec[StoredSecret] = deriveCodec
 
   private def sha256Hex(s: String): String =
     val md    = MessageDigest.getInstance("SHA-256")
     val bytes = md.digest(s.getBytes(StandardCharsets.UTF_8))
     bytes.map("%02x".format(_)).mkString
 
-  def httpRoutes[F[_]: Async](client: Client[F], helcimApiToken: String, secrets: Ref[F, Map[String, StoredSecret]]): HttpRoutes[F] =
+  def httpRoutes[F[_]: Async](client: Client[F], helcimApiToken: String, redis: RedisCommands[F, String, String]): HttpRoutes[F] =
     val dsl = Http4sDsl[F]; import dsl.*
 
     given EntityDecoder[F, InitFrontendRequest]      = jsonOf
@@ -82,7 +86,8 @@ object HelcimRoutes:
 
           helcimResp <- client.expect[HelcimInitializeResponse](helcimReq)
           exp = Instant.now().plusSeconds(60 * 60)
-          _ <- secrets.update(_ + (helcimResp.checkoutToken -> StoredSecret(helcimResp.secretToken, exp)))
+          stored = StoredSecret(helcimResp.secretToken, exp)
+          _ <- redis.setEx(helcimResp.checkoutToken, stored.asJson.noSpaces, 1.hour)
 
           out = Json.obj("secretToken" -> helcimResp.secretToken.asJson, "checkoutToken" -> helcimResp.checkoutToken.asJson)
           resp <- Ok(out)
@@ -91,10 +96,12 @@ object HelcimRoutes:
     val confirmRoutes = HttpRoutes.of[F]:
       case req @ POST -> Root / "helcim" / "confirm-token" =>
         (for
-          in        <- req.as[ConfirmTokenRequest]
-          storedOpt <- secrets.get.map(_.get(in.checkoutToken))
-          stored <- Async[F].fromOption(
-            storedOpt.filter(_.expiresAt.isAfter(Instant.now())),
+          in   <- req.as[ConfirmTokenRequest]
+          json <- redis
+            .get(in.checkoutToken)
+            .flatMap(opt => Async[F].fromOption(opt, new RuntimeException("Unknown/expired checkoutToken")))
+          stored <- Async[F].fromEither(decode[StoredSecret](json).leftMap(df => new RuntimeException(df.message)))
+          _ <- Async[F].raiseWhen(stored.expiresAt.isBefore(Instant.now()))(
             new RuntimeException("Unknown/expired checkoutToken")
           )
           cleanedTxn = Printer.noSpaces.print(in.data)
@@ -107,7 +114,7 @@ object HelcimRoutes:
           _ <- Async[F].fromEither(
             in.data.hcursor.get[String]("cardToken").leftMap(df => new RuntimeException(df.message))
           )
-          _    <- secrets.update(_ - in.checkoutToken)
+          _    <- redis.del(in.checkoutToken).void
           resp <- Ok(Json.obj("ok" -> true.asJson, "cardTokenStored" -> true.asJson))
         yield resp).handleErrorWith(e => BadRequest(Json.obj("error" -> e.getMessage.asJson)))
 
