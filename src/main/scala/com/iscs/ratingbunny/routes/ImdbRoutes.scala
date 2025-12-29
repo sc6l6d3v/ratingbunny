@@ -3,6 +3,7 @@ package com.iscs.ratingbunny.routes
 import cats.effect.*
 import cats.effect.implicits.genSpawnOps
 import cats.implicits.*
+import com.iscs.ratingbunny.config.TrialConfig
 import com.iscs.ratingbunny.domains.*
 import com.iscs.ratingbunny.dslparams.*
 import com.iscs.ratingbunny.model.Requests.*
@@ -183,15 +184,18 @@ object ImdbRoutes extends DecodeUtils:
       I: ImdbQuery[F],
       hx: HistoryRepo[F],
       userRepo: UserRepo[F],
-      authMw: AuthMiddleware[F, String]
+      authMw: AuthMiddleware[F, String],
+      trialConfig: TrialConfig
   ): HttpRoutes[F] =
     val dsl = Http4sDsl[F]; import dsl.*
 
     def ensureVerified(uid: String)(body: => F[Response[F]]): F[Response[F]] =
-      userRepo.findByUserId(uid).flatMap {
-        case Some(u) if u.emailVerified => body
-        case _                          => Forbidden()
-      }
+      if trialConfig.enabled then body
+      else
+        userRepo.findByUserId(uid).flatMap {
+          case Some(u) if u.emailVerified => body
+          case _                          => Forbidden()
+        }
 
     val svc = AuthedRoutes
       .of[String, F]:
