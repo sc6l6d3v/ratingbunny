@@ -59,4 +59,10 @@ object HistoryRoutes:
           resp <- docOpt.fold(NotFound())(doc => Ok(doc.asJson))
         yield resp
 
+      case GET -> Root / "history" / "bysig" / sig as _ =>
+        historyRepo.getUsers(sig).flatMap {
+          case Some(doc) => Ok(doc.asJson)
+          case None      => NotFound()
+        }
+
     CORSSetup.methodConfig(authMw(svc))
