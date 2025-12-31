@@ -8,7 +8,7 @@ import com.iscs.mail.{EmailService, EmailServiceConfig}
 import com.iscs.ratingbunny.config.TrialConfig
 import com.iscs.ratingbunny.domains.{AuthCheck, AuthCheckImpl, AuthLogin, AuthLoginImpl, AutoNameRec, AutoTitleRec, BillingInfo, BillingWorkflow, ConnectionPool, ConnectionPoolImpl, CountryAwareBillingWorkflow, EmailContact, EmailContactImpl, FetchImage, ImdbQuery, ImdbQueryImpl, TitleRec, TokenIssuer, TokenIssuerImpl, TrialService, TrialServiceImpl, UserDoc, UserProfileDoc, UserRepo, UserRepoImpl}
 import com.iscs.ratingbunny.repos.HistoryRepo
-import com.iscs.ratingbunny.routes.{AuthRoutes, EmailContactRoutes, FetchImageRoutes, HelcimRoutes, ImdbRoutes, PoolSvcRoutes}
+import com.iscs.ratingbunny.routes.{AuthRoutes, EmailContactRoutes, FetchImageRoutes, HelcimRoutes, HistoryRoutes, ImdbRoutes, PoolSvcRoutes}
 import com.iscs.ratingbunny.security.JwtAuth
 import com.iscs.ratingbunny.util.BcryptHasher
 import com.typesafe.scalalogging.Logger
@@ -141,7 +141,8 @@ object Server:
             ImdbRoutes.publicRoutes(imdbSvc, historyRepo, jwtSecretKey) <+>
             PoolSvcRoutes.httpRoutes(poolSvc) <+>
             AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token) <+>
-            AuthRoutes.authedRoutes(userRepo, trialSvc, authMw)),
+            AuthRoutes.authedRoutes(userRepo, trialSvc, authMw) <+>
+            HistoryRoutes.authedRoutes(historyRepo, authMw)),
         s"/api/$apiVersion/pro" ->
           ImdbRoutes.authedRoutes(imdbSvc, historyRepo, userRepo, authMw, trialConfig)
       ).orNotFound
