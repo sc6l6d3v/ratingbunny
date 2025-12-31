@@ -99,7 +99,20 @@ final class HistoryRepo[F[_]: Async](private[repos] val coll: MongoCollection[F,
 
   /** Fetch an entry by the request params (recomputes sig and delegates to `bySig`). */
   def byParams(userId: String, params: ReqParams): F[Option[Document]] =
-    bySig(userId, sigFor(params))
+    val sig = sigFor(params)
+    bySig(userId, sig).map(_.map(_ => Document("sig" := sig)))
+
+  /** Fetch all users that have logged this signature. */
+  def getUsers(sig: String): F[Option[Document]] =
+    coll
+      .find(feq("sig", sig))
+      .projection(Document("_id" := 0, "userId" := 1))
+      .stream
+      .compile
+      .toList
+      .map: docs =>
+        val users = docs.flatMap(_.getString("userId").toList)
+        Option.when(users.nonEmpty)(Document("userIds" := users))
 
   /** Create both indexes if they don’t already exist. Safe to call on every start‑up.
     */
