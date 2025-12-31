@@ -33,7 +33,8 @@
         <appender-ref ref="STDOUT" />
     </appender>
 
-    <logger name="org.http4s.client" level="INFO" />
+    <logger name="org.http4s.client" level="INFO"/>
+
     <!-- Mute general mongo driver noise (connection, cluster, etc.) -->
     <logger name="org.mongodb.driver" level="INFO"/>
     <!-- Keep the specific command protocol logs -->
@@ -42,7 +43,7 @@
     <!-- logger name="org.mongodb.scala" level="DEBUG"/ -->
     <!-- logger name="com.mongodb" level="DEBUG"/ -->
 
-    <logger name="mongo4cats" level="DEBUG" />
+    <logger name="mongo4cats" level="DEBUG"/>
     <logger name="emil" level="DEBUG"/>
     <logger name="com.sun.mail" level="DEBUG"/>
 
