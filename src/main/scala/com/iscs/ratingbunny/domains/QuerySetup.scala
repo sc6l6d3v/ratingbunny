@@ -43,6 +43,7 @@ trait QuerySetup:
   private val LTE                     = "$lte"
   private val LT                      = "$lt"
   private val IN                      = "$in"
+  private val NIN                     = "$nin"
   private val OR                      = "$or"
   private val REGX                    = "$regex"
   private val BITSANY                 = "$bitsAnySet"
@@ -112,7 +113,10 @@ trait QuerySetup:
 
   private def getParamList(params: ReqParams, domain: SearchDomain = SearchDomain.Title): List[Document] =
     List(
-      params.isAdult.map(isAdlt => Document(isAdult := isAdlt.toInt)),
+      params.isAdult.map {
+        case true  => Document(isAdult := 1)
+        case false => Document(isAdult := Document(NIN := List(1)))
+      },
       params.year.map(yr => between(startYear, yr.head, yr.last)),
       params.genre.map(genre => Document(genres := Document(IN := genre))),
       params.titleType.map(tt => Document(titleType := Document(IN := tt))),
