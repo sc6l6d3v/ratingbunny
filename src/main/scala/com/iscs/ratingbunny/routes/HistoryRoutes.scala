@@ -1,6 +1,7 @@
 package com.iscs.ratingbunny.routes
 
 import cats.effect.Async
+import cats.implicits.*
 import com.iscs.ratingbunny.model.Requests.ReqParams
 import com.iscs.ratingbunny.repos.HistoryRepo
 import io.circe.generic.auto.*
