@@ -170,7 +170,6 @@ object ImdbRoutes extends DecodeUtils:
           for
             userOpt <- JwtAuth.userFromRequest(req, jwtSecret)
             lst     <- I.getAutosuggestTitle(title, lang, minRating, minVotes, params).compile.toList
-            _       <- hx.log(userOpt.getOrElse("guest"), params).start
             res     <- Ok(lst)
           yield res
       .map(
@@ -199,17 +198,6 @@ object ImdbRoutes extends DecodeUtils:
 
     val svc = AuthedRoutes
       .of[String, F]:
-        case authreq @ POST -> Root / "name2" / name / rating as user =>
-          ensureVerified(user) {
-            for
-              p   <- authreq.req.as[ReqParams]
-              rtg <- getRating(rating)
-              lst <- I.getByName(name, rtg, p, SortField.from(p.sortType)).compile.toList
-              _   <- hx.log(user, p).start
-              res <- Ok(lst)
-            yield res
-          }
-
         case authreq @ GET -> Root / "autoname"
             :? QParamMatcher(q)
             +& LowYearParamMatcher(lowYear)
@@ -224,7 +212,6 @@ object ImdbRoutes extends DecodeUtils:
 
             for
               lst <- I.getAutosuggestName(q, low, high).compile.toList
-              _   <- hx.log(user, params).start
               res <- Ok(lst)
             yield res
           }

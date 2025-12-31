@@ -46,8 +46,15 @@ final class HistoryRepo[F[_]: Async](private[repos] val coll: MongoCollection[F,
   private def sha256(s: String): String =
     MessageDigest.getInstance("SHA-256").digest(s.getBytes("UTF-8")).map("%02x" format _).mkString
 
+  private def genString(params: ReqParams): String = params.asJson.dropNullValues.noSpaces
+
+  /** Compute the signature for a given set of params (must match the `log` signature). */
+  def sigFor(params: ReqParams): String =
+    val json = genString(params)
+    sha256(json)
+
   private def buildSigAndDoc(userId: String, params: ReqParams): (String, Document) =
-    val json    = params.asJson.dropNullValues.noSpaces
+    val json    = genString(params)
     val sig     = sha256(json)
     val created = Instant.now()
     val doc     = Document("userId" := userId, "createdAt" := created, "params" := Document.parse(json), "sig" := sig, "hits" := 1)
@@ -81,10 +88,18 @@ final class HistoryRepo[F[_]: Async](private[repos] val coll: MongoCollection[F,
   def latest(userId: String, limit: Int = 10): Stream[F, Document] =
     coll.find(feq("userId", userId)).sort(Document("createdAt" := -1)).limit(limit).stream
 
+  /** Most frequent *n* records for a user (default 10). */
+  def popular(userId: String, limit: Int = 10): Stream[F, Document] =
+    coll.find(feq("userId", userId)).sort(Document("hits" := -1)).limit(limit).stream
+
   /** Fetch an entry by its signature. */
   def bySig(userId: String, sig: String): F[Option[Document]] =
     val query = feq("userId", userId).add(("sig", sig))
     coll.find(query).first
+
+  /** Fetch an entry by the request params (recomputes sig and delegates to `bySig`). */
+  def byParams(userId: String, params: ReqParams): F[Option[Document]] =
+    bySig(userId, sigFor(params))
 
   /** Create both indexes if they don’t already exist. Safe to call on every start‑up.
     */

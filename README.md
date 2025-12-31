@@ -4,7 +4,7 @@ Working Scala REST backend to allow retrieval of movie info and posters.
 
 Even requests to the free endpoints should include an `Authorization: Bearer <token>`
 header so activity can be attributed to a user. Calls without a valid token are
-still served but the requester will be logged as `guest`.
+still served but the requester will be logged as `guest`. Autosuggest calls will not be logged.
 
 Search history entries are stored with a compound unique index on `userId` and
 `sig` so identical queries from different users don't clash.
