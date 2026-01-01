@@ -20,7 +20,6 @@ trait VerifiedUserRoutes:
 
     if trialConfig.enabled then body
     else
-      userRepo.findByUserId(uid).flatMap {
+      userRepo.findByUserId(uid).flatMap:
         case Some(u) if u.emailVerified => body
         case _                          => Forbidden()
-      }
