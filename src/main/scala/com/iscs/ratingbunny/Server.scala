@@ -141,10 +141,10 @@ object Server:
             ImdbRoutes.publicRoutes(imdbSvc, historyRepo, jwtSecretKey) <+>
             PoolSvcRoutes.httpRoutes(poolSvc) <+>
             AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token) <+>
-            AuthRoutes.authedRoutes(userRepo, trialSvc, authMw) <+>
-            HistoryRoutes.authedRoutes(historyRepo, authMw)),
+            AuthRoutes.authedRoutes(userRepo, trialSvc, authMw)),
         s"/api/$apiVersion/pro" ->
-          ImdbRoutes.authedRoutes(imdbSvc, historyRepo, userRepo, authMw, trialConfig)
+          (ImdbRoutes.authedRoutes(imdbSvc, historyRepo, userRepo, authMw, trialConfig) <+>
+            HistoryRoutes.authedRoutes(historyRepo, userRepo, trialConfig, authMw))
       ).orNotFound
       _            <- Sync[F].delay(L.info(s""""added routes for auth, email, hx, imdb, pool, """))
       finalHttpApp <- Sync[F].delay(hpLogger.httpApp(logHeaders = true, logBody = false)(httpApp))

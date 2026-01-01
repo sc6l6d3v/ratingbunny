@@ -21,13 +21,14 @@ import org.http4s.dsl.*
 import org.http4s.dsl.impl.{OptionalMultiQueryParamDecoderMatcher, OptionalQueryParamDecoderMatcher, QueryParamDecoderMatcher}
 import org.http4s.headers.`Content-Type`
 import org.http4s.server.AuthMiddleware
+import com.iscs.ratingbunny.routes.VerifiedUserRoutes
 import com.iscs.ratingbunny.security.JwtAuth
 import org.typelevel.ci.*
 
 import scala.annotation.tailrec
 import scala.util.Try
 
-object ImdbRoutes extends DecodeUtils:
+object ImdbRoutes extends DecodeUtils with VerifiedUserRoutes:
 
   private val L            = Logger[this.type]
   private val rowSpacer    = 64
@@ -188,21 +189,13 @@ object ImdbRoutes extends DecodeUtils:
   ): HttpRoutes[F] =
     val dsl = Http4sDsl[F]; import dsl.*
 
-    def ensureVerified(uid: String)(body: => F[Response[F]]): F[Response[F]] =
-      if trialConfig.enabled then body
-      else
-        userRepo.findByUserId(uid).flatMap {
-          case Some(u) if u.emailVerified => body
-          case _                          => Forbidden()
-        }
-
     val svc = AuthedRoutes
       .of[String, F]:
         case authreq @ GET -> Root / "autoname"
             :? QParamMatcher(q)
             +& LowYearParamMatcher(lowYear)
             +& HighYearParamMatcher(highYear) as user =>
-          ensureVerified(user) {
+          ensureVerified(user, trialConfig, userRepo) {
             val low  = lowYear.getOrElse(Int.MinValue)
             val high = highYear.getOrElse(Int.MaxValue)
             val params = ReqParams(
@@ -222,7 +215,7 @@ object ImdbRoutes extends DecodeUtils:
             +& CardWidthQueryParameterMatcher(cs)
             +& CardHeightQueryParameterMatcher(ch)
             +& OffsetQUeryParameterMatcher(off) as user =>
-          ensureVerified(user) {
+          ensureVerified(user, trialConfig, userRepo) {
             val dimsL = conv(page, ws, wh, cs, ch, off)
             val pgs   = pageSize(dimsL(1), dimsL(3), dimsL(2), dimsL(4), dimsL(5))
             for
