@@ -1,6 +1,7 @@
 package com.iscs.ratingbunny.routes
 
 import cats.effect.Async
+import cats.implicits.*
 import com.iscs.ratingbunny.config.TrialConfig
 import com.iscs.ratingbunny.domains.UserRepo
 import org.http4s.Response
