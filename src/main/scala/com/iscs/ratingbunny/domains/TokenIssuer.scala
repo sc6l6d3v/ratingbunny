@@ -19,6 +19,7 @@ trait TokenIssuer[F[_]]:
   def issueGuest(uid: String): F[TokenPair]
   def rotate(refresh: String): F[Option[TokenPair]]
   def revoke(refresh: String): F[Unit]
+  def revokeUser(uid: String): F[Unit]
 
 object TokenIssuer:
   def apply[F[_]](using ev: TokenIssuer[F]): TokenIssuer[F] = ev
@@ -93,3 +94,17 @@ class TokenIssuerImpl[F[_]: Async](
 
   override def revoke(raw: String): F[Unit] =
     redis.del(s"refresh:${Hash.sha256(raw)}").void
+
+  override def revokeUser(uid: String): F[Unit] =
+    val keyPattern = s"refresh:*"
+    redis
+      .keys(keyPattern)
+      .flatMap: keys =>
+        keys
+          .filter(_.nonEmpty)
+          .traverse_ : key =>
+            redis
+              .get(key)
+              .flatMap:
+                case Some(value) if value == uid => redis.del(key).void
+                case _                           => Async[F].unit

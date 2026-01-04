@@ -302,6 +302,8 @@ package object domains:
   final case class LoginRequest(email: String, password: String)
   final case class LoginOK(userid: String, tokens: TokenPair)
   final case class SignupOK(userid: String)
+  final case class PasswordResetRequest(identifier: String)
+  final case class PasswordResetConfirmRequest(token: String, newPassword: String)
 
   /** Public view of a user, omitting sensitive fields */
   final case class UserInfo(userid: String, email: String, plan: String, displayName: Option[String])
