@@ -66,10 +66,10 @@ class PasswordResetServiceSpec extends CatsEffectSuite with EmbeddedMongo:
         _       <- service.requestReset(PasswordResetRequest("user@example.com"))
         saved   <- tokens.find.all
       yield
-        assertEquals(saved.length, 1)
+        assertEquals(saved.size, 1)
         assert(saved.head.tokenHash.nonEmpty)
         assert(saved.head.expiresAt.isAfter(saved.head.createdAt))
-        assertEquals(mailer.getSentEmails.length, 1)
+        assertEquals(mailer.getSentEmails.size, 1)
         assert(mailer.getSentEmails.head.textBody.contains("/reset-password?token="))
 
   test("confirmReset updates password, marks token used, and revokes sessions"):
