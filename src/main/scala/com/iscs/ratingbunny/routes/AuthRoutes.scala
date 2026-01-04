@@ -53,6 +53,9 @@ object AuthRoutes:
           case headers.Authorization(Credentials.Token(AuthScheme.Bearer, v)) =>
             v
 
+    def requestIp(req: Request[F]): Option[String] =
+      req.remote.map(_.host.toUriString)
+
     object TokenParamMatcher extends QueryParamDecoderMatcher[String]("token")
 
     val svc = HttpRoutes.of[F]:
@@ -129,7 +132,7 @@ object AuthRoutes:
           case Left(df) =>
             BadRequest(Json.obj("error" -> Json.fromString(df.getMessage)))
           case Right(pr) =>
-            passwordReset.requestReset(pr).attempt *> Accepted(Json.obj("status" -> "ok".asJson))
+            passwordReset.requestReset(pr, requestIp(req)).attempt *> Accepted(Json.obj("status" -> "ok".asJson))
       case req @ POST -> Root / "auth" / "password-reset" / "confirm" =>
         req.attemptAs[PasswordResetConfirmRequest].value.flatMap:
           case Left(df) => BadRequest(Json.obj("error" -> Json.fromString(df.getMessage)))
