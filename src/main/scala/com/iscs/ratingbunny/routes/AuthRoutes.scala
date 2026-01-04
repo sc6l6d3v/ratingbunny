@@ -40,8 +40,8 @@ object AuthRoutes:
     val dsl = Http4sDsl[F]
     import dsl.*
 
-    given EntityDecoder[F, RegisterReq] = jsonOf
-    given EntityDecoder[F, LoginReq]    = jsonOf
+    given EntityDecoder[F, RegisterReq]                 = jsonOf
+    given EntityDecoder[F, LoginReq]                    = jsonOf
     given EntityDecoder[F, PasswordResetRequest]        = jsonOf
     given EntityDecoder[F, PasswordResetConfirmRequest] = jsonOf
     given EntityEncoder[F, TokenPair]                   = jsonEncoderOf
@@ -128,20 +128,26 @@ object AuthRoutes:
                     Forbidden(Json.obj("error" -> Json.fromString("email not verified")))
         yield resp
       case req @ POST -> Root / "auth" / "password-reset" / "request" =>
-        req.attemptAs[PasswordResetRequest].value.flatMap:
-          case Left(df) =>
-            BadRequest(Json.obj("error" -> Json.fromString(df.getMessage)))
-          case Right(pr) =>
-            passwordReset.requestReset(pr, requestIp(req)).attempt *> Accepted(Json.obj("status" -> "ok".asJson))
+        req
+          .attemptAs[PasswordResetRequest]
+          .value
+          .flatMap:
+            case Left(df) =>
+              BadRequest(Json.obj("error" -> Json.fromString(df.getMessage)))
+            case Right(pr) =>
+              passwordReset.requestReset(pr, requestIp(req)).attempt *> Accepted(Json.obj("status" -> "ok".asJson))
       case req @ POST -> Root / "auth" / "password-reset" / "confirm" =>
-        req.attemptAs[PasswordResetConfirmRequest].value.flatMap:
-          case Left(df) => BadRequest(Json.obj("error" -> Json.fromString(df.getMessage)))
-          case Right(pr) =>
-            passwordReset
-              .confirmReset(pr)
-              .flatMap:
-                case Right(_) => Ok(Json.obj("status" -> "ok".asJson))
-                case Left(_)  => BadRequest(Json.obj("error" -> Json.fromString("invalid or expired token")))
+        req
+          .attemptAs[PasswordResetConfirmRequest]
+          .value
+          .flatMap:
+            case Left(df) => BadRequest(Json.obj("error" -> Json.fromString(df.getMessage)))
+            case Right(pr) =>
+              passwordReset
+                .confirmReset(pr)
+                .flatMap:
+                  case Right(_) => Ok(Json.obj("status" -> "ok".asJson))
+                  case Left(_)  => BadRequest(Json.obj("error" -> Json.fromString("invalid or expired token")))
       case ((POST | GET) -> Root / "auth" / "verify") :? TokenParamMatcher(strToken) =>
         for
           userOpt <- userRepo.findByVerificationToken(strToken)
