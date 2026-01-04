@@ -122,7 +122,9 @@ class PasswordResetServiceImpl[F[_]: Async](
       newHash <- EitherT.liftF(hasher.hash(req.newPassword))
       _ <- EitherT.liftF(usersCol.updateOne(feq("userid", user.userid), JUpdates.set("passwordHash", newHash)).void)
       usedAt <- EitherT.liftF(Async[F].delay(Instant.now()))
-      _      <- EitherT.liftF(tokenCol.updateOne(feq("tokenHash", hashed), JUpdates.set("usedAt", usedAt)).void)
+      _ <- EitherT.liftF(
+        tokenCol.updateOne(feq("tokenHash", hashed), JUpdates.set("usedAt", usedAt.toEpochMilli)).void
+      )
       _      <- EitherT.liftF(tokenIssuer.revokeUser(user.userid))
     yield ()
 
