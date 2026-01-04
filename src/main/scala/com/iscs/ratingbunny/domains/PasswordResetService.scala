@@ -95,14 +95,14 @@ class PasswordResetServiceImpl[F[_]: Async](
       case Some(user) if !user.emailVerified => Async[F].unit
       case Some(user) =>
         val program = for
-          now          <- EitherT.liftF(Async[F].delay(Instant.now()))
-          (token, h)   <- EitherT.liftF(generateToken())
-          expires      <- EitherT.liftF(Async[F].delay(now.plus(ttlMinutes, ChronoUnit.MINUTES)))
+          now        <- EitherT.liftF[F, Nothing, Instant](Async[F].delay(Instant.now()))
+          (token, h) <- EitherT.liftF[F, Nothing, (String, String)](generateToken())
+          expires    <- EitherT.liftF[F, Nothing, Instant](Async[F].delay(now.plus(ttlMinutes, ChronoUnit.MINUTES)))
           doc = PasswordResetTokenDoc(user.userid, h, now, expires, None, requestIp)
-          _ <- EitherT.liftF(tokenCol.deleteMany(feq("userId", user.userid)).void)
-          _ <- EitherT.liftF(tokenCol.insertOne(doc).void)
+          _ <- EitherT.liftF[F, Nothing, Unit](tokenCol.deleteMany(feq("userId", user.userid)).void)
+          _ <- EitherT.liftF[F, Nothing, Unit](tokenCol.insertOne(doc).void)
           link = s"${resetHost.stripSuffix("/")}" + s"/reset-password?token=$token"
-          _ <- EitherT.liftF(emailService.sendEmail(user.email, "Reset your password", link, link).void)
+          _ <- EitherT.liftF[F, Nothing, Unit](emailService.sendEmail(user.email, "Reset your password", link, link).void)
         yield ()
 
         program.value.void.handleErrorWith: e =>
