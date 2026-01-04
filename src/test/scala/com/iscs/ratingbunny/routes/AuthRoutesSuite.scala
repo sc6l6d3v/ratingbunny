@@ -17,6 +17,9 @@ import com.iscs.ratingbunny.domains.{
   SignupError,
   SignupRequest,
   SubscriptionStatus,
+  PasswordResetConfirmRequest,
+  PasswordResetRequest,
+  PasswordResetService,
   TokenIssuer,
   TokenPair,
   TrialService,
@@ -72,8 +75,13 @@ class AuthRoutesSuite extends CatsEffectSuite:
     def issueGuest(uid: String) = IO.pure(TokenPair(s"$uid-a", s"$uid-r"))
     def rotate(r: String)       = IO.pure(None)
     def revoke(r: String)       = IO.unit
+    def revokeUser(uid: String) = IO.unit
 
-  private val httpSvc = AuthRoutes.httpRoutes[IO](stubCheck, stubLogin, repo, stubToken).orNotFound
+  private val stubPasswordReset = new PasswordResetService[IO]:
+    def requestReset(req: PasswordResetRequest, requestIp: Option[String]) = IO.unit
+    def confirmReset(req: PasswordResetConfirmRequest) = IO.pure(Right(()))
+
+  private val httpSvc = AuthRoutes.httpRoutes[IO](stubCheck, stubLogin, repo, stubToken, stubPasswordReset).orNotFound
 
   private val token = JwtCirce.encode(JwtClaim(subject = Some(user.userid)), secret, JwtAlgorithm.HS256)
 

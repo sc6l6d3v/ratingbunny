@@ -29,6 +29,7 @@ class AuthLoginSpec extends CatsEffectSuite with EmbeddedMongo:
       def issueGuest(uid: String): IO[TokenPair]   = IO.pure(tp)
       def rotate(r: String): IO[Option[TokenPair]] = IO.pure(Some(tp))
       def revoke(r: String): IO[Unit]              = IO.unit
+      def revokeUser(uid: String): IO[Unit]        = IO.unit
 
   // ── helpers ──────────────────────────────────────────────────
   private def withMongo[A](f: MongoDatabase[IO] => IO[A]): Future[A] =

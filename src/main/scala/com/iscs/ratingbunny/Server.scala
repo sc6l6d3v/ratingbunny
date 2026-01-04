@@ -6,7 +6,7 @@ import cats.implicits.*
 import com.comcast.ip4s.*
 import com.iscs.mail.{EmailService, EmailServiceConfig}
 import com.iscs.ratingbunny.config.TrialConfig
-import com.iscs.ratingbunny.domains.{AuthCheck, AuthCheckImpl, AuthLogin, AuthLoginImpl, AutoNameRec, AutoTitleRec, BillingInfo, BillingWorkflow, ConnectionPool, ConnectionPoolImpl, CountryAwareBillingWorkflow, EmailContact, EmailContactImpl, FetchImage, ImdbQuery, ImdbQueryImpl, TitleRec, TokenIssuer, TokenIssuerImpl, TrialService, TrialServiceImpl, UserDoc, UserProfileDoc, UserRepo, UserRepoImpl}
+import com.iscs.ratingbunny.domains.{AuthCheck, AuthCheckImpl, AuthLogin, AuthLoginImpl, AutoNameRec, AutoTitleRec, BillingInfo, BillingWorkflow, ConnectionPool, ConnectionPoolImpl, CountryAwareBillingWorkflow, EmailContact, EmailContactImpl, FetchImage, ImdbQuery, ImdbQueryImpl, PasswordResetService, PasswordResetServiceImpl, PasswordResetTokenDoc, TitleRec, TokenIssuer, TokenIssuerImpl, TrialService, TrialServiceImpl, UserDoc, UserProfileDoc, UserRepo, UserRepoImpl}
 import com.iscs.ratingbunny.repos.HistoryRepo
 import com.iscs.ratingbunny.routes.{AuthRoutes, EmailContactRoutes, FetchImageRoutes, HelcimRoutes, HistoryRoutes, ImdbRoutes, PoolSvcRoutes}
 import com.iscs.ratingbunny.security.JwtAuth
@@ -47,12 +47,14 @@ object Server:
   private val usersCollection       = "users"
   private val userProfileCollection = "user_profile"
   private val billingCollection     = "billing_info"
+  private val passwordResetCollection = "password_reset_tokens"
   private val apiVersion            = "v3"
   private val helcimApiToken =
     sys.env.getOrElse("HELCIM_API_TOKEN", throw new RuntimeException("HELCIM_API_TOKEN environment variable must be set"))
 
   private val jwtSecretKey =
     sys.env.getOrElse("JWT_SECRET_KEY", throw new RuntimeException("JWT_SECRET_KEY environment variable must be set"))
+  private val resetHost = sys.env.getOrElse("RESET_HOST", "https://example.com")
 
   private val trialConfig = TrialConfig.fromEnv()
 
@@ -89,6 +91,17 @@ object Server:
   ): F[TrialService[F]] =
     for billingCol <- db.getCollectionWithCodec[BillingInfo](billingCollection)
     yield TrialServiceImpl.make(userRepo, billingCol, billingWorkflow)
+
+  private def getPasswordResetSvc[F[_]: Async](
+      db: MongoDatabase[F],
+      tokenIssuer: TokenIssuer[F],
+      emailService: EmailService[F]
+  ): F[PasswordResetService[F]] =
+    for
+      usersCol  <- db.getCollectionWithCodec[UserDoc](usersCollection)
+      tokenColl <- db.getCollectionWithCodec[PasswordResetTokenDoc](passwordResetCollection)
+      hasher = BcryptHasher.make[F](cost = 12)
+    yield PasswordResetServiceImpl.make(usersCol, tokenColl, hasher, emailService, tokenIssuer, resetHost)
 
   private def getTokenIssuerSvc[F[_]: Async](
       redis: RedisCommands[F, String, String],
@@ -127,6 +140,7 @@ object Server:
       loginSvc     <- getLoginSvc(db, token)
       emailSvc     <- getEmailSvc(db, emailService)
       userRepo     <- getUserRepoSvc(db)
+      passwordReset <- getPasswordResetSvc(db, token, emailService)
       trialSvc     <- getTrialSvc(db, userRepo, billingWorkflow)
       fetchSvc     <- Sync[F].delay(new FetchImage[F](imageHost, client))
       historyRepo  <- HistoryRepo.make(db)
@@ -140,7 +154,7 @@ object Server:
             EmailContactRoutes.httpRoutes(emailSvc) <+>
             ImdbRoutes.publicRoutes(imdbSvc, historyRepo, jwtSecretKey) <+>
             PoolSvcRoutes.httpRoutes(poolSvc) <+>
-            AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token) <+>
+            AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token, passwordReset) <+>
             AuthRoutes.authedRoutes(userRepo, trialSvc, authMw)),
         s"/api/$apiVersion/pro" ->
           (ImdbRoutes.authedRoutes(imdbSvc, historyRepo, userRepo, authMw, trialConfig) <+>
