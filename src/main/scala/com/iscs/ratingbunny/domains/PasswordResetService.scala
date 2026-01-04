@@ -16,6 +16,8 @@ import java.security.SecureRandom
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.Base64
+import java.util.concurrent.TimeUnit
+import com.mongodb.client.model.IndexOptions as JIndexOptions
 
 enum PasswordResetError:
   case InvalidOrExpired
@@ -51,7 +53,9 @@ class PasswordResetServiceImpl[F[_]: Async](
     val idxName     = "tokenHash_idx"
     val ttlIdxName  = "tokenExpires_idx"
     val ttlIndex    = Index.ascending("expiresAt")
-    val ttlOptions  = IndexOptions(background = true, expireAfter = Some(java.time.Duration.ZERO)).name(ttlIdxName)
+    val ttlOptions =
+      val opts = new JIndexOptions().background(true).name(ttlIdxName).expireAfter(0L, TimeUnit.SECONDS)
+      IndexOptions.fromJava(opts)
     val tokenIndex  = Index.ascending("tokenHash")
     val tokenOption = IndexOptions(background = true, unique = true).name(idxName)
     for
