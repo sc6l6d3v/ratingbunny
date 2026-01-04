@@ -115,7 +115,7 @@ class PasswordResetServiceImpl[F[_]: Async](
     val program = for
       now   <- EitherT.liftF(Async[F].delay(Instant.now()))
       token <- EitherT.fromOptionF(tokenCol.find(feq("tokenHash", hashed)).first, PasswordResetError.InvalidOrExpired)
-      _ <- EitherT.fromOption[F, PasswordResetError](
+      _ <- EitherT.fromOption(
         Option.when(token.usedAt.isEmpty && token.expiresAt.isAfter(now))(()),
         PasswordResetError.InvalidOrExpired
       )
