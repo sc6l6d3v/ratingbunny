@@ -102,7 +102,7 @@ class TokenIssuerImpl[F[_]: Async](
       .flatMap: keys =>
         keys
           .filter(_.nonEmpty)
-          .traverse_: key =>
+          .traverse_ : key =>
             redis
               .get(key)
               .flatMap:
