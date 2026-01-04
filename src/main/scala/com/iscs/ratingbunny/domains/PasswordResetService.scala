@@ -17,6 +17,7 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.Base64
 import java.util.concurrent.TimeUnit
+import io.circe.{Codec, Decoder, Encoder}
 
 enum PasswordResetError:
   case InvalidOrExpired
@@ -141,5 +142,8 @@ object PasswordResetServiceImpl:
 
 object PasswordResetTokenDoc:
   import io.circe.generic.semiauto.*
-  import io.circe.Codec
+  given instantCodec: Codec[Instant] = Codec.from(
+    Decoder.decodeLong.map(Instant.ofEpochMilli),
+    Encoder.encodeLong.contramap[Instant](_.toEpochMilli)
+  )
   given Codec[PasswordResetTokenDoc] = deriveCodec[PasswordResetTokenDoc]
