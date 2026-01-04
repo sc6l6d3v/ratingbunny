@@ -97,8 +97,14 @@ class TokenIssuerImpl[F[_]: Async](
 
   override def revokeUser(uid: String): F[Unit] =
     val keyPattern = s"refresh:*"
-    redis.keys(keyPattern).flatMap: keys =>
-      keys.filter(_.nonEmpty).traverse_: key =>
-        redis.get(key).flatMap:
-          case Some(value) if value == uid => redis.del(key).void
-          case _                           => Async[F].unit
+    redis
+      .keys(keyPattern)
+      .flatMap: keys =>
+        keys
+          .filter(_.nonEmpty)
+          .traverse_: key =>
+            redis
+              .get(key)
+              .flatMap:
+                case Some(value) if value == uid => redis.del(key).void
+                case _                           => Async[F].unit
