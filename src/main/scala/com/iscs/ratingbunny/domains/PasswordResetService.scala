@@ -46,7 +46,7 @@ class PasswordResetServiceImpl[F[_]: Async](
     ttlMinutes: Long = 30L
 ) extends PasswordResetService[F] with QuerySetup:
   private val L              = Logger[this.type]
-  private val random        = SecureRandom()
+  private val random         = SecureRandom()
   private val minPasswordLen = 8
 
   private def ensureIndexes: F[Unit] =
@@ -91,7 +91,7 @@ class PasswordResetServiceImpl[F[_]: Async](
       else usersCol.find(feq("userid", identifier)).first
 
     ensureIndexes *> lookupUser.flatMap:
-      case None => Async[F].unit
+      case None                              => Async[F].unit
       case Some(user) if !user.emailVerified => Async[F].unit
       case Some(user) =>
         val program = for
@@ -117,15 +117,15 @@ class PasswordResetServiceImpl[F[_]: Async](
         Option.when(token.usedAt.isEmpty && token.expiresAt.isAfter(now))(()),
         PasswordResetError.InvalidOrExpired
       )
-      _ <- EitherT.fromEither[F](validatePw(req.newPassword))
-      user <- EitherT.fromOptionF(usersCol.find(feq("userid", token.userId)).first, PasswordResetError.InvalidOrExpired)
+      _       <- EitherT.fromEither[F](validatePw(req.newPassword))
+      user    <- EitherT.fromOptionF(usersCol.find(feq("userid", token.userId)).first, PasswordResetError.InvalidOrExpired)
       newHash <- EitherT.liftF(hasher.hash(req.newPassword))
-      _ <- EitherT.liftF(usersCol.updateOne(feq("userid", user.userid), JUpdates.set("passwordHash", newHash)).void)
-      usedAt <- EitherT.liftF(Async[F].delay(Instant.now()))
+      _       <- EitherT.liftF(usersCol.updateOne(feq("userid", user.userid), JUpdates.set("passwordHash", newHash)).void)
+      usedAt  <- EitherT.liftF(Async[F].delay(Instant.now()))
       _ <- EitherT.liftF(
         tokenCol.updateOne(feq("tokenHash", hashed), JUpdates.set("usedAt", usedAt.toEpochMilli)).void
       )
-      _      <- EitherT.liftF(tokenIssuer.revokeUser(user.userid))
+      _ <- EitherT.liftF(tokenIssuer.revokeUser(user.userid))
     yield ()
 
     program.value
@@ -144,8 +144,20 @@ object PasswordResetServiceImpl:
 
 object PasswordResetTokenDoc:
   import io.circe.generic.semiauto.*
+
+  // Use BSON DateTime codec instead of Long for Instant
   given instantCodec: Codec[Instant] = Codec.from(
-    Decoder.decodeLong.map(Instant.ofEpochMilli),
-    Encoder.encodeLong.contramap[Instant](_.toEpochMilli)
+    Decoder.instance(c =>
+      c.as[Long]
+        .map(Instant.ofEpochMilli)
+        .orElse(
+          c.as[String]
+            .flatMap(s => scala.util.Try(Instant.parse(s)).toEither.left.map(e => io.circe.DecodingFailure(e.getMessage, c.history)))
+        )
+    ),
+    Encoder.instance(instant =>
+      io.circe.Json.obj("$date" -> io.circe.Json.obj("$numberLong" -> io.circe.Json.fromString(instant.toEpochMilli.toString)))
+    )
   )
+
   given Codec[PasswordResetTokenDoc] = deriveCodec[PasswordResetTokenDoc]
