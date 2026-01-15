@@ -71,4 +71,4 @@ object RabbitConfig:
     )
 
   def resource[F[_]: Async](config: RabbitConfig): Resource[F, RabbitClient[F]] =
-    RabbitClient[F].resource(config.toFs2RabbitConfig)
+    RabbitClient.default[F](config.toFs2RabbitConfig).resource

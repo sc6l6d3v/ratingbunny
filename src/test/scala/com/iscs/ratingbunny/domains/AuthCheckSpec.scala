@@ -150,7 +150,7 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         users    <- db.getCollectionWithCodec[UserDoc]("users")
         prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
         billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
-        failingPublisher: EmailJob => IO[Unit] = _ => IO.raiseError(new RuntimeException("bad address"))
+        failingPublisher = (job: EmailJob) => IO.raiseError(new RuntimeException("bad address"))
         svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, failingPublisher, stubBillingWorkflow, trialConfig)
         res <- svc.signup(mkSignup())
       yield assertEquals(res, Left(SignupError.BadEmail))

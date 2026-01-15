@@ -192,6 +192,9 @@ package object domains:
       locale: Option[String] = Some("en_US")
   )
 
+  object UserProfileDoc:
+    given Codec[UserProfileDoc] = deriveCodec
+
   // ── Which gateway is backing this record (future‑proofing) ──
   enum BillingGateway derives CanEqual:
     case Helcim, Stripe

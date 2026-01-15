@@ -1,25 +1,26 @@
 package com.iscs.ratingbunny.messaging
 
+import cats.implicits.*
 import cats.effect.{Async, Resource}
-import com.rabbitmq.client.BuiltinExchangeType
+import dev.profunktor.fs2rabbit.config.declaration.DeclarationQueueConfig
 import dev.profunktor.fs2rabbit.interpreter.RabbitClient
 import dev.profunktor.fs2rabbit.model.*
 import io.circe.syntax.*
 
 object EmailPublisher:
-  val Exchange: ExchangeName     = ExchangeName("rb.email")
-  val Queue: QueueName           = QueueName("rb.email.jobs")
+  val Exchange: ExchangeName        = ExchangeName("rb.email")
+  val Queue: QueueName              = QueueName("rb.email.jobs")
   val ContactRoutingKey: RoutingKey = RoutingKey("email.contact")
   val VerifyRoutingKey: RoutingKey  = RoutingKey("email.verify_signup")
 
   def setup[F[_]: Async](client: RabbitClient[F]): Resource[F, Unit] =
     client.createConnectionChannel.evalMap { implicit ch =>
-      Async[F].delay {
-        ch.exchangeDeclare(Exchange.value, BuiltinExchangeType.TOPIC, true)
-        ch.queueDeclare(Queue.value, true, false, false, null)
-        ch.queueBind(Queue.value, Exchange.value, ContactRoutingKey.value)
-        ch.queueBind(Queue.value, Exchange.value, VerifyRoutingKey.value)
-      }
+      for
+        _ <- client.declareExchange(Exchange, ExchangeType.Topic)
+        _ <- client.declareQueue(DeclarationQueueConfig.default(Queue))
+        _ <- client.bindQueue(Queue, Exchange, ContactRoutingKey)
+        _ <- client.bindQueue(Queue, Exchange, VerifyRoutingKey)
+      yield ()
     }
 
   def make[F[_]: Async](client: RabbitClient[F]): Resource[F, EmailJob => F[Unit]] =

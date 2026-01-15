@@ -96,7 +96,7 @@ class EmailContactSpec extends AsyncWordSpec with Matchers with EmbeddedMongo:
           for
             db      <- setupTestDatabase("test", client)
             emailFx <- setupTestCollection(db, "mock")
-            failingPublish: EmailJob => IO[Unit] = _ => IO.raiseError(new RuntimeException("publish failed"))
+            failingPublish = (job: EmailJob) => IO.raiseError(new RuntimeException("publish failed"))
             emailContact = new EmailContactImpl[IO](emailFx, failingPublish)
             result <- emailContact
               .saveEmail("John Doe", "john.doe@example.com", "Test", "msg")
