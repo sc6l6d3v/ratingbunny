@@ -12,7 +12,7 @@ import scala.concurrent.duration.*
 
 object CORSSetup:
   private val L = Logger[this.type]
-  private val reactDeploys: Set[Origin.Host] = sys.env
+  val defaultOrigins: Set[Origin.Host] = sys.env
     .getOrElse("ORIGINS", "http://localhost")
     .split(",")
     .flatMap(o =>
@@ -22,22 +22,27 @@ object CORSSetup:
         case Left(l)                           => L.error(s"got bad host: $l"); List.empty[Origin.Host]
     )
     .toSet
-  L.info(s"got origins: ${reactDeploys.mkString(",")}")
+  L.info(s"got origins: ${defaultOrigins.mkString(",")}")
   private val methods = Set(Method.GET, Method.POST)
-  private val checkOrigin: Origin.Host => Boolean = host =>
-    val ok = reactDeploys.contains(host)
-    if !ok then L.debug(s"origin ${host.renderString} NOT accepted (not in ${reactDeploys.size} allowed origins)")
-    else L.debug(s"origin ${host.renderString} accepted")
-    ok
 
-  def methodConfig[F[_]: Async](svc: HttpRoutes[F]): HttpRoutes[F] = CORS.policy
-    .withAllowCredentials(true)
-    .withMaxAge(1.day)
-    .withAllowMethodsIn(methods)
-    .withAllowHeadersIn(Set(ci"Content-Type", ci"Authorization", ci"Accept"))
-    .withAllowOriginHost(checkOrigin)
-    .withExposeHeadersIn(Set(ci"X-Remaining-Count"))
-    .apply(svc)
+  def methodConfig[F[_]: Async](svc: HttpRoutes[F]): HttpRoutes[F] =
+    methodConfig(svc, defaultOrigins)
+
+  def methodConfig[F[_]: Async](svc: HttpRoutes[F], origins: Set[Origin.Host]): HttpRoutes[F] =
+    val checkOrigin: Origin.Host => Boolean = host =>
+      val ok = origins.contains(host)
+      if !ok then L.debug(s"origin ${host.renderString} NOT accepted (not in ${origins.size} allowed origins)")
+      else L.debug(s"origin ${host.renderString} accepted")
+      ok
+
+    CORS.policy
+      .withAllowCredentials(true)
+      .withMaxAge(1.day)
+      .withAllowMethodsIn(methods)
+      .withAllowHeadersIn(Set(ci"Content-Type", ci"Authorization", ci"Accept"))
+      .withAllowOriginHost(checkOrigin)
+      .withExposeHeadersIn(Set(ci"X-Remaining-Count"))
+      .apply(svc)
 
   def RouteNotFound(badVal: String): RouteMessage =
     RouteMessage(badVal)

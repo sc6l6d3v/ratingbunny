@@ -5,6 +5,9 @@ import munit.CatsEffectSuite
 import org.http4s.*
 import org.http4s.client.Client
 import org.http4s.implicits.*
+import org.http4s.headers.Origin.Host
+import org.http4s.Uri.RegName
+import org.http4s.Uri.Scheme.http
 import org.typelevel.ci.CIString
 import fs2.Stream
 
@@ -24,8 +27,11 @@ object DummyFetchImage extends com.iscs.ratingbunny.domains.FetchImage[IO](
     Stream.emits("dummyImageData".getBytes).covary[IO]
 
 class FetchImageRoutesSuite extends CatsEffectSuite:
+  private val testOrigins: Set[Host] = Set(
+    Host(http, RegName("localhost"), None)
+  )
 
-  private val fetchImageRoutes: HttpRoutes[IO] = FetchImageRoutes.httpRoutes[IO](DummyFetchImage)
+  private val fetchImageRoutes: HttpRoutes[IO] = FetchImageRoutes.httpRoutes[IO](DummyFetchImage, testOrigins)
   private val originCI: CIString               = CIString("Origin")
 
   test("GET /image/:imdbId with allowed origin returns CORS header"):

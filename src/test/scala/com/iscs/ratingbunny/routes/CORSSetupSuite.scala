@@ -4,7 +4,10 @@ import cats.effect.IO
 import munit.CatsEffectSuite
 import org.http4s.*
 import org.http4s.dsl.io.*
+import org.http4s.headers.Origin.Host
 import org.http4s.implicits.*
+import org.http4s.Uri.RegName
+import org.http4s.Uri.Scheme.http
 import org.typelevel.ci.CIString
 
 class CORSSetupSuite extends CatsEffectSuite:
@@ -14,8 +17,12 @@ class CORSSetupSuite extends CatsEffectSuite:
     case GET -> Root / "ping" =>
       Ok("pong")
 
+  private val testOrigins: Set[Host] = Set(
+    Host(http, RegName("localhost"), None)
+  )
+
   // Wrap the dummy service with CORSSetup.methodConfig.
-  private val corsRoutes: HttpRoutes[IO] = CORSSetup.methodConfig(dummyRoutes)
+  private val corsRoutes: HttpRoutes[IO] = CORSSetup.methodConfig(dummyRoutes, testOrigins)
 
   private val originCI = CIString("Origin")
 

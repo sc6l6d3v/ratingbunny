@@ -7,6 +7,7 @@ import com.typesafe.scalalogging.Logger
 import org.http4s.*
 import org.http4s.CacheDirective
 import org.http4s.MediaType.image.*
+import org.http4s.headers.Origin.Host
 import org.http4s.dsl.Http4sDsl
 import org.http4s.headers.{`Cache-Control`, `Content-Type`}
 
@@ -16,7 +17,7 @@ import scala.language.postfixOps
 object FetchImageRoutes:
   private val L = Logger[this.type]
 
-  def httpRoutes[F[_]: Async](R: FetchImage[F]): HttpRoutes[F] =
+  def httpRoutes[F[_]: Async](R: FetchImage[F], origins: Set[Host] = CORSSetup.defaultOrigins): HttpRoutes[F] =
     val dsl = Http4sDsl[F]
     import dsl.*
     val imgSvc = HttpRoutes
@@ -36,4 +37,4 @@ object FetchImageRoutes:
               )
           yield resp
       .map(_.withContentType(`Content-Type`(`jpeg`)))
-    CORSSetup.methodConfig(imgSvc)
+    CORSSetup.methodConfig(imgSvc, origins)
