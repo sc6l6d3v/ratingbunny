@@ -2,7 +2,7 @@ package com.iscs.ratingbunny.messaging
 
 import cats.implicits.*
 import cats.effect.{Async, Resource}
-import dev.profunktor.fs2rabbit.config.declaration.DeclarationQueueConfig
+import dev.profunktor.fs2rabbit.config.declaration.{DeclarationExchangeConfig, DeclarationQueueConfig}
 import dev.profunktor.fs2rabbit.interpreter.RabbitClient
 import dev.profunktor.fs2rabbit.model.*
 import io.circe.syntax.*
@@ -16,8 +16,10 @@ object EmailPublisher:
   def setup[F[_]: Async](client: RabbitClient[F]): Resource[F, Unit] =
     client.createConnectionChannel.evalMap { implicit ch =>
       for
-        _ <- client.declareExchange(Exchange, ExchangeType.Topic)
-        _ <- client.declareQueue(DeclarationQueueConfig.default(Queue))
+        _ <- client.declareExchange(
+          DeclarationExchangeConfig.default(Exchange, ExchangeType.Topic).copy(durable = true)
+        )
+        _ <- client.declareQueue(DeclarationQueueConfig.default(Queue).copy(durable = true))
         _ <- client.bindQueue(Queue, Exchange, ContactRoutingKey)
         _ <- client.bindQueue(Queue, Exchange, VerifyRoutingKey)
       yield ()
