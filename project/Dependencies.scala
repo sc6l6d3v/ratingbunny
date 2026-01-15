@@ -6,6 +6,7 @@ object Dependencies {
     val circeVersion      = "0.14.15"
     val emailSvc          = "1.1"
     val fs2Version        = "3.12.2"
+    val fs2RabbitVersion  = "5.5.0"
     val helcim4sVersion   = "1.0"
     val Http4sVersion     = "0.23.32"
     val jsoupVersion      = "1.17.2"
@@ -50,6 +51,11 @@ object Dependencies {
   object fs2 {
     val core = "co.fs2" %% "fs2-core" % V.fs2Version
     val io   = "co.fs2" %% "fs2-io"   % V.fs2Version
+  }
+
+  object fs2Rabbit {
+    val core  = "dev.profunktor" %% "fs2-rabbit"       % V.fs2RabbitVersion
+    val circe = "dev.profunktor" %% "fs2-rabbit-circe" % V.fs2RabbitVersion
   }
 
   object bcrypt {
