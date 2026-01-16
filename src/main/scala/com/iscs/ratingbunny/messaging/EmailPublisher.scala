@@ -8,18 +8,16 @@ import dev.profunktor.fs2rabbit.model.*
 import io.circe.syntax.*
 
 object EmailPublisher:
-  val Exchange: ExchangeName        = ExchangeName("rb.email")
-  val Queue: QueueName              = QueueName("rb.email.jobs")
-  val ContactRoutingKey: RoutingKey = RoutingKey("email.contact")
-  val VerifyRoutingKey: RoutingKey  = RoutingKey("email.verify_signup")
+  private val Exchange: ExchangeName        = ExchangeName("rb.email")
+  private val Queue: QueueName              = QueueName("rb.email.jobs")
+  private val ContactRoutingKey: RoutingKey = RoutingKey("email.contact")
+  private val VerifyRoutingKey: RoutingKey  = RoutingKey("email.verify_signup")
 
-  def setup[F[_]: Async](client: RabbitClient[F]): Resource[F, Unit] =
+  private def setup[F[_]: Async](client: RabbitClient[F]): Resource[F, Unit] =
     client.createConnectionChannel.evalMap { implicit ch =>
       for
-        _ <- client.declareExchange(
-          DeclarationExchangeConfig.default(Exchange, ExchangeType.Topic).copy(durable = true)
-        )
-        _ <- client.declareQueue(DeclarationQueueConfig.default(Queue).copy(durable = true))
+        _ <- client.declareExchange(DeclarationExchangeConfig.default(Exchange, ExchangeType.Topic).withDurable)
+        _ <- client.declareQueue(DeclarationQueueConfig.default(Queue).withDurable)
         _ <- client.bindQueue(Queue, Exchange, ContactRoutingKey)
         _ <- client.bindQueue(Queue, Exchange, VerifyRoutingKey)
       yield ()
