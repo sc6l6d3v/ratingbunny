@@ -59,8 +59,8 @@ class EmailContactImpl[F[_]: MonadCancelThrow: Sync](
           fieldEmail   := email,
           fieldSubject := subject,
           fieldMsg     := msg,
-          fieldCreationDate := BsonValue.BDateTime(Instant.now),
-          fieldLastModified := BsonValue.BDateTime(Instant.now)
+          fieldCreationDate := Instant.now(),
+          fieldLastModified := Instant.now()
         )
       )
     yield doc
