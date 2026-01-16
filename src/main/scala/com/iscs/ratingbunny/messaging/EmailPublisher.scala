@@ -2,7 +2,7 @@ package com.iscs.ratingbunny.messaging
 
 import cats.implicits.*
 import cats.effect.{Async, Resource}
-import dev.profunktor.fs2rabbit.config.declaration.{DeclarationExchangeConfig, DeclarationQueueConfig}
+import dev.profunktor.fs2rabbit.config.declaration.*
 import dev.profunktor.fs2rabbit.interpreter.RabbitClient
 import dev.profunktor.fs2rabbit.model.*
 import io.circe.syntax.*
