@@ -24,9 +24,6 @@ trait TokenIssuer[F[_]]:
 object TokenIssuer:
   def apply[F[_]](using ev: TokenIssuer[F]): TokenIssuer[F] = ev
 
-given Conversion[FiniteDuration, Instant] with
-  def apply(fd: FiniteDuration): Instant = Instant.ofEpochMilli(fd.toMillis)
-
 class TokenIssuerImpl[F[_]: Async](
     redis: RedisCommands[F, String, String],
     userRepo: UserRepo[F],
@@ -34,6 +31,8 @@ class TokenIssuerImpl[F[_]: Async](
     accessTtl: FiniteDuration = 15.minutes,
     refreshTtl: FiniteDuration = 30.days
 ) extends TokenIssuer[F]:
+
+  extension (fd: FiniteDuration) def toInstant: Instant = Instant.ofEpochMilli(fd.toMillis)
 
   private object Hash:
     private val md                = java.security.MessageDigest.getInstance("SHA-256")
@@ -67,8 +66,8 @@ class TokenIssuerImpl[F[_]: Async](
       jwt = JwtCirce.encode(
         JwtClaim(
           subject = Some(uid),
-          issuedAt = Some(nowDuration.length),
-          expiration = Some((nowDuration + accessTtl).length),
+          issuedAt = Some(nowDuration.toInstant.getEpochSecond),
+          expiration = Some((nowDuration + accessTtl).toInstant.getEpochSecond),
           jwtId = Some(jti)
         ),
         key,
