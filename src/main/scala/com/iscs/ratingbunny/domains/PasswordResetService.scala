@@ -131,7 +131,7 @@ class PasswordResetServiceImpl[F[_]: Async](
       _       <- EitherT.liftF(usersCol.updateOne(feq("userid", user.userid), JUpdates.set("passwordHash", newHash)).void)
       usedAt  <- EitherT.liftF(Async[F].delay(Instant.now()))
       _ <- EitherT.liftF(
-        tokenCol.updateOne(feq("tokenHash", hashed), JUpdates.set("usedAt", usedAt.toEpochMilli)).void
+        tokenCol.updateOne(feq("tokenHash", hashed), JUpdates.set("usedAt", usedAt)).void
       )
       _ <- EitherT.liftF(tokenIssuer.revokeUser(user.userid))
       _ <- EitherT.liftF(Async[F].delay(L.info(s"confirm reset on : ${user.userid} completed")))

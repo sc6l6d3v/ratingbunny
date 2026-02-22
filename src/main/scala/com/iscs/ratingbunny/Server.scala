@@ -6,9 +6,46 @@ import cats.implicits.*
 import com.comcast.ip4s.*
 import com.iscs.mail.{EmailService, EmailServiceConfig}
 import com.iscs.ratingbunny.config.TrialConfig
-import com.iscs.ratingbunny.domains.{AuthCheck, AuthCheckImpl, AuthLogin, AuthLoginImpl, AutoNameRec, AutoTitleRec, BillingInfo, BillingWorkflow, ConnectionPool, ConnectionPoolImpl, CountryAwareBillingWorkflow, EmailContact, EmailContactImpl, FetchImage, ImdbQuery, ImdbQueryImpl, PasswordResetService, PasswordResetServiceImpl, PasswordResetTokenDoc, TitleRec, TokenIssuer, TokenIssuerImpl, TrialService, TrialServiceImpl, UserDoc, UserProfileDoc, UserRepo, UserRepoImpl}
+import com.iscs.ratingbunny.domains.{
+  AuthCheck,
+  AuthCheckImpl,
+  AuthLogin,
+  AuthLoginImpl,
+  AutoNameRec,
+  AutoTitleRec,
+  BillingInfo,
+  BillingWorkflow,
+  ConnectionPool,
+  ConnectionPoolImpl,
+  CountryAwareBillingWorkflow,
+  EmailContact,
+  EmailContactImpl,
+  FetchImage,
+  ImdbQuery,
+  ImdbQueryImpl,
+  PasswordResetService,
+  PasswordResetServiceImpl,
+  PasswordResetTokenDoc,
+  TitleRec,
+  TokenIssuer,
+  TokenIssuerImpl,
+  TrialService,
+  TrialServiceImpl,
+  UserDoc,
+  UserProfileDoc,
+  UserRepo,
+  UserRepoImpl
+}
 import com.iscs.ratingbunny.repos.HistoryRepo
-import com.iscs.ratingbunny.routes.{AuthRoutes, EmailContactRoutes, FetchImageRoutes, HelcimRoutes, HistoryRoutes, ImdbRoutes, PoolSvcRoutes}
+import com.iscs.ratingbunny.routes.{
+  AuthRoutes,
+  EmailContactRoutes,
+  FetchImageRoutes,
+  HelcimRoutes,
+  HistoryRoutes,
+  ImdbRoutes,
+  PoolSvcRoutes
+}
 import com.iscs.ratingbunny.security.JwtAuth
 import com.iscs.ratingbunny.util.BcryptHasher
 import com.typesafe.scalalogging.Logger
@@ -40,15 +77,15 @@ object Server:
     debug = sys.env.getOrElse("DEBUG", "false").toBoolean
   )
 
-  private val peopleCollection      = "people"
-  private val peopleTitlesCollection = "people_titles"
-  private val emailCollection       = "email_contact"
-  private val tbrCollection         = "titles"
-  private val usersCollection       = "users"
-  private val userProfileCollection = "user_profile"
-  private val billingCollection     = "billing_info"
+  private val peopleCollection        = "people"
+  private val peopleTitlesCollection  = "people_titles"
+  private val emailCollection         = "email_contact"
+  private val tbrCollection           = "titles"
+  private val usersCollection         = "users"
+  private val userProfileCollection   = "user_profile"
+  private val billingCollection       = "billing_info"
   private val passwordResetCollection = "password_reset_tokens"
-  private val apiVersion            = "v3"
+  private val apiVersion              = "v3"
   private val helcimApiToken =
     sys.env.getOrElse("HELCIM_API_TOKEN", throw new RuntimeException("HELCIM_API_TOKEN environment variable must be set"))
 
@@ -133,19 +170,19 @@ object Server:
   ): F[HttpApp[F]] =
     given Network[F] = Network.forAsync[F]
     for
-      token        <- getTokenIssuerSvc(redis, db, jwtSecretKey)
-      emailService <- EmailService.initialize(ServiceConfig)
+      token           <- getTokenIssuerSvc(redis, db, jwtSecretKey)
+      emailService    <- EmailService.initialize(ServiceConfig)
       billingWorkflow <- CountryAwareBillingWorkflow.make[F](trialConfig)
-      authSvc      <- getAuthSvc(db, emailService, billingWorkflow, trialConfig)
-      loginSvc     <- getLoginSvc(db, token)
-      emailSvc     <- getEmailSvc(db, emailService)
-      userRepo     <- getUserRepoSvc(db)
-      passwordReset <- getPasswordResetSvc(db, token, emailService)
-      trialSvc     <- getTrialSvc(db, userRepo, billingWorkflow)
-      fetchSvc     <- Sync[F].delay(new FetchImage[F](imageHost, client))
-      historyRepo  <- HistoryRepo.make(db)
-      imdbSvc      <- getImdbSvc(db, client)
-      poolSvc      <- getPoolStatsSvc(db)
+      authSvc         <- getAuthSvc(db, emailService, billingWorkflow, trialConfig)
+      loginSvc        <- getLoginSvc(db, token)
+      emailSvc        <- getEmailSvc(db, emailService)
+      userRepo        <- getUserRepoSvc(db)
+      passwordReset   <- getPasswordResetSvc(db, token, emailService)
+      trialSvc        <- getTrialSvc(db, userRepo, billingWorkflow)
+      fetchSvc        <- Sync[F].delay(new FetchImage[F](imageHost, client))
+      historyRepo     <- HistoryRepo.make(db)
+      imdbSvc         <- getImdbSvc(db, client)
+      poolSvc         <- getPoolStatsSvc(db)
       authMw = JwtAuth.middleware(jwtSecretKey)
       httpApp = Router(
         s"/api/$apiVersion" ->
@@ -165,7 +202,7 @@ object Server:
     yield finalHttpApp
 
   def getResource[F[_]: Async](finalHttpApp: HttpApp[F]): Resource[F, Server] =
-    implicit val networkInstance: Network[F] = Network.forAsync[F]
+    given Network[F] = Network.forAsync[F]
     for server <- EmberServerBuilder
         .default[F]
         .withHost(Ipv4Address.fromString(bindHost).getOrElse(ipv4"0.0.0.0"))
