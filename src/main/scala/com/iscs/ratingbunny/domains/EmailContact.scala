@@ -2,18 +2,13 @@ package com.iscs.ratingbunny.domains
 
 import cats.effect.*
 import cats.implicits.*
-import com.iscs.mail.EmailService
 import com.typesafe.scalalogging.Logger
+import com.iscs.ratingbunny.messaging.EmailJob
 import mongo4cats.bson.syntax.*
 import mongo4cats.bson.{BsonValue, Document}
 import mongo4cats.collection.MongoCollection
-import org.bson.conversions.Bson as mbson
-import org.mongodb.scala.model.*
-import org.mongodb.scala.result.UpdateResult
 
 import java.time.Instant
-import jakarta.mail.MessagingException
-import jakarta.mail.internet.{InternetAddress, MimeUtility} // Java-21 module name
 import scala.concurrent.duration.FiniteDuration
 import scala.util.matching.Regex
 
@@ -30,7 +25,7 @@ final case class Email(name: String, email: String, subject: String, msg: String
 
 class EmailContactImpl[F[_]: MonadCancelThrow: Sync](
     emailFx: MongoCollection[F, Document],
-    emailService: EmailService[F]
+    publishEmailJob: EmailJob => F[Unit]
 ) extends EmailContact[F]:
   private val L = Logger[this.type]
 
@@ -41,8 +36,8 @@ class EmailContactImpl[F[_]: MonadCancelThrow: Sync](
   private val fieldCreationDate = "creationDate"
   private val fieldLastModified = "lastModified"
   private val fieldName         = "name"
+  private val fieldEmail        = "email"
   private val fieldSubject      = "subject"
-  private val field_id          = "_id"
   private val fieldMsg          = "msg"
 
   private def checkVal(value: String, pattern: Regex): F[Boolean] =
@@ -61,41 +56,28 @@ class EmailContactImpl[F[_]: MonadCancelThrow: Sync](
     for doc <- Sync[F].delay(
         Document(
           fieldName    := name,
+          fieldEmail   := email,
           fieldSubject := subject,
-          field_id     := email,
-          fieldMsg     := msg
+          fieldMsg     := msg,
+          fieldCreationDate := Instant.now(),
+          fieldLastModified := Instant.now()
         )
       )
     yield doc
 
-  def makeUpdateDoc(doc: Document): F[mbson] =
-    for updateDoc <- Sync[F].delay(
-        Updates.combine(
-          Document("$set" := doc),
-          Updates.setOnInsert(fieldCreationDate, BsonValue.BDateTime(Instant.now)),
-          Updates.currentDate(fieldLastModified)
-        )
-      )
-    yield updateDoc
-
-  private def updateMsg(name: String, email: String, subject: String, msg: String): F[String] =
+  private def insertMsg(name: String, email: String, subject: String, msg: String): F[String] =
     for
       asDoc     <- makeDoc(name, email, subject, msg)
-      updateDoc <- makeUpdateDoc(asDoc)
       result <- Clock[F].timed(
-        emailFx.updateOne(
-          Filters.eq(field_id, email),
-          updateDoc,
-          UpdateOptions().upsert(true)
-        )
+        emailFx.insertOne(asDoc)
       )
-      (updateTime: FiniteDuration, updateResult: UpdateResult) = result
-      _ <- Sync[F].delay(L.info(s"update email doc in {} ms", updateTime.toMillis))
-      emailResponse <- Sync[F].delay:
-        Option(updateResult.getUpsertedId)
-          .map(_.asString().getValue)
-          .getOrElse(email)
-    yield emailResponse
+      (insertTime: FiniteDuration, insertResult) = result
+      _ <- Sync[F].delay(L.info(s"insert email doc in {} ms", insertTime.toMillis))
+      insertedId <- Sync[F].delay:
+        Option(insertResult.getInsertedId)
+          .map(_.asObjectId().getValue.toHexString)
+          .getOrElse("")
+    yield insertedId
 
   override def saveEmail(name: String, email: String, subject: String, msg: String): F[String] =
     val truncSubject = subject.take(maxValLen)
@@ -104,38 +86,18 @@ class EmailContactImpl[F[_]: MonadCancelThrow: Sync](
     validate(name, email).flatMap: isValid =>
       val emailAction: F[String] =
         if (isValid)
-          updateMsg(name, email, truncSubject, truncMsg)
-          sendEmail(name, email, truncSubject, truncMsg)
+          insertMsg(name, email, truncSubject, truncMsg).flatTap: correlationId =>
+            publishEmailJob(
+              EmailJob(
+                EmailJob.KindContact,
+                email,
+                correlationId = Option.when(correlationId.nonEmpty)(correlationId)
+              )
+            )
         else Sync[F].delay(s"Invalid: $email")
 
       Clock[F]
         .timed(emailAction)
         .flatMap:
-          case (totEmailTime, emailJson) =>
-            Sync[F].delay(L.info(s"total email time {} ms", totEmailTime.toMillis)).as(emailJson)
-
-  /** Build  <Display Name> <addr@dom.tld>  string following RFC-5322/2047 */
-  def rfcAddress(display: String, email: String): String =
-    // InternetAddress will quote or RFC-2047-encode when needed
-    val ia = new InternetAddress()
-    ia.setAddress(email)
-    ia.setPersonal(display, "UTF-8") // encode if non-ASCII
-    ia.toString                      // returns the RFC-compliant form
-
-  private def sendEmail(name: String, email: String, subject: String, msg: String): F[String] =
-    val to           = rfcAddress(name, email) // ← RFC-correct
-    val truncSubject = subject.take(maxValLen)
-    val truncMsg     = msg.take(maxMsgLen)
-    (for
-      receipt <- emailService.sendEmail(to, truncSubject, truncMsg, truncMsg)
-      messageId = receipt.head
-      _ <- Sync[F].delay(L.info(s"Email $email - Message ID: $messageId"))
-    yield messageId).handleErrorWith:
-      case e: MessagingException =>
-        Sync[F]
-          .delay(L.error(s"Failed to send email to $email: ${e.getMessage}"))
-          *> Sync[F].raiseError[String](e)
-      case e =>
-        Sync[F]
-          .delay(L.error(s"Unexpected error sending email to $email: ${e.getMessage}"))
-          *> Sync[F].raiseError[String](e)
+          case (totEmailTime, _) =>
+            Sync[F].delay(L.info(s"total email time {} ms", totEmailTime.toMillis)).as(email)

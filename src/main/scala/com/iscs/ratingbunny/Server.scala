@@ -6,36 +6,8 @@ import cats.implicits.*
 import com.comcast.ip4s.*
 import com.iscs.mail.{EmailService, EmailServiceConfig}
 import com.iscs.ratingbunny.config.TrialConfig
-import com.iscs.ratingbunny.domains.{
-  AuthCheck,
-  AuthCheckImpl,
-  AuthLogin,
-  AuthLoginImpl,
-  AutoNameRec,
-  AutoTitleRec,
-  BillingInfo,
-  BillingWorkflow,
-  ConnectionPool,
-  ConnectionPoolImpl,
-  CountryAwareBillingWorkflow,
-  EmailContact,
-  EmailContactImpl,
-  FetchImage,
-  ImdbQuery,
-  ImdbQueryImpl,
-  PasswordResetService,
-  PasswordResetServiceImpl,
-  PasswordResetTokenDoc,
-  TitleRec,
-  TokenIssuer,
-  TokenIssuerImpl,
-  TrialService,
-  TrialServiceImpl,
-  UserDoc,
-  UserProfileDoc,
-  UserRepo,
-  UserRepoImpl
-}
+import com.iscs.ratingbunny.domains.{AuthCheck, AuthCheckImpl, AuthLogin, AuthLoginImpl, AutoNameRec, AutoTitleRec, BillingInfo, BillingWorkflow, ConnectionPool, ConnectionPoolImpl, CountryAwareBillingWorkflow, EmailContact, EmailContactImpl, FetchImage, ImdbQuery, ImdbQueryImpl, PasswordResetService, PasswordResetServiceImpl, PasswordResetTokenDoc, TitleRec, TokenIssuer, TokenIssuerImpl, TrialService, TrialServiceImpl, UserDoc, UserProfileDoc, UserRepo, UserRepoImpl}
+import com.iscs.ratingbunny.messaging.EmailJob
 import com.iscs.ratingbunny.repos.HistoryRepo
 import com.iscs.ratingbunny.routes.{
   AuthRoutes,
@@ -97,7 +69,7 @@ object Server:
 
   private def getAuthSvc[F[_]: Async](
       db: MongoDatabase[F],
-      emailService: EmailService[F],
+      publishEmailJob: EmailJob => F[Unit],
       billingWorkflow: BillingWorkflow[F],
       trialConfig: TrialConfig
   ): F[AuthCheck[F]] =
@@ -107,7 +79,7 @@ object Server:
       billingCollCodec  <- db.getCollectionWithCodec[BillingInfo](billingCollection)
     yield
       val hasher = BcryptHasher.make[F](cost = 12)
-      new AuthCheckImpl(userCollCodec, userProfCollCodec, billingCollCodec, hasher, emailService, billingWorkflow, trialConfig)
+      new AuthCheckImpl(userCollCodec, userProfCollCodec, billingCollCodec, hasher, publishEmailJob, billingWorkflow, trialConfig)
 
   private def getLoginSvc[F[_]: Async](db: MongoDatabase[F], token: TokenIssuer[F]): F[AuthLogin[F]] =
     for userCollCodec <- db.getCollectionWithCodec[UserDoc](usersCollection)
@@ -159,30 +131,31 @@ object Server:
   private def getPoolStatsSvc[F[_]: Async: Parallel](db: MongoDatabase[F]): F[ConnectionPool[F]] =
     Sync[F].delay(new ConnectionPoolImpl[F](db))
 
-  private def getEmailSvc[F[_]: Async: Files](db: MongoDatabase[F], emailService: EmailService[F]): F[EmailContact[F]] =
+  private def getEmailSvc[F[_]: Async: Files](db: MongoDatabase[F], publishEmailJob: EmailJob => F[Unit]): F[EmailContact[F]] =
     for emailColl <- db.getCollection(emailCollection)
-    yield new EmailContactImpl[F](emailColl, emailService)
+    yield new EmailContactImpl[F](emailColl, publishEmailJob)
 
   def getServices[F[_]: Async: Files: Parallel](
       redis: RedisCommands[F, String, String],
       db: MongoDatabase[F],
-      client: Client[F]
+      client: Client[F],
+      publishEmailJob: EmailJob => F[Unit]
   ): F[HttpApp[F]] =
     given Network[F] = Network.forAsync[F]
     for
       token           <- getTokenIssuerSvc(redis, db, jwtSecretKey)
       emailService    <- EmailService.initialize(ServiceConfig)
       billingWorkflow <- CountryAwareBillingWorkflow.make[F](trialConfig)
-      authSvc         <- getAuthSvc(db, emailService, billingWorkflow, trialConfig)
-      loginSvc        <- getLoginSvc(db, token)
-      emailSvc        <- getEmailSvc(db, emailService)
-      userRepo        <- getUserRepoSvc(db)
-      passwordReset   <- getPasswordResetSvc(db, token, emailService)
-      trialSvc        <- getTrialSvc(db, userRepo, billingWorkflow)
-      fetchSvc        <- Sync[F].delay(new FetchImage[F](imageHost, client))
-      historyRepo     <- HistoryRepo.make(db)
-      imdbSvc         <- getImdbSvc(db, client)
-      poolSvc         <- getPoolStatsSvc(db)
+      authSvc      <- getAuthSvc(db, publishEmailJob, billingWorkflow, trialConfig)
+      loginSvc     <- getLoginSvc(db, token)
+      emailSvc     <- getEmailSvc(db, publishEmailJob)
+      userRepo     <- getUserRepoSvc(db)
+      passwordReset <- getPasswordResetSvc(db, token, emailService)
+      trialSvc     <- getTrialSvc(db, userRepo, billingWorkflow)
+      fetchSvc     <- Sync[F].delay(new FetchImage[F](imageHost, client))
+      historyRepo  <- HistoryRepo.make(db)
+      imdbSvc      <- getImdbSvc(db, client)
+      poolSvc      <- getPoolStatsSvc(db)
       authMw = JwtAuth.middleware(jwtSecretKey)
       httpApp = Router(
         s"/api/$apiVersion" ->

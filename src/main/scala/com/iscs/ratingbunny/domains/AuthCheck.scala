@@ -4,8 +4,8 @@ import cats.data.EitherT
 import cats.effect.*
 import cats.effect.kernel.Ref
 import cats.implicits.*
-import com.iscs.mail.EmailService
 import com.iscs.ratingbunny.config.{TrialConfig, TrialWindow}
+import com.iscs.ratingbunny.messaging.EmailJob
 import com.iscs.ratingbunny.util.{DeterministicHash, PasswordHasher}
 import com.mongodb.ErrorCategory.DUPLICATE_KEY
 import com.mongodb.MongoWriteException
@@ -41,7 +41,7 @@ final class AuthCheckImpl[F[_]: Async](
     userProfileCol: MongoCollection[F, UserProfileDoc],
     billingCol: MongoCollection[F, BillingInfo],
     hasher: PasswordHasher[F],
-    emailService: EmailService[F],
+    publishEmailJob: EmailJob => F[Unit],
     billingWorkflow: BillingWorkflow[F],
     trialConfig: TrialConfig
 ) extends AuthCheck[F] with QuerySetup:
@@ -123,7 +123,17 @@ final class AuthCheckImpl[F[_]: Async](
           _ <- persistBilling(user, req.billing, trialWindow)
           link = s"${VERIFYHOST}api/v3/auth/verify?token=$token"
           _ <- EitherT.liftF(Sync[F].delay(L.debug(s"saved $token with $tokenHash")))
-          _ <- EitherT.liftF(emailService.sendEmail(req.email, "Verify your email", link, link).void)
+          _ <- EitherT(
+            publishEmailJob(
+              EmailJob(
+                EmailJob.KindVerifySignup,
+                user._id.toHexString,
+                correlationId = Some(uid)
+              )
+            ).attempt.map:
+              case Right(_) => Right(())
+              case Left(_)  => Left(SignupError.BadEmail)
+          )
         yield SignupOK(uid)
 
         program.value.attempt.flatMap:

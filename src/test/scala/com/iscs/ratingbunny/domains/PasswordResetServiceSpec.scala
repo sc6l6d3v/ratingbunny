@@ -3,13 +3,13 @@ package com.iscs.ratingbunny.domains
 import cats.effect.IO
 import cats.implicits.*
 import com.iscs.ratingbunny.testkit.{MockEmailService, TestHasher}
+import com.typesafe.scalalogging.Logger
 import munit.CatsEffectSuite
 import mongo4cats.circe.*
 import mongo4cats.client.MongoClient
 import mongo4cats.collection.MongoCollection
 import mongo4cats.database.MongoDatabase
 import mongo4cats.embedded.EmbeddedMongo
-import mongo4cats.bson.syntax.*
 import org.mongodb.scala.model.Filters
 
 import java.time.Instant
@@ -19,6 +19,7 @@ class PasswordResetServiceSpec extends CatsEffectSuite with EmbeddedMongo:
 
   override val mongoPort: Int           = 12367
   override def munitIOTimeout: Duration = 2.minutes
+  private val L                         = Logger[this.type]
 
   private def withMongo[A](f: MongoDatabase[IO] => IO[A]) =
     withRunningEmbeddedMongo:
