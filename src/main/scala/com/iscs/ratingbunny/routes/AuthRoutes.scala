@@ -190,14 +190,17 @@ object AuthRoutes:
 
     val svc = AuthedRoutes.of[String, F]:
       case GET -> Root / "auth" / "me" as userId =>
-        userRepo
-          .findByUserId(userId)
-          .flatMap:
-            case Some(u) if u.emailVerified =>
-              val info = UserInfo(u.userid, u.email, u.plan.asString, u.displayName)
-              Ok(info.asJson)
-            case Some(_) => Forbidden()
-            case None    => NotFound()
+        if userId.startsWith("guest-") then
+          Ok(UserInfo(userId, "", Plan.ProMonthly.asString, None).asJson)
+        else
+          userRepo
+            .findByUserId(userId)
+            .flatMap:
+              case Some(u) if u.emailVerified =>
+                val info = UserInfo(u.userid, u.email, u.plan.asString, u.displayName)
+                Ok(info.asJson)
+              case Some(_) => Forbidden()
+              case None    => NotFound()
       case POST -> Root / "auth" / "trial" / "cancel" as userId =>
         trialService
           .cancelTrial(userId)
