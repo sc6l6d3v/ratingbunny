@@ -86,18 +86,20 @@ class EmailContactImpl[F[_]: MonadCancelThrow: Sync](
     validate(name, email).flatMap: isValid =>
       val emailAction: F[String] =
         if (isValid)
-          insertMsg(name, email, truncSubject, truncMsg).flatTap: correlationId =>
-            publishEmailJob(
-              EmailJob(
-                EmailJob.KindContact,
-                email,
-                correlationId = Option.when(correlationId.nonEmpty)(correlationId)
+          insertMsg(name, email, truncSubject, truncMsg)
+            .flatTap: correlationId =>
+              publishEmailJob(
+                EmailJob(
+                  EmailJob.KindContact,
+                  email,
+                  correlationId = Option.when(correlationId.nonEmpty)(correlationId)
+                )
               )
-            )
+            .as(email)
         else Sync[F].delay(s"Invalid: $email")
 
       Clock[F]
         .timed(emailAction)
         .flatMap:
-          case (totEmailTime, _) =>
-            Sync[F].delay(L.info(s"total email time {} ms", totEmailTime.toMillis)).as(email)
+          case (totEmailTime, result) =>
+            Sync[F].delay(L.info(s"total email time {} ms", totEmailTime.toMillis)).as(result)

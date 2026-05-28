@@ -298,11 +298,12 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     Stream
       .eval(Clock[F].monotonic)
       .flatMap: start =>
-        autoTitlesFx
+        val base = autoTitlesFx
           .find(matchBson)
           .projection(projectBson)
           .sort(sortBson)
-          .hint(hint)
+
+        hint.fold(base)(h => base.hint(h))
           .limit(autoSuggestLimit)
           .stream
           .onFinalize:

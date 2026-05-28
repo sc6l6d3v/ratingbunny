@@ -141,7 +141,7 @@ trait QuerySetup:
       Aggregates.limit(AUTONAME_LIMIT)
     )
 
-  final case class AutotitleSpec(matchBson: Document, projectBson: Bson, sortBson: Bson, hint: String)
+  final case class AutotitleSpec(matchBson: Document, projectBson: Bson, sortBson: Bson, hint: Option[String])
 
   def genAutotitleFilter(titlePrefix: String, lang: Option[String], rating: Double, votes: Int, params: ReqParams): AutotitleSpec =
     val fuzzyParams   = params.copy(query = None) // force to not parse primaryTitle
@@ -160,7 +160,10 @@ trait QuerySetup:
       include(id, primaryTitle, startYear, "rating")
     )
 
-    AutotitleSpec(matchBson, projectBson, sortBson, autoTitleHint)
+    val genreIsReal = params.genre.exists(gs => gs.nonEmpty && gs.forall(g => g.nonEmpty && g != "undefined"))
+    val hintOpt     = Option.when(genreIsReal)(autoTitleHint)
+
+    AutotitleSpec(matchBson, projectBson, sortBson, hintOpt)
 
   def genNameFilter(nm: String, rating: Double, params: ReqParams, langBit: Option[Long] = None): Document =
     val langMaskFilter = langBit.map(bit => Document(langMask := Document(BITSANY := bit)))
