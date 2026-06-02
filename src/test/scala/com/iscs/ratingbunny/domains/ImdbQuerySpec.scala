@@ -41,7 +41,8 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
   private val peopleCollection       = "people"
   private val peopleTitlesCollection = "people_titles"
   private val titlesCollection       = "titles"
-  private val autoTitleIndexName     = "auto_movie_genre_prefix_langMask"
+  private val autoTitleIndexName        = "auto_movie_genre_prefix_langMask"
+  private val autoTitleNoGenreIndexName = "auto_titleLC_type_langMask"
 
   test("getByTitle should return results for valid title"):
     withEmbeddedMongoClient: mongoclient =>
@@ -192,7 +193,7 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
         imdbQuery    = new ImdbQueryImpl[IO](peopleFx, peopleTitlesFx, titlesFx, autoTitlesFx, "localhost", mockHttpClient)
         params       = ReqParams()
         titlePrefix  = "Gone with the"
-        resultStream = imdbQuery.getAutosuggestTitle(titlePrefix, None, 7.0, 0, params)
+        resultStream = imdbQuery.getAutosuggestTitle(titlePrefix, None, params)
         results <- resultStream.compile.toList
       yield
         assert(results.nonEmpty)
@@ -259,6 +260,18 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
                 .ascending("primaryTitleLC")
                 .ascending("langMask"),
               options
+            )
+            .void
+      _ <-
+        if existing(autoTitleNoGenreIndexName) then IO.unit
+        else
+          collection
+            .createIndex(
+              Index
+                .ascending("primaryTitleLC")
+                .ascending("titleType")
+                .ascending("langMask"),
+              new JIndexOptions().name(autoTitleNoGenreIndexName)
             )
             .void
     yield ()

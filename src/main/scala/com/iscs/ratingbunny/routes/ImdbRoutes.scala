@@ -153,24 +153,16 @@ object ImdbRoutes extends DecodeUtils with VerifiedUserRoutes:
         case req @ GET -> Root / "autotitle"
             :? QParamMatcher(title)
             +& LangParamMatcher(lang)
-            +& RatingParamMatcher(rtg)
-            +& VotesParamMatcher(vts)
-            +& GenreParamMatcher(genres)
             +& TitleTypeParamMatcher(titleTypes)
             +& IsAdultParamMatcher(isAdult) =>
           val params = ReqParams(
-            query = Some(title),
-            genre = genres.toOption.map(_.flatMap(_.split(","))).filter(_.nonEmpty),
             titleType = titleTypes.toOption.map(_.flatMap(_.split(","))).filter(_.nonEmpty),
             isAdult = isAdult.map(_ != 0)
           )
 
-          val minRating = rtg.getOrElse(0.0)
-          val minVotes  = vts.getOrElse(0)
-
           for
             userOpt <- JwtAuth.userFromRequest(req, jwtSecret)
-            lst     <- I.getAutosuggestTitle(title, lang, minRating, minVotes, params).compile.toList
+            lst     <- I.getAutosuggestTitle(title, lang, params).compile.toList
             res     <- Ok(lst)
           yield res
       .map(

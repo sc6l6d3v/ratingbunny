@@ -34,6 +34,7 @@ trait QuerySetup:
   private val nconst                  = "nconst"
   private val hasUS                   = "hasUS"
   private val hasEN                   = "hasEN"
+  private val rated                   = "rated"
   private val STREAMLIMIT             = 96
   private val AUTOSUGGESTLIMIT        = 20
   private val AUTONAME_LIMIT          = 10
@@ -48,6 +49,7 @@ trait QuerySetup:
   private val REGX                    = "$regex"
   private val BITSANY                 = "$bitsAnySet"
   private val autoTitleHint           = "auto_movie_genre_prefix_langMask"
+  private val autoTitleNoGenreHint    = "auto_titleLC_type_langMask"
   private val topLangs                = List("en", "ja", "de", "fr")
   val L: Logger                       = Logger[this.type]
 
@@ -56,6 +58,7 @@ trait QuerySetup:
   given BsonValueEncoder[Int]      = BsonValueEncoder.intEncoder
   given BsonValueEncoder[Double]   = BsonValueEncoder.doubleEncoder
   given BsonValueEncoder[Long]     = BsonValueEncoder.longEncoder
+  given BsonValueEncoder[Boolean]  = b => if b then BsonValue.True else BsonValue.False
   given BsonValueEncoder[BsonNull] = _ => BsonValue.Null
 
   private def gte[A](fieldName: String, a: A)(using encoder: BsonValueEncoder[A]) = Document(fieldName := Document(GTE := a))
@@ -115,7 +118,7 @@ trait QuerySetup:
     List(
       params.isAdult.map {
         case true  => Document(isAdult := 1)
-        case false => Document(isAdult := Document(NIN := List(1)))
+        case false => Document(isAdult := 0)
       },
       params.year.map(yr => between(startYear, yr.head, yr.last)),
       params.genre.map(genre => Document(genres := Document(IN := genre))),
@@ -143,15 +146,13 @@ trait QuerySetup:
 
   final case class AutotitleSpec(matchBson: Document, projectBson: Bson, sortBson: Bson, hint: Option[String])
 
-  def genAutotitleFilter(titlePrefix: String, lang: Option[String], rating: Double, votes: Int, params: ReqParams): AutotitleSpec =
+  def genAutotitleFilter(titlePrefix: String, lang: Option[String], params: ReqParams): AutotitleSpec =
     val fuzzyParams   = params.copy(query = None) // force to not parse primaryTitle
     val titleElt      = prefixRange(primaryTitleLC, titlePrefix)
-    val ratingFilter  = gte(averageRating, rating)
-    val votesFilter   = gte(numVotes, votes.toDouble)
     val langMaskMatch = optionalLangBit(lang).map(bit => Document(langMask := Document(BITSANY := bit)))
 
     val matchBson: Document = mergeDocs(
-      List(titleElt, ratingFilter, votesFilter) ::: langMaskMatch.toList ::: getParamList(fuzzyParams)
+      List(titleElt) ::: langMaskMatch.toList ::: getParamList(fuzzyParams)
     )
 
     val sortBson = Sorts.ascending(primaryTitle)
@@ -161,7 +162,7 @@ trait QuerySetup:
     )
 
     val genreIsReal = params.genre.exists(gs => gs.nonEmpty && gs.forall(g => g.nonEmpty && g != "undefined"))
-    val hintOpt     = Option.when(genreIsReal)(autoTitleHint)
+    val hintOpt     = Some(if genreIsReal then autoTitleHint else autoTitleNoGenreHint)
 
     AutotitleSpec(matchBson, projectBson, sortBson, hintOpt)
 
@@ -177,20 +178,15 @@ trait QuerySetup:
 
   private def combineVotesWithRating(params: ReqParams, rating: Double): Document =
     params.votes match
-      case Some(realVotes) =>
-        or(
-          List(
-            gte(numVotes, realVotes.toDouble).merge(gte(averageRating, rating)),
-            feq(numVotes, 0.0).merge(feq(averageRating, 0.0))
-          )
-        )
+      case Some(realVotes) if realVotes > 0 =>
+        feq(rated, true)
+          .merge(gte(numVotes, realVotes.toDouble))
+          .merge(gte(averageRating, rating))
       case _ =>
-        or(
-          List(
-            gte(averageRating, rating),
-            feq(averageRating, 0.0)
-          )
-        )
+        or(List(
+          feq(rated, false),
+          feq(rated, true).merge(gte(averageRating, rating))
+        ))
 
   def genQueryPipeline(
       matchVariable: Bson,

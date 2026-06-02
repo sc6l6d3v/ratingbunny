@@ -22,7 +22,7 @@ trait ImdbQuery[F[_]]:
   def getByTitlePath(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRecPath]
   def getByName(name: String, rating: Double, params: ReqParams, sortField: SortField): Stream[F, TitleRec]
   def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec]
-  def getAutosuggestTitle(titlePrefix: String, lang: Option[String], rating: Double, votes: Int, params: ReqParams): Stream[F, AutoTitleRec]
+  def getAutosuggestTitle(titlePrefix: String, lang: Option[String], params: ReqParams): Stream[F, AutoTitleRec]
   def getAutosuggestName(namePrefix: String, lowYear: Int, highYear: Int): Stream[F, AutoNameRec]
 
 class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
@@ -102,7 +102,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
 
     for
       start  <- Stream.eval(Clock[F].monotonic)
-      midRef <- Stream.eval(Ref.of[F, Long](0L))
+      midRef <- Stream.eval(Ref.of[F, Long](start.toMillis))
       resultStream <- titlesFx
         .aggregateWithCodec[TitleRec](queryPipeline)
         .stream
@@ -291,9 +291,9 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     * @return
     *   stream of object
     */
-  override def getAutosuggestTitle(titlePrefix: String, lang: Option[String], rating: Double, votes: Int, params: ReqParams): Stream[F, AutoTitleRec] =
+  override def getAutosuggestTitle(titlePrefix: String, lang: Option[String], params: ReqParams): Stream[F, AutoTitleRec] =
     val AutotitleSpec(matchBson, projectBson, sortBson, hint) =
-      genAutotitleFilter(titlePrefix, lang, rating, votes, params)
+      genAutotitleFilter(titlePrefix, lang, params)
 
     Stream
       .eval(Clock[F].monotonic)
