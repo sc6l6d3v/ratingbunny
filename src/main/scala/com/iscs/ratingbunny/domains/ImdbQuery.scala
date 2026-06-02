@@ -101,19 +101,14 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     )
 
     for
-      start  <- Stream.eval(Clock[F].monotonic)
-      midRef <- Stream.eval(Ref.of[F, Long](start.toMillis))
+      start <- Stream.eval(Clock[F].monotonic)
       resultStream <- titlesFx
         .aggregateWithCodec[TitleRec](queryPipeline)
         .stream
-        .evalMap: result =>
-          Clock[F].monotonic.flatMap: mid =>
-            midRef.set(mid.toMillis) >> Sync[F].pure(result)
         .onFinalize:
           for
             end <- Clock[F].monotonic
-            mid <- midRef.get
-            _ <- Sync[F].delay(L.info(s"getByTitle took ${end.toMillis - start.toMillis} ms, aggregation took ${mid - start.toMillis} ms"))
+            _   <- Sync[F].delay(L.info(s"getByTitle took ${end.toMillis - start.toMillis} ms"))
           yield ()
     yield resultStream
 
