@@ -315,3 +315,17 @@ package object domains:
   final case class RegisterReq(email: String, password: String)
   final case class LoginReq(email: String, password: String)
   final case class TokenPair(access: String, refresh: String)
+
+  final case class TitleRange(
+      _id: String,
+      minRuntimeMinutes: Option[Double] = None,
+      maxRuntimeMinutes: Option[Double] = None,
+      minStartYear: Option[Int] = None,
+      maxStartYear: Option[Int] = None,
+      minRatingAverage: Option[Double] = None,
+      maxRatingAverage: Option[Double] = None,
+      minRatingVotes: Option[Double] = None,
+      maxRatingVotes: Option[Double] = None,
+      minUsBoost: Option[Double] = None,
+      maxUsBoost: Option[Double] = None
+  )

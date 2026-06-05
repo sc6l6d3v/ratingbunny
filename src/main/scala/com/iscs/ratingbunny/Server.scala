@@ -6,7 +6,7 @@ import cats.implicits.*
 import com.comcast.ip4s.*
 import com.iscs.mail.{EmailService, EmailServiceConfig}
 import com.iscs.ratingbunny.config.TrialConfig
-import com.iscs.ratingbunny.domains.{AuthCheck, AuthCheckImpl, AuthLogin, AuthLoginImpl, AutoNameRec, AutoTitleRec, BillingInfo, BillingWorkflow, ConnectionPool, ConnectionPoolImpl, CountryAwareBillingWorkflow, EmailContact, EmailContactImpl, FetchImage, ImdbQuery, ImdbQueryImpl, PasswordResetService, PasswordResetServiceImpl, PasswordResetTokenDoc, TitleRec, TokenIssuer, TokenIssuerImpl, TrialService, TrialServiceImpl, UserDoc, UserProfileDoc, UserRepo, UserRepoImpl}
+import com.iscs.ratingbunny.domains.{AuthCheck, AuthCheckImpl, AuthLogin, AuthLoginImpl, AutoNameRec, AutoTitleRec, BillingInfo, BillingWorkflow, ConnectionPool, ConnectionPoolImpl, CountryAwareBillingWorkflow, EmailContact, EmailContactImpl, FetchImage, ImdbQuery, ImdbQueryImpl, PasswordResetService, PasswordResetServiceImpl, PasswordResetTokenDoc, TitleRange, TitleRanges, TitleRangesImpl, TitleRec, TokenIssuer, TokenIssuerImpl, TrialService, TrialServiceImpl, UserDoc, UserProfileDoc, UserRepo, UserRepoImpl}
 import com.iscs.ratingbunny.messaging.EmailJob
 import com.iscs.ratingbunny.repos.HistoryRepo
 import com.iscs.ratingbunny.routes.{
@@ -16,7 +16,8 @@ import com.iscs.ratingbunny.routes.{
   HelcimRoutes,
   HistoryRoutes,
   ImdbRoutes,
-  PoolSvcRoutes
+  PoolSvcRoutes,
+  TitleRangesRoutes
 }
 import com.iscs.ratingbunny.security.JwtAuth
 import com.iscs.ratingbunny.util.BcryptHasher
@@ -57,6 +58,7 @@ object Server:
   private val userProfileCollection   = "user_profile"
   private val billingCollection       = "billing_info"
   private val passwordResetCollection = "password_reset_tokens"
+  private val titleRangesCollection   = "titles_ranges"
   private val apiVersion              = "v3"
   private val helcimApiToken =
     sys.env.getOrElse("HELCIM_API_TOKEN", throw new RuntimeException("HELCIM_API_TOKEN environment variable must be set"))
@@ -128,6 +130,10 @@ object Server:
       autoTitlesCollCodec   <- db.getCollectionWithCodec[AutoTitleRec](tbrCollection)
     yield new ImdbQueryImpl[F](peopleCollCodec, peopleTitlesCollCodec, titlesCollCodec, autoTitlesCollCodec, imageHost, Some(client))
 
+  private def getTitleRangesSvc[F[_]: Async](db: MongoDatabase[F]): F[TitleRanges[F]] =
+    for coll <- db.getCollectionWithCodec[TitleRange](titleRangesCollection)
+    yield new TitleRangesImpl[F](coll)
+
   private def getPoolStatsSvc[F[_]: Async: Parallel](db: MongoDatabase[F]): F[ConnectionPool[F]] =
     Sync[F].delay(new ConnectionPoolImpl[F](db))
 
@@ -155,6 +161,7 @@ object Server:
       fetchSvc     <- Sync[F].delay(new FetchImage[F](imageHost, client))
       historyRepo  <- HistoryRepo.make(db)
       imdbSvc      <- getImdbSvc(db, client)
+      rangesSvc    <- getTitleRangesSvc(db)
       poolSvc      <- getPoolStatsSvc(db)
       authMw = JwtAuth.middleware(jwtSecretKey)
       httpApp = Router(
@@ -163,6 +170,7 @@ object Server:
             HelcimRoutes.httpRoutes(client, helcimApiToken, redis) <+>
             EmailContactRoutes.httpRoutes(emailSvc) <+>
             ImdbRoutes.publicRoutes(imdbSvc, historyRepo, jwtSecretKey) <+>
+            TitleRangesRoutes.httpRoutes(rangesSvc) <+>
             PoolSvcRoutes.httpRoutes(poolSvc) <+>
             AuthRoutes.httpRoutes(authSvc, loginSvc, userRepo, token, passwordReset) <+>
             AuthRoutes.authedRoutes(userRepo, trialSvc, authMw)),
