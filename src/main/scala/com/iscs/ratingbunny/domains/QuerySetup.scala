@@ -127,13 +127,15 @@ trait QuerySetup:
     ).flatten
 
   def genAutonameFilter(namePrefix: String, lowYear: Int, highYear: Int): Seq[Bson] =
-    val matchBson = mergeDocs(
-      List(
-        prefixRange(nameLC, namePrefix),
-        Document(OR := List(Document("birthYear" := Document(LTE := highYear)), Document("birthYear" := BsonNull.VALUE))),
+    val yearFilters = List(
+      Option.when(highYear < Int.MaxValue)(
+        Document(OR := List(Document("birthYear" := Document(LTE := highYear)), Document("birthYear" := BsonNull.VALUE)))
+      ),
+      Option.when(lowYear > Int.MinValue)(
         Document(OR := List(Document("deathYear" := Document(GTE := lowYear)), Document("deathYear" := BsonNull.VALUE)))
       )
-    )
+    ).flatten
+    val matchBson = mergeDocs(prefixRange(nameLC, namePrefix) :: yearFilters)
     val sortElt = Sorts.ascending(nameLC)
     val proj    = fields(include(id, primaryName, "birthYear", "deathYear", "primaryProfession"))
 
