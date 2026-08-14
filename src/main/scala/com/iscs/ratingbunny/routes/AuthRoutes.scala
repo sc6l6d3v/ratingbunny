@@ -15,13 +15,13 @@ import org.http4s.{
   headers,
   AuthScheme,
   AuthedRoutes,
+  Challenge,
   Credentials,
   EntityDecoder,
   EntityEncoder,
   HttpRoutes,
   InvalidMessageBodyFailure,
-  Request,
-  Response
+  Request
 }
 import org.http4s.server.AuthMiddleware
 import java.time.Instant
@@ -57,6 +57,8 @@ object AuthRoutes:
       req.remote.map(_.host.toUriString)
 
     object TokenParamMatcher extends QueryParamDecoderMatcher[String]("token")
+
+    val bearerChallenge = headers.`WWW-Authenticate`(Challenge("Bearer", "ratingbunny"))
 
     val svc = HttpRoutes.of[F]:
       case req @ POST -> Root / "auth" / "signup" =>
@@ -113,15 +115,9 @@ object AuthRoutes:
                       )
                     )
                   case Left(LoginError.UserNotFound) =>
-                    Sync[F].delay(
-                      Response(Unauthorized) // empty 401 response
-                        .withEntity(Json.obj("error" -> Json.fromString("user not found")))
-                    )
+                    Unauthorized(bearerChallenge, Json.obj("error" -> Json.fromString("user not found")))
                   case Left(LoginError.BadPassword) =>
-                    Sync[F].delay(
-                      Response(Unauthorized)
-                        .withEntity(Json.obj("error" -> Json.fromString("wrong password")))
-                    )
+                    Unauthorized(bearerChallenge, Json.obj("error" -> Json.fromString("wrong password")))
                   case Left(LoginError.Inactive) =>
                     Forbidden(Json.obj("error" -> Json.fromString("account inactive")))
                   case Left(LoginError.Unverified) =>
@@ -170,14 +166,15 @@ object AuthRoutes:
           resp <- Ok(Json.obj("access" -> tp.access.asJson, "refresh" -> tp.refresh.asJson))
         yield resp
       case req @ POST -> Root / "auth" / "refresh" =>
-        bearer(req).fold(Forbidden()): tok =>
+        bearer(req).fold(Unauthorized(bearerChallenge, Json.obj("error" -> Json.fromString("missing bearer token")))): tok =>
           token
             .rotate(tok)
             .flatMap:
-              case None    => Forbidden()
+              case None    => Unauthorized(bearerChallenge, Json.obj("error" -> Json.fromString("invalid or expired token")))
               case Some(p) => Ok(p)
       case req @ POST -> Root / "auth" / "logout" =>
-        bearer(req).fold(Forbidden())(tok => token.revoke(tok) *> NoContent())
+        bearer(req).fold(Unauthorized(bearerChallenge, Json.obj("error" -> Json.fromString("missing bearer token")))): tok =>
+          token.revoke(tok) *> NoContent()
     CORSSetup.methodConfig(svc)
 
   def authedRoutes[F[_]: Async](
@@ -190,8 +187,7 @@ object AuthRoutes:
 
     val svc = AuthedRoutes.of[String, F]:
       case GET -> Root / "auth" / "me" as userId =>
-        if userId.startsWith("guest-") then
-          Ok(UserInfo(userId, "", Plan.ProMonthly.asString, None).asJson)
+        if userId.startsWith("guest-") then Ok(UserInfo(userId, "", Plan.ProMonthly.asString, None).asJson)
         else
           userRepo
             .findByUserId(userId)

@@ -85,6 +85,52 @@ class AuthRoutesSuite extends CatsEffectSuite:
 
   private val token = JwtCirce.encode(JwtClaim(subject = Some(user.userid)), secret, JwtAlgorithm.HS256)
 
+  /** Login service stubbed to always fail with the given error, wired into the public routes. */
+  private def svcFailingLoginWith(err: LoginError) =
+    val failing = new AuthLogin[IO]:
+      def login(req: LoginRequest) = IO.pure(Left(err))
+    AuthRoutes.httpRoutes[IO](stubCheck, failing, repo, stubToken, stubPasswordReset).orNotFound
+
+  private val loginBody = Json.obj("email" -> Json.fromString(user.email), "password" -> Json.fromString("secret"))
+
+  /** A 401 must carry the Bearer challenge and a JSON error body. */
+  private def assertUnauthorized(resp: Response[IO], expectedMessage: String) =
+    assertEquals(resp.status, Status.Unauthorized)
+    assertEquals(
+      resp.headers.get[headers.`WWW-Authenticate`].map(_.values.head.scheme),
+      Some("Bearer")
+    )
+    resp
+      .as[Json]
+      .map: json =>
+        assertEquals(json.hcursor.get[String]("error"), Right(expectedMessage))
+
+  private def assertLogin401(err: LoginError, expectedMessage: String) =
+    val req = Request[IO](Method.POST, uri"/auth/login").withEntity(loginBody)
+    svcFailingLoginWith(err).run(req).flatMap(assertUnauthorized(_, expectedMessage))
+
+  test("POST /auth/login returns 401 when the user is not found"):
+    assertLogin401(LoginError.UserNotFound, "user not found")
+
+  test("POST /auth/login returns 401 on a wrong password"):
+    assertLogin401(LoginError.BadPassword, "wrong password")
+
+  test("POST /auth/refresh returns 401 without a bearer token"):
+    httpSvc
+      .run(Request[IO](Method.POST, uri"/auth/refresh"))
+      .flatMap(assertUnauthorized(_, "missing bearer token"))
+
+  test("POST /auth/refresh returns 401 when the token cannot be rotated"):
+    // stubToken.rotate always yields None
+    val req = Request[IO](Method.POST, uri"/auth/refresh")
+      .putHeaders(headers.Authorization(Credentials.Token(AuthScheme.Bearer, "stale-refresh")))
+    httpSvc.run(req).flatMap(assertUnauthorized(_, "invalid or expired token"))
+
+  test("POST /auth/logout returns 401 without a bearer token"):
+    httpSvc
+      .run(Request[IO](Method.POST, uri"/auth/logout"))
+      .flatMap(assertUnauthorized(_, "missing bearer token"))
+
   test("GET /auth/me returns user info"):
     val req = Request[IO](Method.GET, uri"/auth/me")
       .putHeaders(headers.Authorization(Credentials.Token(AuthScheme.Bearer, token)))
