@@ -16,10 +16,10 @@ object Main extends IOApp:
     for
       dbClient <- IO.delay(new DbClient[IO](DbClient.fromUrl("MONGOURI")))
       resources <- IO.delay(for
-        redis <- new RedisConfig[IO]().resource
-        dbres <- dbClient.dbResource
-        clres <- EmberClientBuilder.default[IO].build
-        rabbit <- RabbitConfig.resource[IO](RabbitConfig.fromEnv())
+        redis     <- new RedisConfig[IO]().resource
+        dbres     <- dbClient.dbResource
+        clres     <- EmberClientBuilder.default[IO].build
+        rabbit    <- RabbitConfig.resource[IO](RabbitConfig.fromEnv())
         publisher <- EmailPublisher.make[IO](rabbit)
       yield (redis, dbres, clres, publisher))
       ec <- resources.use:
