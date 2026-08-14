@@ -35,8 +35,13 @@ class TokenIssuerImpl[F[_]: Async](
   extension (fd: FiniteDuration) def toInstant: Instant = Instant.ofEpochMilli(fd.toMillis)
 
   private object Hash:
-    private val md                = java.security.MessageDigest.getInstance("SHA-256")
-    def sha256(s: String): String = md.digest(s.getBytes("UTF-8")).map("%02x" format _).mkString
+    private val md = java.security.MessageDigest.getInstance("SHA-256")
+    def sha256(s: String): String =
+      java.security.MessageDigest
+        .getInstance("SHA-256")
+        .digest(s.getBytes("UTF-8"))
+        .map("%02x" format _)
+        .mkString
 
   // Lua script for atomic getDel operation
   private val getDelScript =
