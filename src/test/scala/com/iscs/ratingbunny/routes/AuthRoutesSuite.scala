@@ -110,10 +110,27 @@ class AuthRoutesSuite extends CatsEffectSuite:
     svcFailingLoginWith(err).run(req).flatMap(assertUnauthorized(_, expectedMessage))
 
   test("POST /auth/login returns 401 when the user is not found"):
-    assertLogin401(LoginError.UserNotFound, "user not found")
+    assertLogin401(LoginError.UserNotFound, "invalid credentials")
 
   test("POST /auth/login returns 401 on a wrong password"):
-    assertLogin401(LoginError.BadPassword, "wrong password")
+    assertLogin401(LoginError.BadPassword, "invalid credentials")
+
+  test("POST /auth/login does not reveal which of the two credential failures occurred"):
+    // The enumeration guard. If these two responses ever diverge, an attacker can
+    // probe an address and learn whether it is registered.
+    val req = Request[IO](Method.POST, uri"/auth/login").withEntity(loginBody)
+    for
+      notFound    <- svcFailingLoginWith(LoginError.UserNotFound).run(req)
+      badPassword <- svcFailingLoginWith(LoginError.BadPassword).run(req)
+      notFoundBody    <- notFound.as[Json]
+      badPasswordBody <- badPassword.as[Json]
+    yield
+      assertEquals(notFound.status, badPassword.status)
+      assertEquals(notFoundBody, badPasswordBody)
+      assertEquals(
+        notFound.headers.get[headers.`WWW-Authenticate`].map(_.values.head.scheme),
+        badPassword.headers.get[headers.`WWW-Authenticate`].map(_.values.head.scheme)
+      )
 
   test("POST /auth/refresh returns 401 without a bearer token"):
     httpSvc
