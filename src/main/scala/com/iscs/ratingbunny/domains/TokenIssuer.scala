@@ -35,7 +35,8 @@ class TokenIssuerImpl[F[_]: Async](
   extension (fd: FiniteDuration) def toInstant: Instant = Instant.ofEpochMilli(fd.toMillis)
 
   private object Hash:
-    private val md = java.security.MessageDigest.getInstance("SHA-256")
+    // Constructed per call: MessageDigest is stateful and not thread-safe, so a shared
+    // instance can interleave between fibers and yield a wrong hash.
     def sha256(s: String): String =
       java.security.MessageDigest
         .getInstance("SHA-256")

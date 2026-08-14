@@ -114,10 +114,11 @@ object AuthRoutes:
                         "refresh" -> ok.tokens.refresh.asJson
                       )
                     )
-                  case Left(LoginError.UserNotFound) =>
-                    Unauthorized(bearerChallenge, Json.obj("error" -> Json.fromString("user not found")))
-                  case Left(LoginError.BadPassword) =>
-                    Unauthorized(bearerChallenge, Json.obj("error" -> Json.fromString("wrong password")))
+                  // Both arms answer identically on purpose: telling the caller which of the two
+                  // failed turns login into a user-enumeration oracle. The distinction stays in
+                  // LoginError for the logs, and must not reach the wire.
+                  case Left(LoginError.UserNotFound) | Left(LoginError.BadPassword) =>
+                    Unauthorized(bearerChallenge, Json.obj("error" -> Json.fromString("invalid credentials")))
                   case Left(LoginError.Inactive) =>
                     Forbidden(Json.obj("error" -> Json.fromString("account inactive")))
                   case Left(LoginError.Unverified) =>
