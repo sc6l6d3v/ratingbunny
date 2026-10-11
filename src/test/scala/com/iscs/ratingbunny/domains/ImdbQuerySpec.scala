@@ -6,11 +6,10 @@ import com.iscs.ratingbunny.domains.ImdbQueryData.{
   autosuggestNameRecs,
   autosuggestTitleRecs,
   enhancedNameCompRecs,
-  nameCompRecs,
-  nameRecs,
   titlePathRecs,
   titleRecs
 }
+import com.iscs.ratingbunny.domains.PagedTitleData.pagedTitleRecs
 import com.iscs.ratingbunny.model.Requests.ReqParams
 import com.typesafe.scalalogging.Logger
 import io.circe.generic.auto.*
@@ -64,7 +63,7 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
         imdbQuery    = new ImdbQueryImpl[IO](peopleFx, peopleTitlesFx, titlesFx, autoTitlesFx, "localhost", mockHttpClient)
         title        = Some("The Shawshank Redemption")
         params       = ReqParams(query = title, sortType = Some("rating"))
-        resultStream = imdbQuery.getByTitle(8.0, params, limit = 10, SortField.from(params.sortType))
+        resultStream = imdbQuery.getByTitle(8.0, params, offset = 0, limit = 10, SortField.from(params.sortType))
         results <- resultStream.compile.toList
       yield
         assert(results.nonEmpty)
@@ -101,49 +100,12 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
         imdbQuery    = new ImdbQueryImpl[IO](peopleFx, peopleTitlesFx, titlesFx, autoTitlesFx, "localhost", Some(mockHttpClient))
         title        = Some("The Matrix")
         params       = ReqParams(query = title, sortType = Some("rating"))
-        resultStream = imdbQuery.getByTitlePath(7.5, params, limit = 10, SortField.from(params.sortType))
+        resultStream = imdbQuery.getByTitlePath(7.5, params, offset = 0, limit = 10, SortField.from(params.sortType))
         results <- resultStream.compile.toList
       yield
         assert(results.nonEmpty)
         assert(results.forall(_.primaryTitle.contains("The Matrix")))
         assert(results.forall(_.posterPath.nonEmpty))
-
-  test("getByName should return results for valid name"):
-    withEmbeddedMongoClient: mongoclient =>
-      for
-        db                 <- setupTestDatabase("test", mongoclient)
-        peopleFx           <- setupAutoNameCollection(db, peopleCollection)
-        peopleTitlesDocsFx <- setupDocumentCollection(db, peopleTitlesCollection)
-        peopleTitlesFx     <- setupTitleCollection(db, peopleTitlesCollection)
-        titlesDocsFx       <- setupDocumentCollection(db, titlesCollection)
-        titlesFx           <- setupTitleCollection(db, titlesCollection)
-        autoTitlesFx       <- setupAutoTitleCollection(db, titlesCollection)
-        _ <- peopleTitlesDocsFx
-          .insertMany(nameCompRecs)
-          .attempt
-          .flatMap:
-            case Left(e) =>
-              IO(L.error(s"failed to insert ${nameCompRecs.mkString}")) >> IO.raiseError(e)
-            case Right(_) =>
-              IO(L.info(s"succeeded inserts ${nameCompRecs.mkString}"))
-        _ <- titlesDocsFx
-          .insertMany(nameRecs)
-          .attempt
-          .flatMap:
-            case Left(e) =>
-              IO(L.error(s"failed to insert ${nameRecs.mkString}")) >> IO.raiseError(e)
-            case Right(_) =>
-              IO(L.info(s"succeeded inserts ${nameRecs.mkString}"))
-
-        imdbQuery = new ImdbQueryImpl[IO](peopleFx, peopleTitlesFx, titlesFx, autoTitlesFx, "localhost", mockHttpClient)
-        params    = ReqParams(sortType = Some("rating"))
-        // name         = "Morgan Freeman"
-        name         = "nm0000151"
-        resultStream = imdbQuery.getByName(name, 6.5, params, SortField.from(params.sortType))
-        results <- resultStream.compile.toList
-      yield
-        assert(results.nonEmpty)
-        assert(results.forall(_.primaryTitle.nonEmpty))
 
   test("getByEnhancedName should return enhanced results for valid name"):
     withEmbeddedMongoClient: mongoclient =>
@@ -166,11 +128,62 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
         params    = ReqParams(sortType = Some("rating"))
         // name         = "Leonardo DiCaprio"
         name         = "nm0000138"
-        resultStream = imdbQuery.getByEnhancedName(name, 6.5, params, limit = 5, SortField.from(params.sortType))
+        resultStream = imdbQuery.getByEnhancedName(name, 6.5, params, offset = 0, limit = 5, SortField.from(params.sortType))
         results <- resultStream.compile.toList
       yield
         assert(results.nonEmpty)
         assert(results.forall(_.primaryTitle.nonEmpty))
+
+  test("getByTitle reads one page at a time and countByTitle counts the whole match"):
+    withEmbeddedMongoClient: mongoclient =>
+      for
+        db             <- setupTestDatabase("test", mongoclient)
+        peopleFx       <- setupAutoNameCollection(db, peopleCollection)
+        peopleTitlesFx <- setupTitleCollection(db, peopleTitlesCollection)
+        titlesDocsFx   <- setupDocumentCollection(db, titlesCollection)
+        titlesFx       <- setupTitleCollection(db, titlesCollection)
+        autoTitlesFx   <- setupAutoTitleCollection(db, titlesCollection)
+        _              <- titlesDocsFx.insertMany(pagedTitleRecs)
+        imdbQuery = new ImdbQueryImpl[IO](peopleFx, peopleTitlesFx, titlesFx, autoTitlesFx, "localhost", mockHttpClient)
+        params    = ReqParams(year = Some(List(2000, 2100)), sortType = Some("rating"))
+        all     <- imdbQuery.getByTitle(5.0, params, offset = 0, limit = 100, SortField.ByRating).compile.toList
+        page1   <- imdbQuery.getByTitle(5.0, params, offset = 0, limit = 10, SortField.ByRating).compile.toList
+        page2   <- imdbQuery.getByTitle(5.0, params, offset = 10, limit = 10, SortField.ByRating).compile.toList
+        page3   <- imdbQuery.getByTitle(5.0, params, offset = 20, limit = 10, SortField.ByRating).compile.toList
+        pastEnd <- imdbQuery.getByTitle(5.0, params, offset = 30, limit = 10, SortField.ByRating).compile.toList
+        total   <- imdbQuery.countByTitle(5.0, params)
+        noYear  <- imdbQuery.countByTitle(5.0, params.copy(year = Some(Nil)))
+        strict  <- imdbQuery.countByTitle(8.0, params)
+      yield
+        assertEquals(all.map(_._id), pagedTitleRecs.flatMap(_.getString("_id")))
+        assertEquals(page1.map(_._id), all.take(10).map(_._id))
+        assertEquals(page2.map(_._id), all.slice(10, 20).map(_._id))
+        assertEquals(page3.map(_._id), all.slice(20, 30).map(_._id))
+        assertEquals(pastEnd, Nil)
+        assertEquals(total, pagedTitleRecs.size.toLong)
+        assertEquals(noYear, pagedTitleRecs.size.toLong)
+        assertEquals(strict, all.count(_.rating.flatMap(_.average).exists(_ >= 8.0)).toLong)
+
+  test("getByEnhancedName pages with an offset and countByName counts the whole match"):
+    withEmbeddedMongoClient: mongoclient =>
+      for
+        db                 <- setupTestDatabase("test", mongoclient)
+        peopleFx           <- setupAutoNameCollection(db, peopleCollection)
+        peopleTitlesDocsFx <- setupDocumentCollection(db, peopleTitlesCollection)
+        peopleTitlesFx     <- setupTitleCollection(db, peopleTitlesCollection)
+        titlesFx           <- setupTitleCollection(db, titlesCollection)
+        autoTitlesFx       <- setupAutoTitleCollection(db, titlesCollection)
+        _                  <- peopleTitlesDocsFx.insertMany(enhancedNameCompRecs)
+        imdbQuery = new ImdbQueryImpl[IO](peopleFx, peopleTitlesFx, titlesFx, autoTitlesFx, "localhost", mockHttpClient)
+        params    = ReqParams(sortType = Some("rating"))
+        name      = "nm0000138"
+        all   <- imdbQuery.getByEnhancedName(name, 5.0, params, offset = 0, limit = 100, SortField.ByRating).compile.toList
+        rest  <- imdbQuery.getByEnhancedName(name, 5.0, params, offset = 1, limit = 100, SortField.ByRating).compile.toList
+        total <- imdbQuery.countByName(name, 5.0, params)
+      yield
+        assertEquals(all.size, 3)
+        assertEquals(rest.map(_._id), all.drop(1).map(_._id))
+        assertEquals(total, all.size.toLong)
 
   test("getAutosuggestTitle should return suggestions based on title prefix"):
     withEmbeddedMongoClient: mongoclient =>
