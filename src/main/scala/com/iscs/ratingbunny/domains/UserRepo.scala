@@ -2,6 +2,7 @@ package com.iscs.ratingbunny.domains
 
 import cats.effect.*
 import cats.implicits.*
+import mongo4cats.bson.Document
 import mongo4cats.circe.*
 import mongo4cats.collection.MongoCollection
 import mongo4cats.models.collection.IndexOptions
@@ -48,23 +49,33 @@ class UserRepoImpl[F[_]: Async](collection: MongoCollection[F, UserDoc]) extends
     )
     collection.updateOne(feq("userid", uid), update).void
 
-  private val idxVerif    = "verificationTokenHash_idx"
-  private val idxVerifDef = "verificationTokenHash_1"
+  private val idxVerif     = "verificationTokenHash_idx"
+  private val idxUserId    = "userid_unique_idx"
+  private val idxEmailNorm = "email_norm_unique_idx"
 
+  /** Unique indexes that settle signup races on userid and email. Existing indexes are matched by key, not name: the production ones were
+    * created by hand under other names, and creating a same-key index under a new name is an error. A failure is logged rather than raised
+    * so legacy duplicates cannot stop the app from starting.
+    */
   def ensureIndexes: F[Unit] =
     for
       idxDocs <- collection.listIndexes
-      existing = idxDocs.flatMap(_.getString("name").toList).toSet
-      _ <-
-        if existing(idxVerif) || existing(idxVerifDef) then Async[F].unit
-        else
-          collection
-            .createIndex(
-              Index.ascending("verificationTokenHash"),
-              IndexOptions(background = true, unique = true, sparse = true).name(idxVerif)
-            )
-            .void
+      _       <- ensureUnique(idxDocs, "verificationTokenHash", idxVerif, sparse = true)
+      _       <- ensureUnique(idxDocs, "userid", idxUserId, sparse = false)
+      _       <- ensureUnique(idxDocs, "email_norm", idxEmailNorm, sparse = false)
     yield ()
+
+  private def ensureUnique(idxDocs: Iterable[Document], field: String, name: String, sparse: Boolean): F[Unit] =
+    idxDocs.find(_.getDocument("key").exists(_.keys == Set(field))) match
+      case Some(idx) if idx.getBoolean("unique").contains(true) => Async[F].unit
+      case Some(idx) =>
+        Sync[F].delay(L.error(s"users.$field has non-unique index ${idx.getString("name").getOrElse("?")}; uniqueness is not enforced"))
+      case None =>
+        collection
+          .createIndex(Index.ascending(field), IndexOptions(background = true, unique = true, sparse = sparse).name(name))
+          .void
+          .handleErrorWith: e =>
+            Sync[F].delay(L.error(s"could not create unique index on users.$field: ${e.getMessage}", e))
 
 object UserRepoImpl:
   def make[F[_]: Async](collection: MongoCollection[F, UserDoc]): F[UserRepo[F]] =
