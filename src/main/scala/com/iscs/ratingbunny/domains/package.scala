@@ -1,6 +1,5 @@
 package com.iscs.ratingbunny
 
-import com.iscs.ratingbunny.model.Requests.ReqParams
 import mongo4cats.bson.ObjectId
 
 import java.time.Instant
@@ -100,15 +99,6 @@ package object domains:
       role: Option[String] = None,
       posterPath: Option[String] = None
   ) extends TitleRecBase
-
-  final case class UserHistory(
-      _id: String,
-      userId: String,
-      createdAt: Instant,
-      params: ReqParams,
-      sig: String,
-      hits: Int
-  )
 
   /** -- incoming payload */
   final case class SignupBilling(
