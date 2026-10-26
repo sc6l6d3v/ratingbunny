@@ -50,4 +50,6 @@ echo "Done."
 echo "  Built   : ${IMAGE}:${STAMP_TAG}"
 echo "  Tagged  : ${IMAGE}:${REST_TAG}"
 echo "  Pushed  : ${IMAGE}:${STAMP_TAG}, ${IMAGE}:${REST_TAG}"
-[[ "${PUSH_LATEST:-0}" == "1" ]] && echo "  Pushed  : ${IMAGE}:latest"
+if [[ "${PUSH_LATEST:-0}" == "1" ]]; then
+  echo "  Pushed  : ${IMAGE}:latest"
+fi

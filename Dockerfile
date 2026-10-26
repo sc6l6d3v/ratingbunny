@@ -17,6 +17,13 @@ ENV APP_VERSION=1.0
 # ENV variables for App
 RUN apk add --no-cache curl bash busybox-extras
 
+# CVE-2026-91403: distrust the compromised eMudhra/emSign roots and the Sectigo "AAA Certificate
+# Services" cross-sign root in the JDK trust store; the build fails if any of them remain.
+RUN keytool -list -v -cacerts -storepass changeit 2>/dev/null \
+      | awk -F': ' '/^Alias name:/ {a = $2} /^Owner:/ && /emSign|AAA Certificate Services/ {print a}' \
+      | while IFS= read -r a; do keytool -delete -cacerts -storepass changeit -alias "$a"; done; \
+    ! keytool -list -v -cacerts -storepass changeit 2>/dev/null | grep -E '^Owner:.*(emSign|AAA Certificate Services)'
+
 # Define working directory
 WORKDIR /root
 ENV PROJECT_HOME=/usr/src
