@@ -73,7 +73,7 @@ object AuthRoutes:
 
             case Right(sr) =>
               for
-                _              <- Sync[F].delay(L.info(s""""request" signup=$sr"""))
+                _              <- Sync[F].delay(L.info(s""""request" signup email=${sr.email} plan=${sr.plan.asString}"""))
                 eitherSignupOk <- A.signup(sr)
                 out <- eitherSignupOk match
                   case Right(ok) =>
