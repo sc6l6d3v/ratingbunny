@@ -4,18 +4,21 @@
 # published ports, restart policy, extra hosts and bind mounts, so no per-host flags are needed.
 # The running container is left alone unless the pulled image passes its checks.
 #
-# Usage (as root): redeploy.sh [-n] [-e KEY=VALUE]... DEV|PROD [expected jar sha256]
+# Usage (as root): redeploy.sh [-n] [-e KEY=VALUE]... [-u PORT/PROTO]... DEV|PROD [expected jar sha256]
 #   -n             dry run: pull and check the image, print the docker run command, change nothing
 #   -e KEY=VALUE   add or replace an env var; later redeploys keep it, as it is then in the container's env
+#   -u PORT/PROTO  stop publishing that container port (e.g. 5050/tcp); later redeploys keep it unpublished
 set -euo pipefail
 
-usage() { echo "usage: $0 [-n] [-e KEY=VALUE]... DEV|PROD [expected jar sha256]" >&2; exit 2; }
+usage() { echo "usage: $0 [-n] [-e KEY=VALUE]... [-u PORT/PROTO]... DEV|PROD [expected jar sha256]" >&2; exit 2; }
 dry=
 sets=()
-while getopts ne: opt; do
+drops=()
+while getopts ne:u: opt; do
   case $opt in
     n) dry=1 ;;
     e) [[ $OPTARG =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || usage; sets+=("$OPTARG") ;;
+    u) [[ $OPTARG =~ ^[0-9]+/(tcp|udp)$ ]] || usage; drops+=("$OPTARG") ;;
     *) usage ;;
   esac
 done
@@ -46,16 +49,28 @@ mapfile -t flags < <(docker inspect "$name" --format '
 {{end}}{{end}}{{range index .HostConfig "ExtraHosts"}}--add-host={{.}}
 {{end}}{{range index .HostConfig "Binds"}}--volume={{.}}
 {{end}}' | grep .)
-echo "new container: docker run -d --name $name --env-file $envf ${flags[*]} $img"
-(( ${#sets[@]} == 0 )) || echo "env vars set by -e: ${sets[*]%%=*}"
-[[ -z $dry ]] || { echo "dry run: $name not changed"; exit 0; }
+for p in "${drops[@]}"; do
+  kept=()
+  for f in "${flags[@]}"; do [[ $f == --publish=*:"$p" ]] || kept+=("$f"); done
+  (( ${#kept[@]} < ${#flags[@]} )) && echo "no longer publishing $p" || echo "$p was not published"
+  flags=("${kept[@]}")
+done
 
 # The env file keeps only what was passed at run time; the image's own ENV comes from the new image.
 cur=$(comm -23 <(docker inspect "$name" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep . | sort) \
                <(docker image inspect "$old" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep . | sort))
+# A name without a value (from `--env NAME` with NAME unset) would take its value from whatever shell runs this script.
+bare=$(grep -v = <<< "$cur" || true)
+[[ -z $bare ]] || echo "dropping env names that have no value: $(echo $bare)"
+cur=$(grep = <<< "$cur" || true)
 for kv in "${sets[@]}"; do
   cur=$(grep -v "^${kv%%=*}=" <<< "$cur" || true)$'\n'$kv
 done
+
+echo "new container: docker run -d --name $name --env-file $envf ${flags[*]} $img"
+(( ${#sets[@]} == 0 )) || echo "env vars set by -e: ${sets[*]%%=*}"
+[[ -z $dry ]] || { echo "dry run: $name not changed"; exit 0; }
+
 umask 077
 grep . <<< "$cur" > "$envf"
 echo "saved $(wc -l < "$envf") env vars to $envf"
