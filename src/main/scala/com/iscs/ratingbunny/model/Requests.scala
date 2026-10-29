@@ -15,7 +15,7 @@ object Requests:
     override def toString: String = List(
       query.map(q => s"query=$q"),
       votes.map(v => s"votes=$v"),
-      year.map(yr => s"year=${yr.head} to ${yr.last}"),
+      year.filter(_.nonEmpty).map(yr => s"year=${yr.head} to ${yr.last}"),
       genre.map(g => s"genre=${g.mkString(",")}"),
       titleType.map(t => s"titleType=${t.mkString(",")}"),
       isAdult.map(a => s"isAdult=>$a"),

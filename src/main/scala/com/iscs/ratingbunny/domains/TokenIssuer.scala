@@ -44,6 +44,12 @@ class TokenIssuerImpl[F[_]: Async](
         .map("%02x" format _)
         .mkString
 
+  private def refreshKey(raw: String): String = s"refresh:${Hash.sha256(raw)}"
+
+  // Sorted set of a user's live refresh keys, scored by expiry epoch second, so revokeUser
+  // reads one key instead of scanning every session in Redis.
+  private def userIndexKey(uid: String): String = s"refresh-user:$uid"
+
   // Lua script for atomic getDel operation
   private val getDelScript =
     """
@@ -54,6 +60,20 @@ class TokenIssuerImpl[F[_]: Async](
     return value
     """
 
+  // Stores the token and indexes it under its user in one step, so no token exists that
+  // revokeUser cannot find. Also prunes index entries whose tokens have already expired.
+  // KEYS: refresh key, user index key. ARGV: uid, ttl seconds, now epoch seconds.
+  private val issueScript =
+    """
+    local ttl = tonumber(ARGV[2])
+    local now = tonumber(ARGV[3])
+    redis.call('SET', KEYS[1], ARGV[1], 'EX', ttl)
+    redis.call('ZREMRANGEBYSCORE', KEYS[2], '-inf', now)
+    redis.call('ZADD', KEYS[2], now + ttl, KEYS[1])
+    redis.call('EXPIRE', KEYS[2], ttl)
+    return 1
+    """
+
   private def getDel(key: String): F[Option[String]] =
     redis
       .eval(getDelScript, ScriptOutputType.Value, List(key))
@@ -61,6 +81,10 @@ class TokenIssuerImpl[F[_]: Async](
       .recover:
         case _: NoSuchElementException => None
         case _                         => None
+
+  /** Removes one refresh token and its index entry; yields the uid it belonged to. */
+  private def consume(key: String): F[Option[String]] =
+    getDel(key).flatTap(_.traverse_(uid => redis.zRem(userIndexKey(uid), key)))
 
   override def issue(user: UserDoc): F[TokenPair] =
     issueGuest(user.userid)
@@ -80,13 +104,17 @@ class TokenIssuerImpl[F[_]: Async](
         HS256
       )
       rawRefresh <- Sync[F].delay(UUID.randomUUID().toString)
-      _          <- redis.setEx(s"refresh:${Hash.sha256(rawRefresh)}", uid, refreshTtl)
+      _ <- redis.eval(
+        issueScript,
+        ScriptOutputType.Integer,
+        List(refreshKey(rawRefresh), userIndexKey(uid)),
+        List(uid, refreshTtl.toSeconds.toString, nowDuration.toSeconds.toString)
+      )
     yield TokenPair(jwt, rawRefresh)
 
   override def rotate(raw: String): F[Option[TokenPair]] =
-    val key = s"refresh:${Hash.sha256(raw)}"
     for
-      uidOpt <- getDel(key)
+      uidOpt <- consume(refreshKey(raw))
       res <- uidOpt.traverse: uid =>
         if uid.startsWith("guest-") then issueGuest(uid).map(Option(_))
         else
@@ -98,18 +126,12 @@ class TokenIssuerImpl[F[_]: Async](
     yield res.flatten
 
   override def revoke(raw: String): F[Unit] =
-    redis.del(s"refresh:${Hash.sha256(raw)}").void
+    consume(refreshKey(raw)).void
 
   override def revokeUser(uid: String): F[Unit] =
-    val keyPattern = s"refresh:*"
+    val index = userIndexKey(uid)
     redis
-      .keys(keyPattern)
-      .flatMap: keys =>
-        keys
-          .filter(_.nonEmpty)
-          .traverse_ : key =>
-            redis
-              .get(key)
-              .flatMap:
-                case Some(value) if value == uid => redis.del(key).void
-                case _                           => Async[F].unit
+      .zRange(index, 0, -1)
+      .flatMap:
+        case Nil           => Async[F].unit
+        case first :: rest => redis.del(first, rest*) *> redis.zRem(index, first, rest*).void

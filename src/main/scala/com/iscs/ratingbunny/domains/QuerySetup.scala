@@ -35,7 +35,6 @@ trait QuerySetup:
   private val hasUS                   = "hasUS"
   private val hasEN                   = "hasEN"
   private val rated                   = "rated"
-  private val STREAMLIMIT             = 96
   private val AUTOSUGGESTLIMIT        = 20
   private val AUTONAME_LIMIT          = 10
   protected val autoSuggestLimit: Int = AUTOSUGGESTLIMIT
@@ -120,7 +119,7 @@ trait QuerySetup:
         case true  => Document(isAdult := 1)
         case false => Document(isAdult := 0)
       },
-      params.year.map(yr => between(startYear, yr.head, yr.last)),
+      params.year.filter(_.nonEmpty).map(yr => between(startYear, yr.head, yr.last)),
       params.genre.map(genre => Document(genres := Document(IN := genre))),
       params.titleType.map(tt => Document(titleType := Document(IN := tt))),
       params.query.flatMap(title => getOptFilters(params.query, params.searchType, domain))
@@ -190,28 +189,27 @@ trait QuerySetup:
           feq(rated, true).merge(gte(averageRating, rating))
         ))
 
+  /** One page of results: `offset` matches are skipped in sort order and at most `limit` are returned. */
   def genQueryPipeline(
       matchVariable: Bson,
-      isLimited: Boolean = false,
-      limit: Int = STREAMLIMIT,
+      offset: Int,
+      limit: Int,
       sortField: SortField = SortField.ByRating,
       projection: Option[Bson] = None
   ): Seq[Bson] =
-    val basePipeLine = Seq(
+    Seq(
       Some(Aggregates.`match`(matchVariable)),
       projection.map(Aggregates.project),
-      Some(Aggregates.sort(buildSort(sortField)))
+      Some(Aggregates.sort(buildSort(sortField))),
+      Option.when(offset > 0)(Aggregates.skip(offset)),
+      Some(limitBson(limit))
     ).flatten
-    if (isLimited)
-      basePipeLine :+ limitBson(limit)
-    else
-      basePipeLine
 
   def genTitleQueryPipeline(
       matchVariable: Bson,
-      isLimited: Boolean = false,
-      limit: Int = STREAMLIMIT,
+      offset: Int,
+      limit: Int,
       sortField: SortField = SortField.ByRating,
       projection: Option[Bson] = None
   ): Seq[Bson] =
-    genQueryPipeline(matchVariable, isLimited, limit, sortField, projection)
+    genQueryPipeline(matchVariable, offset, limit, sortField, projection)

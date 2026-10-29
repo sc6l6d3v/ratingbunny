@@ -6,9 +6,9 @@ import com.iscs.ratingbunny.config.TrialConfig
 import com.iscs.ratingbunny.domains.UserRepo
 import com.iscs.ratingbunny.model.Requests.ReqParams
 import com.iscs.ratingbunny.repos.HistoryRepo
+import io.circe.Json
 import io.circe.generic.auto.*
 import io.circe.syntax.*
-import mongo4cats.circe.*
 import org.http4s.AuthedRoutes
 import org.http4s.circe.CirceEntityCodec.{circeEntityDecoder, circeEntityEncoder}
 import org.http4s.circe.jsonOf
@@ -46,7 +46,7 @@ object HistoryRoutes extends VerifiedUserRoutes:
                 .latest(userId, limit)
                 .compile
                 .toList
-                .flatMap(docs => Ok(docs.asJson))
+                .flatMap(entries => Ok(entries.asJson))
           )
         }
 
@@ -59,7 +59,7 @@ object HistoryRoutes extends VerifiedUserRoutes:
                 .popular(userId, limit)
                 .compile
                 .toList
-                .flatMap(docs => Ok(docs.asJson))
+                .flatMap(entries => Ok(entries.asJson))
           )
         }
 
@@ -67,17 +67,9 @@ object HistoryRoutes extends VerifiedUserRoutes:
         ensureVerified(userId, trialConfig, userRepo) {
           for
             params <- req.req.as[ReqParams]
-            docOpt <- historyRepo.byParams(userId, params)
-            resp <- docOpt.fold(NotFound())(doc => Ok(doc.asJson))
+            sigOpt <- historyRepo.byParams(userId, params)
+            resp   <- sigOpt.fold(NotFound())(sig => Ok(Json.obj("sig" -> sig.asJson)))
           yield resp
-        }
-
-      case GET -> Root / "history" / "bysig" / sig as userId =>
-        ensureVerified(userId, trialConfig, userRepo) {
-          historyRepo.getUsers(sig).flatMap {
-            case Some(doc) => Ok(doc.asJson)
-            case None      => NotFound()
-          }
         }
 
     CORSSetup.methodConfig(authMw(svc))

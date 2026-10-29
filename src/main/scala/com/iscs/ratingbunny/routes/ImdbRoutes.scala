@@ -1,7 +1,7 @@
 package com.iscs.ratingbunny.routes
 
 import cats.effect.*
-import cats.effect.implicits.genSpawnOps
+import cats.effect.implicits.{genSpawnOps, genSpawnOps_}
 import cats.implicits.*
 import com.iscs.ratingbunny.config.TrialConfig
 import com.iscs.ratingbunny.domains.*
@@ -68,11 +68,20 @@ object ImdbRoutes extends DecodeUtils with VerifiedUserRoutes:
   private def conv(page: String, ws: String, wh: String, cs: String, ch: String, off: String): List[Int] =
     dims(List((page, 1), (ws, 600), (wh, 900), (cs, 160), (ch, 238), (off, 0)))
 
-  private def pureExtract[T](recs: List[T], pg: Int, pgs: Int): List[T] =
-    recs.slice((pg - 1) * pgs, (pg - 1) * pgs + pgs)
+  /** The slice of a search's full result set that one page covers: `page` is 1-based and `size` is records per page. */
+  final private case class PageWindow(page: Int, size: Int):
+    val offset: Int                  = math.min((page - 1).toLong * size, Int.MaxValue.toLong).toInt
+    def remaining(total: Long): Long = math.max(total - page.toLong * size, 0L)
 
-  private def remain(pg: Int, pgs: Int, total: Int): Int =
-    math.max(total - (pg * pgs), 0)
+  private def pageWindow(page: String, ws: String, wh: String, cs: String, ch: String, off: String): PageWindow =
+    val dimsL = conv(page, ws, wh, cs, ch, off)
+    PageWindow(math.max(dimsL.head, 1), math.max(pageSize(dimsL(1), dimsL(3), dimsL(2), dimsL(4), dimsL(5)), 1))
+
+  private def withRemaining[F[_]](resp: Response[F], remaining: Long): Response[F] =
+    resp.putHeaders(
+      Header.Raw(ci"X-Remaining-Count", remaining.toString),
+      Header.Raw(ci"Access-Control-Expose-Headers", "X-Remaining-Count")
+    )
 
   private def scrubInternal(j: Json): Json =
     j.mapObject(
@@ -106,30 +115,18 @@ object ImdbRoutes extends DecodeUtils with VerifiedUserRoutes:
         cs: String,
         ch: String,
         off: String,
-        fetch: (Double, ReqParams, Int, SortField) => Stream[F, TitleRecBase],
+        fetch: (Double, ReqParams, Int, Int, SortField) => Stream[F, TitleRecBase],
         logText: String
     ): F[Response[F]] =
+      val win = pageWindow(page, ws, wh, cs, ch, off)
       for
         params  <- req.as[ReqParams]
         rtg     <- getRating(rating)
         userOpt <- JwtAuth.userFromRequest(req, jwtSecret)
-        dimsL = conv(page, ws, wh, cs, ch, off)
-        pgs   = pageSize(dimsL(1), dimsL(3), dimsL(2), dimsL(4), dimsL(5))
-        results <- Sync[F]
-          .delay(
-            if params.year.nonEmpty then fetch(rtg, params, pgs << 3, SortField.from(params.sortType))
-            else Stream.empty
-          )
-          .flatMap(_.compile.toList)
-        pageList = pureExtract(results, dimsL.head, pgs)
-        left     = remain(dimsL.head, pgs, results.size)
-        _ <- hx.log(userOpt.getOrElse("guest"), params).start
-        resp <- Ok(pageList).map(
-          _.putHeaders(
-            Header.Raw(ci"X-Remaining-Count", left.toString),
-            Header.Raw(ci"Access-Control-Expose-Headers", "X-Remaining-Count")
-          )
-        )
+        (pageList, total) <- fetch(rtg, params, win.offset, win.size, SortField.from(params.sortType)).compile.toList
+          .both(I.countByTitle(rtg, params))
+        _    <- hx.log(userOpt.getOrElse("guest"), params).start
+        resp <- Ok(pageList).map(withRemaining(_, win.remaining(total)))
       yield resp
 
     val svc = HttpRoutes
@@ -208,26 +205,20 @@ object ImdbRoutes extends DecodeUtils with VerifiedUserRoutes:
             +& CardHeightQueryParameterMatcher(ch)
             +& OffsetQUeryParameterMatcher(off) as user =>
           ensureVerified(user, trialConfig, userRepo) {
-            val dimsL = conv(page, ws, wh, cs, ch, off)
-            val pgs   = pageSize(dimsL(1), dimsL(3), dimsL(2), dimsL(4), dimsL(5))
+            val win = pageWindow(page, ws, wh, cs, ch, off)
             for
               p   <- authreq.req.as[ReqParams]
               _   <- Sync[F].delay(L.info(s"got reqParams: $p"))
               rtg <- getRating(rating)
-              lst <- I
-                .getByEnhancedName(p.query.getOrElse(""), rtg, p, pgs << 3, SortField.from(p.sortType))
+              name = p.query.getOrElse("")
+              (pageLst, total) <- I
+                .getByEnhancedName(name, rtg, p, win.offset, win.size, SortField.from(p.sortType))
                 .compile
                 .toList
-              _ <- Sync[F].delay(L.info(s"got list: $lst"))
-              pageLst = pureExtract(lst, dimsL.head, pgs)
-              left    = remain(dimsL.head, pgs, lst.size)
-              _ <- hx.log(user, p).start
-              res <- Ok(pageLst).map(
-                _.putHeaders(
-                  Header.Raw(ci"X-Remaining-Count", left.toString),
-                  Header.Raw(ci"Access-Control-Expose-Headers", "X-Remaining-Count")
-                )
-              )
+                .both(I.countByName(name, rtg, p))
+              _   <- Sync[F].delay(L.info(s"got list: $pageLst"))
+              _   <- hx.log(user, p).start
+              res <- Ok(pageLst).map(withRemaining(_, win.remaining(total)))
             yield res
           }
       .map(

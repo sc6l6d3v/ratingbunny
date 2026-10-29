@@ -18,10 +18,18 @@ import org.mongodb.scala.model.Projections.{computed, fields, include}
 import scala.language.implicitConversions
 
 trait ImdbQuery[F[_]]:
-  def getByTitle(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec]
-  def getByTitlePath(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRecPath]
-  def getByName(name: String, rating: Double, params: ReqParams, sortField: SortField): Stream[F, TitleRec]
-  def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec]
+  def getByTitle(rating: Double, params: ReqParams, offset: Int, limit: Int, sortField: SortField): Stream[F, TitleRec]
+  def getByTitlePath(rating: Double, params: ReqParams, offset: Int, limit: Int, sortField: SortField): Stream[F, TitleRecPath]
+  def countByTitle(rating: Double, params: ReqParams): F[Long]
+  def getByEnhancedName(
+      name: String,
+      rating: Double,
+      params: ReqParams,
+      offset: Int,
+      limit: Int,
+      sortField: SortField
+  ): Stream[F, TitleRec]
+  def countByName(name: String, rating: Double, params: ReqParams): F[Long]
   def getAutosuggestTitle(titlePrefix: String, lang: Option[String], params: ReqParams): Stream[F, AutoTitleRec]
   def getAutosuggestName(namePrefix: String, lowYear: Int, highYear: Int): Stream[F, AutoNameRec]
 
@@ -63,13 +71,15 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     *   required numeric
     * @param params
     *   other params
+    * @param offset
+    *   matches to skip, in sort order
     * @param limit
     *   how many
     * @param sortField
     *   how to order
     * @return
     */
-  override def getByTitle(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec] =
+  override def getByTitle(rating: Double, params: ReqParams, offset: Int, limit: Int, sortField: SortField): Stream[F, TitleRec] =
     val projection = Some(
       fields(
         include(
@@ -92,13 +102,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
       )
     )
 
-    val queryPipeline = genTitleQueryPipeline(
-      genTitleFilter(params, rating, optionalLangBit(params.lang)),
-      isLimited = true,
-      limit,
-      sortField,
-      projection
-    )
+    val queryPipeline = genTitleQueryPipeline(titleFilter(rating, params), offset, limit, sortField, projection)
 
     for
       start <- Stream.eval(Clock[F].monotonic)
@@ -111,69 +115,6 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
             _   <- Sync[F].delay(L.info(s"getByTitle took ${end.toMillis - start.toMillis} ms"))
           yield ()
     yield resultStream
-
-  /** db.getCollection("title_principals_namerating").aggregate([ { $match: { "startYear": { "$gte": 1961, "$lte": 2023 }, "genresList": {
-    * "$in": ["Thriller"] }, "titleType": "movie", "isAdult": 0, "numVotes": { "$gte": 500 }, "$or": [{ "averageRating": { "$exists": false
-    * } }, { "averageRating": { "$gte": 5.0 } }], primaryName: "Steve McQueen" } }, { $group: { _id: "$tconst", averageRating: { $first:
-    * "$averageRating" }, numVotes: { $first: "$numVotes" }, titleType: { $first: "$titleType" }, primaryTitle: { $first: "$primaryTitle" },
-    * originalTitle: { $first: "$originalTitle" }, isAdult: { $first: "$isAdult" }, startYear: { $first: "$startYear" }, endYear: { $first:
-    * "$endYear" }, runtimeMinutes: { $first: "$runtimeMinutes" }, genresList: { $first: "$genresList" } } }, { $project: { averageRating: {
-    * $ifNull: ["$averageRating", "$$REMOVE"] }, numVotes: { $ifNull: ["$numVotes", "$$REMOVE"] }, titleType: 1, primaryTitle: 1,
-    * originalTitle: { $ifNull: ["$originalTitle", "$$REMOVE"] }, isAdult: 1, startYear: 1, endYear: 1, runtimeMinutes: { $ifNull:
-    * ["$runtimeMinutes", "$$REMOVE"] }, genresList: 1, } }, { $sort: {startYear: -1, numVotes: -1} } ]);
-    *
-    * @param name
-    *   first lastname
-    * @param rating
-    *   IMDB
-    * @param params
-    *   object
-    * @param sortField
-    *   how to order
-    * @return
-    *   stream of object
-    */
-  override def getByName(name: String, rating: Double, params: ReqParams, sortField: SortField): Stream[F, TitleRec] =
-    val projection = Some(
-      fields(
-        computed("_id", s"$$tconst"),
-        include(
-          "tconst",
-          "nconst",
-          "titleType",
-          "primaryTitle",
-          "originalTitle",
-          "isAdult",
-          "startYear",
-          "endYear",
-          "runtimeMinutes",
-          "genres",
-          "rating",
-          "hasUS",
-          "hasEN",
-          "langs",
-          "langMask",
-          "usBoost",
-          "characters",
-          "origCat",
-          "role"
-        )
-      )
-    )
-
-    val queryPipeline = genQueryPipeline(genNameFilter(name, rating, params), sortField = sortField, projection = projection)
-
-    Stream
-      .eval(Clock[F].monotonic)
-      .flatMap: start =>
-        peopleTitlesFx
-          .aggregateWithCodec[TitleRec](queryPipeline)
-          .stream
-          .onFinalize: // Ensure that logging operation happens once after all stream processing is complete
-            for
-              end <- Clock[F].monotonic
-              _   <- Sync[F].delay(L.info(s"getByName took {} ms", (end - start).toMillis))
-            yield ()
 
   /** db.getCollection("title_principals_namerating").aggregate([ { $match: { firstName: "Wallis", lastName: "Day", "startYear": { "$gte":
     * 2010, "$lte": 2024 }, "genresList": { "$in": ["Adventure"] }, "titleType": "tvEpisode", "isAdult": 0, "numVotes": { "$gte": 500 },
@@ -192,12 +133,23 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     *   IMDB
     * @param params
     *   object
+    * @param offset
+    *   matches to skip, in sort order
+    * @param limit
+    *   how many
     * @param sortField
     *   how to order
     * @return
     *   stream object
     */
-  override def getByEnhancedName(name: String, rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRec] =
+  override def getByEnhancedName(
+      name: String,
+      rating: Double,
+      params: ReqParams,
+      offset: Int,
+      limit: Int,
+      sortField: SortField
+  ): Stream[F, TitleRec] =
     val projection = Some(
       fields(
         computed("_id", s"$$tconst"),
@@ -225,13 +177,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
       )
     )
 
-      val queryPipeline = genQueryPipeline(
-        genNameFilter(name, rating, params),
-        isLimited = true,
-        limit,
-        sortField = sortField,
-        projection = projection
-      )
+    val queryPipeline = genQueryPipeline(genNameFilter(name, rating, params), offset, limit, sortField, projection)
 
     Stream
       .eval(Clock[F].monotonic)
@@ -247,6 +193,10 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
               end <- Clock[F].monotonic
               _   <- Sync[F].delay(L.info(s"getByEnhancedName took {} ms", (end - start).toMillis))
             yield ()
+
+  /** Number of titles `getByEnhancedName` would return for these arguments with no offset or limit. */
+  override def countByName(name: String, rating: Double, params: ReqParams): F[Long] =
+    peopleTitlesFx.count(genNameFilter(name, rating, params))
 
   /** db.getCollection("title_principals_namerating").aggregate([ { $match: { firstName: { $regex: "^Dan"}, lastName: { $regex: "^Cra" },
     * "startYear": { "$gte": 1995, "$lte": 2024 }, "genresList": { "$in": ["Adventure"] }, "titleType": "movie", "isAdult": 0, "numVotes": {
@@ -317,7 +267,20 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
       _ <- Sync[F].delay(L.info(s"pathStr {} imdb {} time {} ms", pathStr, imdb, pathTime.toMillis))
     yield pathVal
 
-  override def getByTitlePath(rating: Double, params: ReqParams, limit: Int, sortField: SortField): Stream[F, TitleRecPath] =
+  /** Number of titles `getByTitle` and `getByTitlePath` would return for these arguments with no offset or limit. */
+  override def countByTitle(rating: Double, params: ReqParams): F[Long] =
+    titlesFx.count(titleFilter(rating, params))
+
+  private def titleFilter(rating: Double, params: ReqParams) =
+    genTitleFilter(params, rating, optionalLangBit(params.lang))
+
+  override def getByTitlePath(
+      rating: Double,
+      params: ReqParams,
+      offset: Int,
+      limit: Int,
+      sortField: SortField
+  ): Stream[F, TitleRecPath] =
     Stream
       .eval(Clock[F].monotonic)
       .flatMap: overallStart =>
@@ -343,13 +306,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
           )
         )
 
-        val queryPipeline = genTitleQueryPipeline(
-          genTitleFilter(params, rating, optionalLangBit(params.lang)),
-          isLimited = true,
-          limit,
-          sortField,
-          projection
-        )
+        val queryPipeline = genTitleQueryPipeline(titleFilter(rating, params), offset, limit, sortField, projection)
 
         // connect the streams
         val titleRecPathStream = titlesFx.aggregateWithCodec[TitleRecPath](queryPipeline).stream

@@ -6,10 +6,16 @@ import cats.implicits.*
 import com.iscs.ratingbunny.config.{TrialConfig, TrialWindow}
 import com.iscs.ratingbunny.messaging.EmailJob
 import com.iscs.ratingbunny.testkit.TestHasher
+import com.iscs.ratingbunny.util.PasswordHasher
+import com.mongodb.ErrorCategory.DUPLICATE_KEY
+import com.mongodb.MongoWriteException
 import mongo4cats.circe.*
 import mongo4cats.client.MongoClient
+import mongo4cats.collection.MongoCollection
 import mongo4cats.database.MongoDatabase
 import mongo4cats.embedded.EmbeddedMongo
+import mongo4cats.models.collection.IndexOptions
+import mongo4cats.operations.Index
 import munit.CatsEffectSuite
 
 import java.time.Instant
@@ -87,6 +93,26 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
       plan: Plan = Plan.Free,
       billing: Option[SignupBilling] = None
   ) = SignupRequest(email, pwd, None, plan, billing)
+
+  private def mkUser(userid: String, email: String) =
+    UserDoc(
+      email = email,
+      email_norm = email.trim.toLowerCase,
+      passwordHash = "x",
+      userid = userid,
+      plan = Plan.Free,
+      status = SubscriptionStatus.Active,
+      displayName = None,
+      verificationTokenHash = Some(s"token-$email")
+    )
+
+  /** Runs `onHash` between the userid probe and the user insert, the window a concurrent signup races through. */
+  private def racingHasher(onHash: IO[Unit]): PasswordHasher[IO] = new PasswordHasher[IO]:
+    def hash(pw: String): IO[String]                    = onHash *> hasher.hash(pw)
+    def verify(pw: String, stored: String): IO[Boolean] = hasher.verify(pw, stored)
+
+  private def singleKeyIndexes(users: MongoCollection[IO, UserDoc], field: String) =
+    users.listIndexes.map(_.filter(_.getDocument("key").exists(_.keys == Set(field))).toList)
 
   // ── tests ────────────────────────────────────────────────────
   test("signup succeeds for fresh user"):
@@ -204,3 +230,164 @@ class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
         svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubPublishJob, failingWorkflow, trialConfig)
         res <- svc.signup(mkSignup(plan = Plan.ProMonthly, billing = Some(mkBilling())))
       yield assertEquals(res, Left(SignupError.BillingFailed("boom")))
+
+  test("signup derives a sanitised userid from the email local part"):
+    withMongo: db =>
+      for
+        users    <- db.getCollectionWithCodec[UserDoc]("users")
+        prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, stubPublishJob, stubBillingWorkflow, trialConfig)
+        cases = List(
+          "Alice.Smith+news@Example.com"   -> "alice.smithnews",
+          "jo@example.com"                 -> "jouser",
+          "+++@example.com"                -> "user",
+          "guest-abc@example.com"          -> "user-guest-abc",
+          s"${"b" * 40}@example.com"       -> "b" * 32
+        )
+        got      <- cases.traverse((email, _) => svc.signup(mkSignup(email = email)).map(_.map(_.userid)))
+        profiles <- prof.find.all.map(_.map(_.userid).toSet)
+      yield
+        assertEquals(got, cases.map((_, uid) => Right(uid)))
+        assertEquals(profiles, cases.map(_._2).toSet)
+
+  test("concurrent signups with the same local part both succeed with distinct userids"):
+    withMongo: db =>
+      for
+        users    <- db.getCollectionWithCodec[UserDoc]("users")
+        prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
+        _        <- UserRepoImpl.make[IO](users)
+        slow = racingHasher(IO.sleep(300.millis))
+        svc  = new AuthCheckImpl[IO](users, prof, billingC, slow, stubPublishJob, stubBillingWorkflow, trialConfig)
+        res <- (svc.signup(mkSignup(email = "sam@a.com")), svc.signup(mkSignup(email = "sam@b.com"))).parTupled
+        stored   <- users.find.all.map(_.map(_.userid).toList.sorted)
+        profiles <- prof.find.all.map(_.map(_.userid).toList.sorted)
+      yield
+        val ids = List(res._1, res._2).map(_.map(_.userid))
+        assertEquals(ids.collect { case Right(id) => id }.sorted, List("sam", "sam1"), s"got $ids")
+        assertEquals(stored, List("sam", "sam1"))
+        assertEquals(profiles, List("sam", "sam1"))
+
+  test("a userid taken between probe and insert is retried with the next candidate"):
+    withMongo: db =>
+      for
+        users    <- db.getCollectionWithCodec[UserDoc]("users")
+        prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
+        _        <- UserRepoImpl.make[IO](users)
+        jobs     <- Ref.of[IO, List[EmailJob]](Nil)
+        racer = racingHasher(users.insertOne(mkUser("bob", "other@example.com")).void)
+        svc   = new AuthCheckImpl[IO](users, prof, billingC, racer, job => jobs.update(job :: _), stubBillingWorkflow, trialConfig)
+        res      <- svc.signup(mkSignup(email = "bob@example.com"))
+        mine     <- users.find(feq("email_norm", "bob@example.com")).first
+        profiles <- prof.find.all.map(_.map(_.userid).toList)
+        sent     <- jobs.get
+      yield
+        assertEquals(res, Right(SignupOK("bob1")))
+        assertEquals(mine.map(_.userid), Some("bob1"))
+        assertEquals(profiles, List("bob1"))
+        assertEquals(sent.map(_.correlationId), List(Some("bob1")))
+
+  test("userid retries stop after ten candidates"):
+    withMongo: db =>
+      for
+        users    <- db.getCollectionWithCodec[UserDoc]("users")
+        prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
+        _        <- UserRepoImpl.make[IO](users)
+        taken = ("bob" :: (1 to 9).map(i => s"bob$i").toList).map(uid => mkUser(uid, s"$uid@other.com"))
+        racer = racingHasher(taken.traverse_(users.insertOne))
+        svc   = new AuthCheckImpl[IO](users, prof, billingC, racer, stubPublishJob, stubBillingWorkflow, trialConfig)
+        res    <- svc.signup(mkSignup(email = "bob@example.com"))
+        countU <- users.count
+        countP <- prof.count
+      yield
+        assertEquals(res, Left(SignupError.UserIdExists))
+        assertEquals(countU, 10L)
+        assertEquals(countP, 0L)
+
+  test("an email collision at insert time is EmailExists without retrying"):
+    withMongo: db =>
+      for
+        users    <- db.getCollectionWithCodec[UserDoc]("users")
+        prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
+        _        <- UserRepoImpl.make[IO](users)
+        racer = racingHasher(users.insertOne(mkUser("someoneelse", "dana@example.com")).void)
+        svc   = new AuthCheckImpl[IO](users, prof, billingC, racer, stubPublishJob, stubBillingWorkflow, trialConfig)
+        res    <- svc.signup(mkSignup(email = "Dana@Example.com"))
+        countU <- users.count
+        countP <- prof.count
+      yield
+        assertEquals(res, Left(SignupError.EmailExists))
+        assertEquals(countU, 1L)
+        assertEquals(countP, 0L)
+
+  test("a failed signup removes only the documents it inserted"):
+    withMongo: db =>
+      for
+        users    <- db.getCollectionWithCodec[UserDoc]("users")
+        prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
+        _        <- prof.insertOne(UserProfileDoc("carol", avatarUrl = Some("https://orphan.example.com/a.png")))
+        _ <- billingC.insertOne(
+          BillingInfo(userId = "carol", helcim = Some(HelcimAccount("orphan-cust")), address = mkBilling().address)
+        )
+        failingPublisher = (_: EmailJob) => IO.raiseError(new RuntimeException("queue down"))
+        svc = new AuthCheckImpl[IO](users, prof, billingC, hasher, failingPublisher, stubBillingWorkflow, trialConfig)
+        res      <- svc.signup(mkSignup(email = "carol@example.com", plan = Plan.ProMonthly, billing = Some(mkBilling())))
+        countU   <- users.count
+        profiles <- prof.find.all.map(_.toList)
+        billings <- billingC.find.all.map(_.toList)
+      yield
+        assertEquals(res, Left(SignupError.BadEmail))
+        assertEquals(countU, 0L)
+        assertEquals(profiles.map(_.avatarUrl), List(Some("https://orphan.example.com/a.png")))
+        assertEquals(billings.flatMap(_.helcim.map(_.customerId)), List("orphan-cust"))
+
+  test("an unexpected failure propagates instead of reporting a weak password"):
+    withMongo: db =>
+      for
+        users    <- db.getCollectionWithCodec[UserDoc]("users")
+        prof     <- db.getCollectionWithCodec[UserProfileDoc]("user_profile")
+        billingC <- db.getCollectionWithCodec[BillingInfo]("billing_info")
+        broken = racingHasher(IO.raiseError(new IllegalStateException("hasher unavailable")))
+        svc    = new AuthCheckImpl[IO](users, prof, billingC, broken, stubPublishJob, stubBillingWorkflow, trialConfig)
+        res <- svc.signup(mkSignup()).attempt
+      yield assert(res.left.exists(_.getMessage == "hasher unavailable"), s"expected the error to propagate, got $res")
+
+  test("ensureIndexes enforces unique userid and email_norm and accepts a hand-made equivalent"):
+    withMongo: db =>
+      for
+        users <- db.getCollectionWithCodec[UserDoc]("users")
+        _     <- users.createIndex(Index.ascending("email_norm"), IndexOptions(unique = true).name("email_norm_unique_idx"))
+        _     <- UserRepoImpl.make[IO](users)
+        _     <- UserRepoImpl.make[IO](users)
+        emailIdx  <- singleKeyIndexes(users, "email_norm")
+        useridIdx <- singleKeyIndexes(users, "userid")
+        _         <- users.insertOne(mkUser("erin", "erin@a.com"))
+        dup       <- users.insertOne(mkUser("erin", "erin@b.com")).attempt
+      yield
+        assertEquals(emailIdx.flatMap(_.getString("name")), List("email_norm_unique_idx"))
+        assertEquals(useridIdx.flatMap(_.getBoolean("unique")), List(true))
+        assert(
+          dup.left.exists:
+            case mw: MongoWriteException => mw.getError.getCategory == DUPLICATE_KEY
+            case _                       => false
+          ,
+          s"expected a duplicate-key failure, got $dup"
+        )
+
+  test("ensureIndexes logs and continues when existing data violates uniqueness"):
+    withMongo: db =>
+      for
+        users     <- db.getCollectionWithCodec[UserDoc]("users")
+        _         <- users.insertMany(List(mkUser("dupe", "dupe@a.com"), mkUser("dupe", "dupe@b.com")))
+        made      <- UserRepoImpl.make[IO](users).attempt
+        useridIdx <- singleKeyIndexes(users, "userid")
+        emailIdx  <- singleKeyIndexes(users, "email_norm")
+      yield
+        assert(made.isRight, s"startup must not fail on legacy duplicates, got $made")
+        assertEquals(useridIdx, Nil)
+        assertEquals(emailIdx.flatMap(_.getBoolean("unique")), List(true))
