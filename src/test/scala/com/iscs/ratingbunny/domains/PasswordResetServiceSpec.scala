@@ -2,6 +2,9 @@ package com.iscs.ratingbunny.domains
 
 import cats.effect.IO
 import cats.implicits.*
+import ch.qos.logback.classic.Logger as LogbackLogger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import com.iscs.ratingbunny.testkit.{MockEmailService, TestHasher}
 import com.typesafe.scalalogging.Logger
 import munit.CatsEffectSuite
@@ -11,9 +14,11 @@ import mongo4cats.collection.MongoCollection
 import mongo4cats.database.MongoDatabase
 import mongo4cats.embedded.EmbeddedMongo
 import org.mongodb.scala.model.Filters
+import org.slf4j.LoggerFactory
 
 import java.time.Instant
 import scala.concurrent.duration.*
+import scala.jdk.CollectionConverters.*
 
 class PasswordResetServiceSpec extends CatsEffectSuite with EmbeddedMongo:
 
@@ -74,6 +79,23 @@ class PasswordResetServiceSpec extends CatsEffectSuite with EmbeddedMongo:
         assert(saved.head.expiresAt.isAfter(saved.head.createdAt))
         assertEquals(mailer.getSentEmails.size, 1)
         assert(mailer.getSentEmails.head.textBody.contains("/reset-password?token="))
+
+  test("requestReset logs the userid but never the password hash"):
+    val logger   = LoggerFactory.getLogger(classOf[PasswordResetServiceImpl[IO]]).asInstanceOf[LogbackLogger]
+    val appender = ListAppender[ILoggingEvent]()
+    withMongo: db =>
+      for
+        users  <- db.getCollectionWithCodec[UserDoc]("users")
+        tokens <- db.getCollectionWithCodec[PasswordResetTokenDoc]("password_reset_tokens")
+        _      <- insertUser(users, "user@example.com")
+        hash   <- users.find.first.map(_.get.passwordHash)
+        service = PasswordResetServiceImpl.make(users, tokens, TestHasher.make[IO], new MockEmailService[IO](), new RecordingTokenIssuer, "https://app.example.com")
+        _      <- IO { appender.start(); logger.addAppender(appender) }
+        _      <- service.requestReset(PasswordResetRequest("user@example.com"), Some("203.0.113.7")).guarantee(IO(logger.detachAppender(appender)).void)
+        msgs    = appender.list.asScala.map(_.getFormattedMessage).toList
+      yield
+        assert(!msgs.exists(_.contains(hash)), msgs)
+        assert(msgs.exists(_.contains("request reset on : u1 for addr: 203.0.113.7")), msgs)
 
   test("confirmReset updates password, marks token used, and revokes sessions"):
     withMongo: db =>

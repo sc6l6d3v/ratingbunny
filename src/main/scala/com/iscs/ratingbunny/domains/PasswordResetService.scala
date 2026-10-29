@@ -95,8 +95,8 @@ class PasswordResetServiceImpl[F[_]: Async](
       case Some(user) if !user.emailVerified => Async[F].unit
       case Some(user) =>
         requestIp match
-          case Some(ip) => L.info(s"request reset on : $user for addr: $ip")
-          case _        => L.info(s"request reset on : $user")
+          case Some(ip) => L.info(s"request reset on : ${user.userid} for addr: $ip")
+          case _        => L.info(s"request reset on : ${user.userid}")
         val program = for
           now        <- EitherT.liftF[F, Nothing, Instant](Async[F].delay(Instant.now()))
           (token, h) <- EitherT.liftF[F, Nothing, (String, String)](generateToken())
