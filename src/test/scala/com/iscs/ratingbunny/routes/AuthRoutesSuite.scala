@@ -1,7 +1,12 @@
 package com.iscs.ratingbunny.routes
 
 import cats.effect.IO
+import ch.qos.logback.classic.Logger as LogbackLogger
+import ch.qos.logback.classic.spi.ILoggingEvent
+import ch.qos.logback.core.read.ListAppender
 import munit.CatsEffectSuite
+import org.slf4j.LoggerFactory
+import scala.jdk.CollectionConverters.*
 import org.http4s._
 import org.http4s.implicits._
 import org.http4s.circe._
@@ -131,6 +136,24 @@ class AuthRoutesSuite extends CatsEffectSuite:
         notFound.headers.get[headers.`WWW-Authenticate`].map(_.values.head.scheme),
         badPassword.headers.get[headers.`WWW-Authenticate`].map(_.values.head.scheme)
       )
+
+  test("POST /auth/signup logs the email and plan but never the password"):
+    val root     = LoggerFactory.getLogger(org.slf4j.Logger.ROOT_LOGGER_NAME).asInstanceOf[LogbackLogger]
+    val appender = ListAppender[ILoggingEvent]()
+    val body = Json.obj(
+      "email"    -> Json.fromString("new@example.com"),
+      "password" -> Json.fromString("Plaintext9Secret"),
+      "plan"     -> Json.fromString("free")
+    )
+    val req = Request[IO](Method.POST, uri"/auth/signup").withEntity(body)
+    for
+      _    <- IO { appender.start(); root.addAppender(appender) }
+      resp <- httpSvc.run(req).guarantee(IO(root.detachAppender(appender)).void)
+      msgs  = appender.list.asScala.map(_.getFormattedMessage).toList
+    yield
+      assertEquals(resp.status, Status.BadRequest)
+      assert(!msgs.exists(_.contains("Plaintext9Secret")), msgs)
+      assert(msgs.exists(_.contains("signup email=new@example.com plan=free")), msgs)
 
   test("POST /auth/refresh returns 401 without a bearer token"):
     httpSvc

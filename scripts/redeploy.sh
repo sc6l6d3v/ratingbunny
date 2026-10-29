@@ -4,13 +4,22 @@
 # published ports, restart policy, extra hosts and bind mounts, so no per-host flags are needed.
 # The running container is left alone unless the pulled image passes its checks.
 #
-# Usage (as root): redeploy.sh [-n] DEV|PROD [expected jar sha256]
-#   -n   dry run: pull and check the image, print the docker run command, change nothing
+# Usage (as root): redeploy.sh [-n] [-e KEY=VALUE]... DEV|PROD [expected jar sha256]
+#   -n             dry run: pull and check the image, print the docker run command, change nothing
+#   -e KEY=VALUE   add or replace an env var; later redeploys keep it, as it is then in the container's env
 set -euo pipefail
 
-usage() { echo "usage: $0 [-n] DEV|PROD [expected jar sha256]" >&2; exit 2; }
+usage() { echo "usage: $0 [-n] [-e KEY=VALUE]... DEV|PROD [expected jar sha256]" >&2; exit 2; }
 dry=
-[[ ${1:-} == -n ]] && { dry=1; shift; }
+sets=()
+while getopts ne: opt; do
+  case $opt in
+    n) dry=1 ;;
+    e) [[ $OPTARG =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || usage; sets+=("$OPTARG") ;;
+    *) usage ;;
+  esac
+done
+shift $((OPTIND - 1))
 case ${1:-} in DEV|PROD) env=$1 ;; *) usage ;; esac
 want=${2:-}
 name=rs-svc-${env,,}
@@ -38,12 +47,17 @@ mapfile -t flags < <(docker inspect "$name" --format '
 {{end}}{{range index .HostConfig "Binds"}}--volume={{.}}
 {{end}}' | grep .)
 echo "new container: docker run -d --name $name --env-file $envf ${flags[*]} $img"
+(( ${#sets[@]} == 0 )) || echo "env vars set by -e: ${sets[*]%%=*}"
 [[ -z $dry ]] || { echo "dry run: $name not changed"; exit 0; }
 
 # The env file keeps only what was passed at run time; the image's own ENV comes from the new image.
+cur=$(comm -23 <(docker inspect "$name" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep . | sort) \
+               <(docker image inspect "$old" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep . | sort))
+for kv in "${sets[@]}"; do
+  cur=$(grep -v "^${kv%%=*}=" <<< "$cur" || true)$'\n'$kv
+done
 umask 077
-comm -23 <(docker inspect "$name" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep . | sort) \
-         <(docker image inspect "$old" --format '{{range .Config.Env}}{{println .}}{{end}}' | grep . | sort) > "$envf"
+grep . <<< "$cur" > "$envf"
 echo "saved $(wc -l < "$envf") env vars to $envf"
 if [[ $(docker image inspect "$img" --format '{{.Id}}') == "$old" ]]; then
   echo "same image as before: rest-$env-prev left as is"
