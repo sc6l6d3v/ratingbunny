@@ -36,11 +36,9 @@ WORKDIR $PROJECT_HOME/data
 
 # We are running http4s on this port so expose it
 EXPOSE 8080
-EXPOSE 5050
-# Expose this port if you want to enable remote debugging: 5005
 
 COPY target/scala-${SCALA_VERSION}/${APP_NAME}-assembly-$APP_VERSION.jar $PROJECT_HOME/data/$APP_NAME.jar
 
-# This will run at start, it points to the .sh file in the bin directory to start the play app
-ENTRYPOINT [ "sh", "-c", "exec java -Djava.net.preferIPv4Stack=true -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5050 -jar \"$PROJECT_HOME/data/$APP_NAME.jar\"" ]
-# Add this arg to the script if you want to enable remote debugging: -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
+# The Java debugger is off unless JDWP_PORT is set (DEV sets 5050). Anyone who can reach that port can run code in the JVM,
+# so PROD leaves it unset.
+ENTRYPOINT [ "sh", "-c", "exec java -Djava.net.preferIPv4Stack=true ${JDWP_PORT:+\"-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:$JDWP_PORT\"} -jar \"$PROJECT_HOME/data/$APP_NAME.jar\"" ]
