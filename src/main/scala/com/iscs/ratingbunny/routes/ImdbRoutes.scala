@@ -3,7 +3,6 @@ package com.iscs.ratingbunny.routes
 import cats.effect.*
 import cats.effect.implicits.{genSpawnOps, genSpawnOps_}
 import cats.implicits.*
-import com.iscs.ratingbunny.config.TrialConfig
 import com.iscs.ratingbunny.domains.*
 import com.iscs.ratingbunny.dslparams.*
 import com.iscs.ratingbunny.model.Requests.*
@@ -173,8 +172,7 @@ object ImdbRoutes extends DecodeUtils with VerifiedUserRoutes:
       I: ImdbQuery[F],
       hx: HistoryRepo[F],
       userRepo: UserRepo[F],
-      authMw: AuthMiddleware[F, String],
-      trialConfig: TrialConfig
+      authMw: AuthMiddleware[F, String]
   ): HttpRoutes[F] =
     val dsl = Http4sDsl[F]; import dsl.*
 
@@ -184,7 +182,7 @@ object ImdbRoutes extends DecodeUtils with VerifiedUserRoutes:
             :? QParamMatcher(q)
             +& LowYearParamMatcher(lowYear)
             +& HighYearParamMatcher(highYear) as user =>
-          ensureVerified(user, trialConfig, userRepo) {
+          ensureVerified(user, userRepo) {
             val low  = lowYear.getOrElse(Int.MinValue)
             val high = highYear.getOrElse(Int.MaxValue)
             val params = ReqParams(
@@ -204,7 +202,7 @@ object ImdbRoutes extends DecodeUtils with VerifiedUserRoutes:
             +& CardWidthQueryParameterMatcher(cs)
             +& CardHeightQueryParameterMatcher(ch)
             +& OffsetQUeryParameterMatcher(off) as user =>
-          ensureVerified(user, trialConfig, userRepo) {
+          ensureVerified(user, userRepo) {
             val win = pageWindow(page, ws, wh, cs, ch, off)
             for
               p   <- authreq.req.as[ReqParams]

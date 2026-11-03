@@ -1,7 +1,6 @@
 package com.iscs.ratingbunny.routes
 
 import cats.effect.IO
-import com.iscs.ratingbunny.config.TrialConfig
 import com.iscs.ratingbunny.domains.{Plan, SubscriptionStatus, UserDoc, UserRepo}
 import com.iscs.ratingbunny.model.Requests.ReqParams
 import com.iscs.ratingbunny.repos.HistoryRepo
@@ -48,8 +47,6 @@ class HistoryRoutesSuite extends CatsEffectSuite with EmbeddedMongo:
     def markEmailVerified(uid: String): IO[Unit]                    = IO.unit
     def updateSubscription(uid: String, plan: Plan, status: SubscriptionStatus, trialEndsAt: Option[Instant]): IO[Unit] = IO.unit
 
-  private val trialOff = TrialConfig(enabled = false, lengthDays = 0, includeFreePlan = false)
-
   private val bearer = headers.Authorization(
     Credentials.Token(AuthScheme.Bearer, JwtCirce.encode(JwtClaim(subject = Some(uid)), secret, JwtAlgorithm.HS256))
   )
@@ -63,7 +60,7 @@ class HistoryRoutesSuite extends CatsEffectSuite with EmbeddedMongo:
             db   <- client.getDatabase("test")
             repo <- HistoryRepo.make[IO](db)
             coll <- db.getCollection("user_history")
-            app = HistoryRoutes.authedRoutes[IO](repo, userRepo, trialOff, JwtAuth.middleware[IO](secret)).orNotFound
+            app = HistoryRoutes.authedRoutes[IO](repo, userRepo, JwtAuth.middleware[IO](secret)).orNotFound
             res <- test(app, repo, coll)
           yield res
 
