@@ -2,7 +2,6 @@ package com.iscs.ratingbunny.routes
 
 import cats.effect.{IO, Ref, Resource}
 import cats.implicits.*
-import com.iscs.ratingbunny.config.TrialConfig
 import com.iscs.ratingbunny.domains.PagedTitleData.titleDoc
 import com.iscs.ratingbunny.domains.{AutoNameRec, AutoTitleRec, ImdbQueryImpl, Plan, SubscriptionStatus, TitleRec, UserDoc, UserRepo}
 import com.iscs.ratingbunny.repos.HistoryRepo
@@ -144,7 +143,7 @@ class ImdbRoutesPagingSuite extends CatsEffectSuite with EmbeddedMongo:
     for
       iq <- imdbQuery(None)
       hx <- HistoryRepo.make[IO](mongo())
-      routes = ImdbRoutes.authedRoutes[IO](iq, hx, userRepo, JwtAuth.middleware[IO](secret), TrialConfig(false, 0, false))
+      routes = ImdbRoutes.authedRoutes[IO](iq, hx, userRepo, JwtAuth.middleware[IO](secret))
       body   = withYear.deepMerge(Json.obj("query" -> Json.fromString(nconst)))
       pages <- (1 to 11).toList.traverse(p => post(routes, s"/name/$p/5.0", body, auth = true))
     yield assertEquals(pages, expectedPages)

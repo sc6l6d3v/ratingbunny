@@ -2,7 +2,6 @@ package com.iscs.ratingbunny.routes
 
 import cats.effect.Async
 import cats.implicits.*
-import com.iscs.ratingbunny.config.TrialConfig
 import com.iscs.ratingbunny.domains.UserRepo
 import com.iscs.ratingbunny.model.Requests.ReqParams
 import com.iscs.ratingbunny.repos.HistoryRepo
@@ -29,7 +28,6 @@ object HistoryRoutes extends VerifiedUserRoutes:
   def authedRoutes[F[_]: Async](
       historyRepo: HistoryRepo[F],
       userRepo: UserRepo[F],
-      trialConfig: TrialConfig,
       authMw: AuthMiddleware[F, String]
   ): HttpRoutes[F] =
     val dsl = Http4sDsl[F]; import dsl.*
@@ -38,7 +36,7 @@ object HistoryRoutes extends VerifiedUserRoutes:
 
     val svc = AuthedRoutes.of[String, F]:
       case GET -> Root / "history" / "latest" :? LimitParam(limitOpt) as userId =>
-        ensureVerified(userId, trialConfig, userRepo) {
+        ensureVerified(userId, userRepo) {
           normalizeLimit(limitOpt).fold(
             msg => BadRequest(msg),
             limit =>
@@ -51,7 +49,7 @@ object HistoryRoutes extends VerifiedUserRoutes:
         }
 
       case GET -> Root / "history" / "popular" :? LimitParam(limitOpt) as userId =>
-        ensureVerified(userId, trialConfig, userRepo) {
+        ensureVerified(userId, userRepo) {
           normalizeLimit(limitOpt).fold(
             msg => BadRequest(msg),
             limit =>
@@ -64,7 +62,7 @@ object HistoryRoutes extends VerifiedUserRoutes:
         }
 
       case req @ POST -> Root / "history" / "byparams" as userId =>
-        ensureVerified(userId, trialConfig, userRepo) {
+        ensureVerified(userId, userRepo) {
           for
             params <- req.req.as[ReqParams]
             sigOpt <- historyRepo.byParams(userId, params)
