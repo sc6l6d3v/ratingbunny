@@ -33,11 +33,9 @@ class ImdbRoutesPagingSuite extends CatsEffectSuite with EmbeddedMongo:
   override val mongoPort: Int = 12371
   private val secret          = "paging-secret"
   private val nconst          = "nm0000001"
-  private val total           = 30
+  private val total           = 60
 
-  // ws=0 gives one card per row; wh=328 with ch=100 gives three rows, so every page holds 3 records.
-  private val pageSize = 3
-  private val dims     = "?ws=0&wh=328&cs=100&ch=100&off=0"
+  private val pageSize = ImdbRoutes.PageSize
 
   private val titleIds = (1 to total).map(i => f"tt$i%07d").toList
 
@@ -92,7 +90,7 @@ class ImdbRoutesPagingSuite extends CatsEffectSuite with EmbeddedMongo:
   private val withoutYear = Json.obj()
 
   private def post(routes: HttpRoutes[IO], path: String, body: Json, auth: Boolean = false): IO[(List[String], Long)] =
-    val req = Request[IO](Method.POST, Uri.unsafeFromString(path + dims)).withEntity(body)
+    val req = Request[IO](Method.POST, Uri.unsafeFromString(path)).withEntity(body)
     routes
       .orNotFound(if auth then req.putHeaders(bearer) else req)
       .flatMap: resp =>
@@ -104,8 +102,8 @@ class ImdbRoutesPagingSuite extends CatsEffectSuite with EmbeddedMongo:
   private def expectedPage(p: Int): List[String] = titleIds.slice((p - 1) * pageSize, p * pageSize)
   private def expectedRemaining(p: Int): Long    = math.max(total - p * pageSize, 0).toLong
 
-  // Pages 1-11 of 30 records at 3 per page: ten full pages, then an empty page past the end.
-  private val expectedPages = (1 to 11).toList.map(p => (expectedPage(p), expectedRemaining(p)))
+  // Pages 1-4 of 60 records at 24 per page: two full pages, a page of 12, then an empty page past the end.
+  private val expectedPages = (1 to 4).toList.map(p => (expectedPage(p), expectedRemaining(p)))
 
   private def publicRoutes(client: Option[Client[IO]] = None): IO[HttpRoutes[IO]] =
     for
@@ -113,11 +111,18 @@ class ImdbRoutesPagingSuite extends CatsEffectSuite with EmbeddedMongo:
       hx <- HistoryRepo.make[IO](mongo())
     yield ImdbRoutes.publicRoutes[IO](iq, hx, secret)
 
-  test("title pages are consecutive slices of the full result with an exact remaining count, including page 9 and beyond"):
+  test("title pages are consecutive 24-record slices of the full result with an exact remaining count, and past the end is empty"):
     for
       routes <- publicRoutes()
-      pages  <- (1 to 11).toList.traverse(p => post(routes, s"/title/$p/5.0", withYear))
+      pages  <- (1 to 4).toList.traverse(p => post(routes, s"/title/$p/5.0", withYear))
     yield assertEquals(pages, expectedPages)
+
+  test("window-size parameters from older clients are ignored, so they can neither change nor inflate the page"):
+    for
+      routes  <- publicRoutes()
+      desktop <- post(routes, "/title/1/5.0?ws=1600&wh=900&cs=230&ch=345&off=0", withYear)
+      huge    <- post(routes, "/title/1/5.0?ws=4000&wh=4000&cs=1&ch=1&off=0", withYear)
+    yield assertEquals(List(desktop, huge), List.fill(2)((expectedPage(1), expectedRemaining(1))))
 
   test("a body without a year searches every year instead of returning nothing"):
     for
@@ -135,15 +140,15 @@ class ImdbRoutesPagingSuite extends CatsEffectSuite with EmbeddedMongo:
     for
       asked            <- Ref.of[IO, List[String]](Nil)
       routes           <- publicRoutes(Some(recordingImageClient(asked)))
-      (ids, remaining) <- post(routes, "/pathtitle/4/5.0", withYear)
+      (ids, remaining) <- post(routes, "/pathtitle/2/5.0", withYear)
       requested        <- asked.get
-    yield assertEquals((ids, remaining, requested.sorted), (expectedPage(4), expectedRemaining(4), expectedPage(4).sorted))
+    yield assertEquals((ids, remaining, requested.sorted), (expectedPage(2), expectedRemaining(2), expectedPage(2).sorted))
 
-  test("pro name pages are consecutive slices with an exact remaining count, including page 9 and beyond"):
+  test("pro name pages are consecutive 24-record slices with an exact remaining count, and past the end is empty"):
     for
       iq <- imdbQuery(None)
       hx <- HistoryRepo.make[IO](mongo())
       routes = ImdbRoutes.authedRoutes[IO](iq, hx, userRepo, JwtAuth.middleware[IO](secret))
       body   = withYear.deepMerge(Json.obj("query" -> Json.fromString(nconst)))
-      pages <- (1 to 11).toList.traverse(p => post(routes, s"/name/$p/5.0", body, auth = true))
+      pages <- (1 to 4).toList.traverse(p => post(routes, s"/name/$p/5.0", body, auth = true))
     yield assertEquals(pages, expectedPages)

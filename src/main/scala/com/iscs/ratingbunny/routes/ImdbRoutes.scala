@@ -4,7 +4,6 @@ import cats.effect.*
 import cats.effect.implicits.{genSpawnOps, genSpawnOps_}
 import cats.implicits.*
 import com.iscs.ratingbunny.domains.*
-import com.iscs.ratingbunny.dslparams.*
 import com.iscs.ratingbunny.model.Requests.*
 import com.iscs.ratingbunny.repos.HistoryRepo
 import com.iscs.ratingbunny.util.DecodeUtils
@@ -24,15 +23,10 @@ import com.iscs.ratingbunny.routes.VerifiedUserRoutes
 import com.iscs.ratingbunny.security.JwtAuth
 import org.typelevel.ci.*
 
-import scala.annotation.tailrec
-import scala.util.Try
-
 object ImdbRoutes extends DecodeUtils with VerifiedUserRoutes:
 
-  private val L            = Logger[this.type]
-  private val rowSpacer    = 64
-  private val columnSpacer = 64
-  private val apiVersion   = "v3"
+  private val L          = Logger[this.type]
+  private val apiVersion = "v3"
 
   private object QParamMatcher         extends QueryParamDecoderMatcher[String]("q")
   private object LangParamMatcher      extends OptionalQueryParamDecoderMatcher[String]("lang")
@@ -44,37 +38,16 @@ object ImdbRoutes extends DecodeUtils with VerifiedUserRoutes:
   private object LowYearParamMatcher   extends OptionalQueryParamDecoderMatcher[Int]("lowyear")
   private object HighYearParamMatcher  extends OptionalQueryParamDecoderMatcher[Int]("highyear")
 
-  // ---------- helpers (unchanged) ------------------------------------------------
-  private def rowsPerPage(height: Int, spacer: Int, cardHeight: Int): Int =
-    @tailrec
-    def rowsPerPageTR(rem: Int, c: Int): Int =
-      if rem < 0 then c else rowsPerPageTR(rem - spacer - cardHeight, c + 1)
-    rowsPerPageTR(height, 0)
+  /** Records per search page: a multiple of 2, 3, 4 and 6, the column counts the React grid uses, so every page fills whole rows. */
+  private[routes] val PageSize = 24
 
-  private def cardsPerRow(width: Int, spacer: Int, offset: Int, cardWidth: Int): Int =
-    @tailrec
-    def cardsPerRowTR(rem: Int, c: Int): Int =
-      if rem < 0 then c else cardsPerRowTR(rem - spacer - cardWidth, c + 1)
-    cardsPerRowTR(width - offset, 0)
+  /** The slice of a search's full result set that one page covers: `page` is 1-based. */
+  final private case class PageWindow(page: Int):
+    val offset: Int                  = math.min((page - 1).toLong * PageSize, Int.MaxValue.toLong).toInt
+    def remaining(total: Long): Long = math.max(total - page.toLong * PageSize, 0L)
 
-  private def pageSize(w: Int, cw: Int, h: Int, ch: Int, off: Int): Int =
-    cardsPerRow(w, columnSpacer, off, cw) * rowsPerPage(h, rowSpacer, ch)
-
-  private def dims(strPairs: List[(String, Int)]): List[Int] =
-    strPairs.map:
-      case (s, d) => Try(s.toInt).toOption.getOrElse(d)
-
-  private def conv(page: String, ws: String, wh: String, cs: String, ch: String, off: String): List[Int] =
-    dims(List((page, 1), (ws, 600), (wh, 900), (cs, 160), (ch, 238), (off, 0)))
-
-  /** The slice of a search's full result set that one page covers: `page` is 1-based and `size` is records per page. */
-  final private case class PageWindow(page: Int, size: Int):
-    val offset: Int                  = math.min((page - 1).toLong * size, Int.MaxValue.toLong).toInt
-    def remaining(total: Long): Long = math.max(total - page.toLong * size, 0L)
-
-  private def pageWindow(page: String, ws: String, wh: String, cs: String, ch: String, off: String): PageWindow =
-    val dimsL = conv(page, ws, wh, cs, ch, off)
-    PageWindow(math.max(dimsL.head, 1), math.max(pageSize(dimsL(1), dimsL(3), dimsL(2), dimsL(4), dimsL(5)), 1))
+  /** Page numbers that are not numbers, or below 1, are page 1. */
+  private def pageWindow(page: String): PageWindow = PageWindow(math.max(page.toIntOption.getOrElse(1), 1))
 
   private def withRemaining[F[_]](resp: Response[F], remaining: Long): Response[F] =
     resp.putHeaders(
@@ -109,20 +82,15 @@ object ImdbRoutes extends DecodeUtils with VerifiedUserRoutes:
         req: Request[F],
         page: String,
         rating: String,
-        ws: String,
-        wh: String,
-        cs: String,
-        ch: String,
-        off: String,
         fetch: (Double, ReqParams, Int, Int, SortField) => Stream[F, TitleRecBase],
         logText: String
     ): F[Response[F]] =
-      val win = pageWindow(page, ws, wh, cs, ch, off)
+      val win = pageWindow(page)
       for
         params  <- req.as[ReqParams]
         rtg     <- getRating(rating)
         userOpt <- JwtAuth.userFromRequest(req, jwtSecret)
-        (pageList, total) <- fetch(rtg, params, win.offset, win.size, SortField.from(params.sortType)).compile.toList
+        (pageList, total) <- fetch(rtg, params, win.offset, PageSize, SortField.from(params.sortType)).compile.toList
           .both(I.countByTitle(rtg, params))
         _    <- hx.log(userOpt.getOrElse("guest"), params).start
         resp <- Ok(pageList).map(withRemaining(_, win.remaining(total)))
@@ -130,21 +98,11 @@ object ImdbRoutes extends DecodeUtils with VerifiedUserRoutes:
 
     val svc = HttpRoutes
       .of[F]:
-        case req @ POST -> Root / "title" / page / rating
-            :? WindowWidthQueryParameterMatcher(ws)
-            +& WindowHeightQueryParameterMatcher(wh)
-            +& CardWidthQueryParameterMatcher(cs)
-            +& CardHeightQueryParameterMatcher(ch)
-            +& OffsetQUeryParameterMatcher(off) =>
-          commonTitle[TitleRec](req, page, rating, ws, wh, cs, ch, off, I.getByTitle, "title")
+        case req @ POST -> Root / "title" / page / rating =>
+          commonTitle[TitleRec](req, page, rating, I.getByTitle, "title")
 
-        case req @ POST -> Root / "pathtitle" / page / rating
-            :? WindowWidthQueryParameterMatcher(ws)
-            +& WindowHeightQueryParameterMatcher(wh)
-            +& CardWidthQueryParameterMatcher(cs)
-            +& CardHeightQueryParameterMatcher(ch)
-            +& OffsetQUeryParameterMatcher(off) =>
-          commonTitle[TitleRecPath](req, page, rating, ws, wh, cs, ch, off, I.getByTitlePath, "pathtitle")
+        case req @ POST -> Root / "pathtitle" / page / rating =>
+          commonTitle[TitleRecPath](req, page, rating, I.getByTitlePath, "pathtitle")
 
         case req @ GET -> Root / "autotitle"
             :? QParamMatcher(title)
@@ -196,21 +154,16 @@ object ImdbRoutes extends DecodeUtils with VerifiedUserRoutes:
             yield res
           }
 
-        case authreq @ POST -> Root / "name" / page / rating
-            :? WindowWidthQueryParameterMatcher(ws)
-            +& WindowHeightQueryParameterMatcher(wh)
-            +& CardWidthQueryParameterMatcher(cs)
-            +& CardHeightQueryParameterMatcher(ch)
-            +& OffsetQUeryParameterMatcher(off) as user =>
+        case authreq @ POST -> Root / "name" / page / rating as user =>
           ensureVerified(user, userRepo) {
-            val win = pageWindow(page, ws, wh, cs, ch, off)
+            val win = pageWindow(page)
             for
               p   <- authreq.req.as[ReqParams]
               _   <- Sync[F].delay(L.info(s"got reqParams: $p"))
               rtg <- getRating(rating)
               name = p.query.getOrElse("")
               (pageLst, total) <- I
-                .getByEnhancedName(name, rtg, p, win.offset, win.size, SortField.from(p.sortType))
+                .getByEnhancedName(name, rtg, p, win.offset, PageSize, SortField.from(p.sortType))
                 .compile
                 .toList
                 .both(I.countByName(name, rtg, p))
