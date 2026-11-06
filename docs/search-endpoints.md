@@ -4,12 +4,16 @@ Ready-to-run Postman/cURL examples for the core search endpoints that return ful
 All requests expect JSON responses and most require authentication; include the
 `Authorization: Bearer <token>` header unless noted otherwise.
 
-## `/api/v3/pro/name/{page}/{pageSize}` (actor search)
+Search results come 24 per page. `{page}` is 1-based, and `{rating}` is the minimum
+average rating. Each response's `X-Remaining-Count` header gives the number of matching
+records after that page, and it is 0 on the last page.
+
+## `/api/v3/pro/name/{page}/{rating}` (actor search)
 Returns roles for a given person (`nconst`) with optional genre, year, and vote filters.
 
 **Request**
 ```bash
-curl --location 'http://localhost:8084/api/v3/pro/name/1/4?ws=600&wh=800&cs=211&ch=328&off=0' \
+curl --location 'http://localhost:8084/api/v3/pro/name/1/4' \
   --header 'Content-Type: application/json' \
   --header 'Authorization: Bearer <token>' \
   --header 'Cookie: __Host-nc_sameSiteCookielax=true; __Host-nc_sameSiteCookiestrict=true' \
@@ -66,13 +70,13 @@ curl --location 'http://localhost:8084/api/v3/pro/name/1/4?ws=600&wh=800&cs=211&
 ]
 ```
 
-## `/api/v3/title/{page}/{pageSize}`
+## `/api/v3/title/{page}/{rating}`
 Search for titles with either exact matching or regex-based search types.
 
 ### Exact search
 **Request**
 ```bash
-curl --location 'http://localhost:8084/api/v3/title/1/5?ws=936&wh=1404&cs=230&ch=345&off=0' \
+curl --location 'http://localhost:8084/api/v3/title/1/5' \
   --header 'Content-Type: application/json' \
   --header 'Authorization: Bearer <token>' \
   --header 'Cookie: __Host-nc_sameSiteCookielax=true; __Host-nc_sameSiteCookiestrict=true' \
@@ -116,7 +120,7 @@ curl --location 'http://localhost:8084/api/v3/title/1/5?ws=936&wh=1404&cs=230&ch
 ### Regex search
 **Request**
 ```bash
-curl --location 'http://localhost:8084/api/v3/title/1/5?ws=936&wh=1404&cs=230&ch=345&off=0' \
+curl --location 'http://localhost:8084/api/v3/title/1/5' \
   --header 'Content-Type: application/json' \
   --header 'Authorization: Bearer <token>' \
   --header 'Cookie: __Host-nc_sameSiteCookielax=true; __Host-nc_sameSiteCookiestrict=true' \
