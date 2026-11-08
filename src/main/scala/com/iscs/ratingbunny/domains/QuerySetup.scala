@@ -46,8 +46,8 @@ trait QuerySetup:
   private val NIN                     = "$nin"
   private val OR                      = "$or"
   private val REGX                    = "$regex"
-  private val autoTitleHint           = "auto_movie_genre_prefix_langMask"
-  private val autoTitleNoGenreHint    = "auto_titleLC_type_langMask"
+  private val autoTitleHint           = "auto_movie_genre_prefix_origLang"
+  private val autoTitleNoGenreHint    = "auto_titleLC_type_origLang"
   private val LangCode                = "^[a-z]{2}$".r
   val L: Logger                       = Logger[this.type]
 
