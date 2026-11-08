@@ -228,13 +228,11 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
               _   <- Sync[F].delay(L.info(s"getAutosuggestName took {} ms", (end - start).toMillis))
             yield ()
 
-  /** db.getCollection("title_principals_namerating").aggregate([ { $match: { primaryTitle: { $regex: "^^Gone with the" }, "startYear": {
-    * "$gte": 2015, "$lte": 2024 }, "genresList": { "$in": ["Adventure"] }, "titleType": "movie", "isAdult": 0, "numVotes": { "$gte": 50 },
-    * "$or": [{ "averageRating": { "$exists": false } }, { "averageRating": { "$gte": 4.0 } }] } }, { $group: { _id: "$primaryTitle", } }, {
-    * $sort: { "primaryTitle": 1 } }, { $limit: 20 } ])
+  /** db.titles.find({ primaryTitleLC: { $gte: "gone with the", $lt: "gone with the\uffff" }, origLang: "en", isAdult: 0, titleType: { $in:
+    * ["movie"] } }).sort({ primaryTitleLC: 1 }).limit(20).hint("auto_titleLC_type_origLang")
     *
     * @param titlePrefix
-    *   title regex
+    *   case-insensitive title prefix
     * @return
     *   stream of object
     */
