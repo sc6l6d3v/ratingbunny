@@ -40,7 +40,8 @@ curl --location 'http://localhost:8084/api/v3/autoname?q=John%20Wa&lowyear=1950&
 
 ## `/api/v3/autotitle`
 Find titles by name with language, rating, vote and metadata filters. `lang` is a two-letter ISO 639-1 code matched against the
-title's original language (`origLang`); see search-endpoints.md.
+title's original language (`origLang`); see search-endpoints.md. Results are the first 20 matches in case-insensitive
+title order (`primaryTitleLC`), which is the order the prefix index yields.
 
 **Request**
 ```bash
