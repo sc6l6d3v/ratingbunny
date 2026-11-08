@@ -157,7 +157,9 @@ trait QuerySetup:
       List(titleElt) ::: origLangFilter(lang).toList ::: getParamList(fuzzyParams)
     )
 
-    val sortBson = Sorts.ascending(primaryTitle)
+    // Sort on the index key so the prefix scan yields sorted order and stops at the limit; a sort on
+    // primaryTitle would force a blocking SORT over every matching key.
+    val sortBson = Sorts.ascending(primaryTitleLC)
 
     val projectBson = fields(
       include(id, primaryTitle, startYear, "rating")
