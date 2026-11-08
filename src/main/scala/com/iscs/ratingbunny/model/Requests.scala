@@ -10,7 +10,9 @@ object Requests:
       isAdult: Option[Boolean] = None,
       searchType: Option[String] = None,
       sortType: Option[String] = None,
-      lang: Option[String] = None
+      lang: Option[String] = None,
+      // the minimum rating from the request path, set by the search routes so the history records the search as it was run
+      rating: Option[Double] = None
   ):
     override def toString: String = List(
       query.map(q => s"query=$q"),
@@ -21,6 +23,7 @@ object Requests:
       isAdult.map(a => s"isAdult=>$a"),
       searchType.map(s => s"searchType=>$s"),
       sortType.map(s => s"sortType=>$s"),
-      lang.map(l => s"lang=>$l")
+      lang.map(l => s"lang=>$l"),
+      rating.map(r => s"rating=>$r")
     ).flatten
       .mkString(", ")

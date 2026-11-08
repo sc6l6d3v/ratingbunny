@@ -92,7 +92,7 @@ object ImdbRoutes extends DecodeUtils with VerifiedUserRoutes:
         userOpt <- JwtAuth.userFromRequest(req, jwtSecret)
         (pageList, total) <- fetch(rtg, params, win.offset, PageSize, SortField.from(params.sortType)).compile.toList
           .both(I.countByTitle(rtg, params))
-        _    <- hx.log(userOpt.getOrElse("guest"), params).start
+        _    <- hx.log(userOpt.getOrElse("guest"), params.copy(rating = Some(rtg))).start
         resp <- Ok(pageList).map(withRemaining(_, win.remaining(total)))
       yield resp
 
@@ -168,7 +168,7 @@ object ImdbRoutes extends DecodeUtils with VerifiedUserRoutes:
                 .toList
                 .both(I.countByName(name, rtg, p))
               _   <- Sync[F].delay(L.info(s"got list: $pageLst"))
-              _   <- hx.log(user, p).start
+              _   <- hx.log(user, p.copy(rating = Some(rtg))).start
               res <- Ok(pageLst).map(withRemaining(_, win.remaining(total)))
             yield res
           }

@@ -102,6 +102,20 @@ class HistoryRepoSpec extends AsyncWordSpec with Matchers with EmbeddedMongo wit
             stored.flatMap(_.getString("query")) shouldBe Some("tenet ")
             stored.flatMap(_.getString("sortType")) shouldBe Some("year")
 
+      "store the rating and keep one search at two ratings as two entries" in:
+        withEmbeddedMongoClient: client =>
+          val at7 = ReqParams(genre = Some(List("Action")), year = Some(List(2023, 2026)), rating = Some(7.0))
+          for
+            db   <- client.getDatabase("test")
+            repo <- HistoryRepo.make[IO](db)
+            _    <- repo.log("user-1", at7)
+            _    <- repo.log("user-1", at7.copy(rating = Some(8.0)))
+            docs <- repo.coll.find(feq("userId", "user-1")).all
+          yield
+            docs.size shouldBe 2
+            docs.toList.flatMap(_.getDocument("params").flatMap(_.getDouble("rating"))).sorted shouldBe List(7.0, 8.0)
+            docs.toList.flatMap(_.getInt("hits")) shouldBe List(1, 1)
+
       "propagate a write error that is not the duplicate-key race" in:
         withEmbeddedMongoClient: client =>
           val params = ReqParams(query = Some("tenet"))
@@ -143,6 +157,7 @@ class HistoryRepoSpec extends AsyncWordSpec with Matchers with EmbeddedMongo wit
               base.copy(query = Some("tenet 2")),
               base.copy(genre = Some(List("Comedy"))),
               base.copy(year = Some(List(2019, 2021))),
+              base.copy(rating = Some(8.0)),
               base.copy(votes = Some(1000)),
               base.copy(isAdult = Some(true)),
               base.copy(searchType = Some("exact")),

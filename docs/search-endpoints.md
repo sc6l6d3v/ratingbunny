@@ -169,3 +169,11 @@ curl --location 'http://localhost:8084/api/v3/title/1/5' \
   }
 ]
 ```
+
+## Search history (`/api/v3/pro/history/...`)
+Every title and name search is upserted into the caller's history, keyed by a signature of the search. The stored `params` are
+the request body plus `rating`, the `{rating}` from the request path, so one search run at rating 7 and again at rating 8 is two
+entries. `params.rating` is absent on entries that have none.
+
+- `GET …/history/latest?limit=n` and `GET …/history/popular?limit=n` return `[{ "sig", "createdAt", "params", "hits" }]`.
+- `POST …/history/byparams` takes a search body (with `rating`) and answers `{ "sig" }`, or 404 when the caller never ran it.
