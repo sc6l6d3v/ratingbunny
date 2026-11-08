@@ -73,6 +73,11 @@ curl --location 'http://localhost:8084/api/v3/pro/name/1/4' \
 ## `/api/v3/title/{page}/{rating}`
 Search for titles with either exact matching or regex-based search types.
 
+### Language
+`lang` in the request body is a two-letter ISO 639-1 code and matches a title's **original language** as TMDB reports it (the ETL
+sets `origLang` on movies with at least 1000 votes). `zh` also matches `cn`, TMDB's code for Cantonese. A value that is not two
+letters is ignored. Results carry `origLang` when it is known.
+
 ### Exact search
 **Request**
 ```bash

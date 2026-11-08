@@ -29,7 +29,7 @@ trait QuerySetup:
   private val endYear                 = "endYear"
   private val runtimeMinutes          = "runtimeMinutes"
   private val titleType               = "titleType"
-  private val langMask                = "langMask"
+  private val origLang                = "origLang"
   private val role                    = "role"
   private val nconst                  = "nconst"
   private val hasUS                   = "hasUS"
@@ -46,10 +46,9 @@ trait QuerySetup:
   private val NIN                     = "$nin"
   private val OR                      = "$or"
   private val REGX                    = "$regex"
-  private val BITSANY                 = "$bitsAnySet"
   private val autoTitleHint           = "auto_movie_genre_prefix_langMask"
   private val autoTitleNoGenreHint    = "auto_titleLC_type_langMask"
-  private val topLangs                = List("en", "ja", "de", "fr")
+  private val LangCode                = "^[a-z]{2}$".r
   val L: Logger                       = Logger[this.type]
 
   extension (b: Boolean) def toInt: Int = if b then 1 else 0
@@ -71,10 +70,13 @@ trait QuerySetup:
   private def prefixRange(fieldName: String, prefix: String): Document =
     Document(fieldName := Document(GTE := prefix.toLowerCase).add(LT := s"${prefix.toLowerCase}\uffff"))
 
-  protected def optionalLangBit(lang: Option[String]): Option[Long] =
-    lang.flatMap: code =>
-      val idx = topLangs.indexOf(code.toLowerCase)
-      Option.when(idx >= 0)(1L << idx)
+  /** Match titles whose original language (TMDB ISO 639-1 code, set by the ETL) is `lang`. `zh` also matches `cn`, TMDB's code for
+    * Cantonese. Anything that is not a two-letter code is ignored.
+    */
+  private def origLangFilter(lang: Option[String]): Option[Document] =
+    lang.map(_.trim.toLowerCase).collect:
+      case "zh"              => Document(origLang := Document(IN := List("zh", "cn")))
+      case code @ LangCode() => feq(origLang, code)
 
   private def mergeDocs(docs: List[Document]): Document = docs.foldLeft(Document())(_ merge _)
 
@@ -150,10 +152,9 @@ trait QuerySetup:
   def genAutotitleFilter(titlePrefix: String, lang: Option[String], params: ReqParams): AutotitleSpec =
     val fuzzyParams   = params.copy(query = None) // force to not parse primaryTitle
     val titleElt      = prefixRange(primaryTitleLC, titlePrefix)
-    val langMaskMatch = optionalLangBit(lang).map(bit => Document(langMask := Document(BITSANY := bit)))
 
     val matchBson: Document = mergeDocs(
-      List(titleElt) ::: langMaskMatch.toList ::: getParamList(fuzzyParams)
+      List(titleElt) ::: origLangFilter(lang).toList ::: getParamList(fuzzyParams)
     )
 
     val sortBson = Sorts.ascending(primaryTitle)
@@ -167,15 +168,11 @@ trait QuerySetup:
 
     AutotitleSpec(matchBson, projectBson, sortBson, hintOpt)
 
-  def genNameFilter(nm: String, rating: Double, params: ReqParams, langBit: Option[Long] = None): Document =
-    val langMaskFilter = langBit.map(bit => Document(langMask := Document(BITSANY := bit)))
-    val filters = List(Some(feq(nconst, nm)), langMaskFilter, Some(combineVotesWithRating(params, rating))) :::
-      getParamList(params, SearchDomain.Name).map(Some(_))
-    mergeDocs(filters.flatten)
+  def genNameFilter(nm: String, rating: Double, params: ReqParams): Document =
+    mergeDocs(feq(nconst, nm) :: combineVotesWithRating(params, rating) :: getParamList(params, SearchDomain.Name))
 
-  def genTitleFilter(params: ReqParams, rating: Double, langBit: Option[Long] = None): Document =
-    val langMaskFilter = langBit.map(bit => Document(langMask := Document(BITSANY := bit)))
-    mergeDocs(langMaskFilter.toList ::: List(combineVotesWithRating(params, rating)) ::: getParamList(params))
+  def genTitleFilter(params: ReqParams, rating: Double): Document =
+    mergeDocs(origLangFilter(params.lang).toList ::: List(combineVotesWithRating(params, rating)) ::: getParamList(params))
 
   private def combineVotesWithRating(params: ReqParams, rating: Double): Document =
     params.votes match

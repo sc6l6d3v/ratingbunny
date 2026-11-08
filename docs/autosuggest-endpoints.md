@@ -39,7 +39,8 @@ curl --location 'http://localhost:8084/api/v3/autoname?q=John%20Wa&lowyear=1950&
 ```
 
 ## `/api/v3/autotitle`
-Find titles by name with language, rating, vote and metadata filters.
+Find titles by name with language, rating, vote and metadata filters. `lang` is a two-letter ISO 639-1 code matched against the
+title's original language (`origLang`); see search-endpoints.md.
 
 **Request**
 ```bash
