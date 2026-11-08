@@ -97,6 +97,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
           "hasEN",
           "langs",
           "langMask",
+          "origLang",
           "usBoost"
         )
       )
@@ -169,6 +170,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
           "hasEN",
           "langs",
           "langMask",
+          "origLang",
           "usBoost",
           "characters",
           "origCat",
@@ -272,7 +274,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
     titlesFx.count(titleFilter(rating, params))
 
   private def titleFilter(rating: Double, params: ReqParams) =
-    genTitleFilter(params, rating, optionalLangBit(params.lang))
+    genTitleFilter(params, rating)
 
   override def getByTitlePath(
       rating: Double,
@@ -301,6 +303,7 @@ class ImdbQueryImpl[F[_]: MonadCancelThrow: Async: Parallel: Concurrent](
               "hasEN",
               "langs",
               "langMask",
+              "origLang",
               "usBoost"
             )
           )

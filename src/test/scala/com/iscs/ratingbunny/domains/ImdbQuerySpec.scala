@@ -9,7 +9,7 @@ import com.iscs.ratingbunny.domains.ImdbQueryData.{
   titlePathRecs,
   titleRecs
 }
-import com.iscs.ratingbunny.domains.PagedTitleData.pagedTitleRecs
+import com.iscs.ratingbunny.domains.PagedTitleData.{pagedTitleRecs, titleDoc}
 import com.iscs.ratingbunny.model.Requests.ReqParams
 import com.typesafe.scalalogging.Logger
 import io.circe.generic.auto.*
@@ -18,7 +18,7 @@ import mongo4cats.client.MongoClient
 import mongo4cats.collection.MongoCollection
 import mongo4cats.database.MongoDatabase
 import mongo4cats.embedded.EmbeddedMongo
-import mongo4cats.bson.Document
+import mongo4cats.bson.{BsonValue, Document}
 import mongo4cats.operations.Index
 import munit.CatsEffectSuite
 import org.http4s.*
@@ -163,6 +163,36 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
         assertEquals(total, pagedTitleRecs.size.toLong)
         assertEquals(noYear, pagedTitleRecs.size.toLong)
         assertEquals(strict, all.count(_.rating.flatMap(_.average).exists(_ >= 8.0)).toLong)
+
+  test("getByTitle filters on original language; zh also matches Cantonese; a malformed code is ignored"):
+    withEmbeddedMongoClient: mongoclient =>
+      for
+        db             <- setupTestDatabase("test", mongoclient)
+        peopleFx       <- setupAutoNameCollection(db, peopleCollection)
+        peopleTitlesFx <- setupTitleCollection(db, peopleTitlesCollection)
+        titlesDocsFx   <- setupDocumentCollection(db, titlesCollection)
+        titlesFx       <- setupTitleCollection(db, titlesCollection)
+        autoTitlesFx   <- setupAutoTitleCollection(db, titlesCollection)
+        langs = List("ja", "ko", "ko", "zh", "cn", "en")
+        docs  = langs.zipWithIndex.map((l, i) => titleDoc(i + 1, f"tt${i + 1}%07d").add("origLang", BsonValue.string(l))) :+ titleDoc(7, "tt0000007")
+        _ <- titlesDocsFx.insertMany(docs)
+        _ <- ensureAutoTitleIndex(titlesDocsFx)
+        imdbQuery = new ImdbQueryImpl[IO](peopleFx, peopleTitlesFx, titlesFx, autoTitlesFx, "localhost", mockHttpClient)
+        params    = ReqParams(year = Some(List(2000, 2100)))
+        ko      <- imdbQuery.getByTitle(5.0, params.copy(lang = Some("ko")), 0, 100, SortField.ByRating).compile.toList
+        koCount <- imdbQuery.countByTitle(5.0, params.copy(lang = Some("ko")))
+        zh      <- imdbQuery.getByTitle(5.0, params.copy(lang = Some("ZH")), 0, 100, SortField.ByRating).compile.toList
+        none    <- imdbQuery.getByTitle(5.0, params.copy(lang = Some("xx")), 0, 100, SortField.ByRating).compile.toList
+        word    <- imdbQuery.getByTitle(5.0, params.copy(lang = Some("korean")), 0, 100, SortField.ByRating).compile.toList
+        auto    <- imdbQuery.getAutosuggestTitle("paged", Some("ja"), params).compile.toList
+      yield
+        assertEquals(ko.map(_._id), List("tt0000002", "tt0000003"))
+        assert(ko.forall(_.origLang.contains("ko")))
+        assertEquals(koCount, 2L)
+        assertEquals(zh.map(_._id), List("tt0000004", "tt0000005"))
+        assertEquals(none, Nil)
+        assertEquals(word.size, docs.size)
+        assertEquals(auto.map(_._id), List("tt0000001"))
 
   test("getByEnhancedName pages with an offset and countByName counts the whole match"):
     withEmbeddedMongoClient: mongoclient =>

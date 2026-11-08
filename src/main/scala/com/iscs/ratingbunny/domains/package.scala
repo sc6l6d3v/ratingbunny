@@ -48,6 +48,7 @@ package object domains:
     val hasEN: Option[Boolean]
     val langs: Option[List[String]]
     val langMask: Option[Long]
+    val origLang: Option[String]
     val usBoost: Option[Double]
     val characters: Option[List[String]]
     val origCat: Option[String]
@@ -70,6 +71,7 @@ package object domains:
       hasEN: Option[Boolean] = None,
       langs: Option[List[String]] = None,
       langMask: Option[Long] = None,
+      origLang: Option[String] = None,
       usBoost: Option[Double] = None,
       characters: Option[List[String]] = None,
       origCat: Option[String] = None,
@@ -93,6 +95,7 @@ package object domains:
       hasEN: Option[Boolean] = None,
       langs: Option[List[String]] = None,
       langMask: Option[Long] = None,
+      origLang: Option[String] = None,
       usBoost: Option[Double] = None,
       characters: Option[List[String]] = None,
       origCat: Option[String] = None,
