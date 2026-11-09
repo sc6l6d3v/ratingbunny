@@ -64,7 +64,8 @@ final class HistoryRepo[F[_]: Async](private[repos] val coll: MongoCollection[F,
       titleType = tidy(params.titleType),
       isAdult = params.isAdult,
       searchType = params.searchType,
-      lang = params.lang
+      lang = params.lang,
+      rating = params.rating
     )
 
   private def toEntry(doc: Document): Option[HistoryEntry] =

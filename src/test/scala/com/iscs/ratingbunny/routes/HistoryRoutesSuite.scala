@@ -140,3 +140,14 @@ class HistoryRoutesSuite extends CatsEffectSuite with EmbeddedMongo:
         _    <- repo.log("someone-else", params)
         resp <- get(app, Uri.unsafeFromString(s"/history/bysig/${repo.sigFor(params)}"))
       yield assertEquals(resp.status, Status.NotFound)
+
+  test("GET /history/latest returns the rating a search was run at and still reads entries stored without one"):
+    withRoutes: (app, repo, coll) =>
+      for
+        _    <- coll.insertOne(entry("e" * 64, Instant.parse("2026-01-01T00:00:00Z"), "older").add("hits" := 1))
+        _    <- repo.log(uid, ReqParams(query = Some("Tenet"), rating = Some(8.0)))
+        body <- get(app, uri"/history/latest").flatMap(_.as[Json])
+      yield
+        val params = body.asArray.get.toList.map(_.hcursor.downField("params"))
+        assertEquals(params.map(_.get[String]("query").toOption), List(Some("Tenet"), Some("older")))
+        assertEquals(params.map(_.get[Double]("rating").toOption), List(Some(8.0), None))

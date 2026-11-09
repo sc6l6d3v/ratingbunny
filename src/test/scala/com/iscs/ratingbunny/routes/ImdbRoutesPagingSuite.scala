@@ -9,6 +9,8 @@ import com.iscs.ratingbunny.security.JwtAuth
 import io.circe.Json
 import io.circe.generic.auto.*
 import mongo4cats.bson.Document
+import mongo4cats.bson.syntax.*
+import mongo4cats.collection.MongoCollection
 import mongo4cats.circe.*
 import mongo4cats.client.MongoClient
 import mongo4cats.embedded.EmbeddedMongo
@@ -152,3 +154,21 @@ class ImdbRoutesPagingSuite extends CatsEffectSuite with EmbeddedMongo:
       body   = withYear.deepMerge(Json.obj("query" -> Json.fromString(nconst)))
       pages <- (1 to 4).toList.traverse(p => post(routes, s"/name/$p/5.0", body, auth = true))
     yield assertEquals(pages, expectedPages)
+
+  test("the rating in the path is recorded with the search in the history, one entry per rating"):
+    val body = withYear.deepMerge(Json.obj("votes" -> Json.fromInt(4242)))
+    def ratingsLogged(coll: MongoCollection[IO, Document]): IO[List[Double]] =
+      coll
+        .find(Document("userId" := "guest", "params.votes" := 4242))
+        .all
+        .map(_.toList.flatMap(_.getDocument("params").flatMap(_.getDouble("rating"))).sorted)
+    // the routes log in a forked fiber, so give it a moment to land
+    def awaitBoth(coll: MongoCollection[IO, Document], tries: Int): IO[List[Double]] =
+      ratingsLogged(coll).flatMap(rs => if rs.size >= 2 || tries == 0 then IO.pure(rs) else IO.sleep(100.millis) >> awaitBoth(coll, tries - 1))
+    for
+      routes  <- publicRoutes()
+      _       <- post(routes, "/title/1/7", body)
+      _       <- post(routes, "/title/1/8", body)
+      coll    <- mongo().getCollection("user_history")
+      ratings <- awaitBoth(coll, 50)
+    yield assertEquals(ratings, List(7.0, 8.0))
