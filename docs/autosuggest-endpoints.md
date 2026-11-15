@@ -43,6 +43,10 @@ Find titles by name with language, rating, vote and metadata filters. `lang` is 
 title's original language (`origLang`); see search-endpoints.md. Results are the first 20 matches in case-insensitive
 title order (`primaryTitleLC`), which is the order the prefix index yields.
 
+The query is hinted to one of four indexes the ETL creates (`ensure_indexes_final.js`): `auto_titleLC_type_origLang` or, with a
+`genre`, `auto_movie_genre_prefix_origLang`; when `lang` is a code the filter accepts, `auto_lang_titleLC_type` or
+`auto_lang_genre_prefix`, which lead on `origLang` so the prefix scan stays within that language.
+
 **Request**
 ```bash
 curl --location 'http://localhost:8084/api/v3/autotitle?q=Gone%20with%20the%20W&lang=en&rating=4.0&votes=30&genre=Drama&titletype=movie&isadult=0' \

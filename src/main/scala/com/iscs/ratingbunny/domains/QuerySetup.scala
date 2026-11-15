@@ -46,8 +46,12 @@ trait QuerySetup:
   private val NIN                     = "$nin"
   private val OR                      = "$or"
   private val REGX                    = "$regex"
-  private val autoTitleHint           = "auto_movie_genre_prefix_origLang"
-  private val autoTitleNoGenreHint    = "auto_titleLC_type_origLang"
+  // Title autosuggest indexes, created by the ETL's ensure_indexes_final.js. With a language the index leads on origLang so
+  // the prefix scan covers one language instead of every title sharing the prefix.
+  private val autoTitleHint             = "auto_movie_genre_prefix_origLang"
+  private val autoTitleNoGenreHint      = "auto_titleLC_type_origLang"
+  private val autoTitleLangHint         = "auto_lang_genre_prefix"
+  private val autoTitleLangNoGenreHint  = "auto_lang_titleLC_type"
   private val LangCode                = "^[a-z]{2}$".r
   val L: Logger                       = Logger[this.type]
 
@@ -153,8 +157,9 @@ trait QuerySetup:
     val fuzzyParams   = params.copy(query = None) // force to not parse primaryTitle
     val titleElt      = prefixRange(primaryTitleLC, titlePrefix)
 
+    val langElt = origLangFilter(lang)
     val matchBson: Document = mergeDocs(
-      List(titleElt) ::: origLangFilter(lang).toList ::: getParamList(fuzzyParams)
+      List(titleElt) ::: langElt.toList ::: getParamList(fuzzyParams)
     )
 
     // Sort on the index key so the prefix scan yields sorted order and stops at the limit; a sort on
@@ -166,7 +171,11 @@ trait QuerySetup:
     )
 
     val genreIsReal = params.genre.exists(gs => gs.nonEmpty && gs.forall(g => g.nonEmpty && g != "undefined"))
-    val hintOpt     = Some(if genreIsReal then autoTitleHint else autoTitleNoGenreHint)
+    val hintOpt = Some((genreIsReal, langElt.isDefined) match
+      case (true, true)   => autoTitleLangHint
+      case (false, true)  => autoTitleLangNoGenreHint
+      case (true, false)  => autoTitleHint
+      case (false, false) => autoTitleNoGenreHint)
 
     AutotitleSpec(matchBson, projectBson, sortBson, hintOpt)
 
