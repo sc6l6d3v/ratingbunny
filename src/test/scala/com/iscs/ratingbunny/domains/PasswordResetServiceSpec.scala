@@ -12,6 +12,7 @@ import mongo4cats.circe.*
 import mongo4cats.client.MongoClient
 import mongo4cats.collection.MongoCollection
 import mongo4cats.database.MongoDatabase
+import com.iscs.ratingbunny.testkit.FreePort
 import mongo4cats.embedded.EmbeddedMongo
 import org.mongodb.scala.model.Filters
 import org.slf4j.LoggerFactory
@@ -22,7 +23,7 @@ import scala.jdk.CollectionConverters.*
 
 class PasswordResetServiceSpec extends CatsEffectSuite with EmbeddedMongo:
 
-  override val mongoPort: Int           = 12367
+  override val mongoPort: Int = FreePort()
   override def munitIOTimeout: Duration = 2.minutes
   private val L                         = Logger[this.type]
 

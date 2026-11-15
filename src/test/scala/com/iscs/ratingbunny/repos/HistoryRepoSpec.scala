@@ -7,6 +7,7 @@ import com.iscs.ratingbunny.model.Requests.ReqParams
 import mongo4cats.bson.Document
 import mongo4cats.bson.syntax.*
 import mongo4cats.client.MongoClient
+import com.iscs.ratingbunny.testkit.FreePort
 import mongo4cats.embedded.EmbeddedMongo
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -15,7 +16,7 @@ import scala.concurrent.Future
 
 class HistoryRepoSpec extends AsyncWordSpec with Matchers with EmbeddedMongo with QuerySetup:
 
-  override val mongoPort: Int = 12349
+  override val mongoPort: Int = FreePort()
 
   "HistoryRepo" when:
     "ensureIndexes is invoked" should:

@@ -17,6 +17,7 @@ import mongo4cats.circe.*
 import mongo4cats.client.MongoClient
 import mongo4cats.collection.MongoCollection
 import mongo4cats.database.MongoDatabase
+import com.iscs.ratingbunny.testkit.FreePort
 import mongo4cats.embedded.EmbeddedMongo
 import mongo4cats.bson.{BsonValue, Document}
 import mongo4cats.operations.Index
@@ -35,11 +36,11 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
   private val L                         = Logger[this.type]
   override def munitIOTimeout: Duration = 2.minutes
 
-  override val mongoPort: Int        = 12348
-  val mockHttpClient                 = Option.empty[Client[IO]]
-  private val peopleCollection       = "people"
-  private val peopleTitlesCollection = "people_titles"
-  private val titlesCollection       = "titles"
+  override val mongoPort: Int           = FreePort()
+  val mockHttpClient                    = Option.empty[Client[IO]]
+  private val peopleCollection          = "people"
+  private val peopleTitlesCollection    = "people_titles"
+  private val titlesCollection          = "titles"
   private val autoTitleIndexName        = "auto_movie_genre_prefix_origLang"
   private val autoTitleNoGenreIndexName = "auto_titleLC_type_origLang"
 
@@ -174,7 +175,10 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
         titlesFx       <- setupTitleCollection(db, titlesCollection)
         autoTitlesFx   <- setupAutoTitleCollection(db, titlesCollection)
         langs = List("ja", "ko", "ko", "zh", "cn", "en")
-        docs  = langs.zipWithIndex.map((l, i) => titleDoc(i + 1, f"tt${i + 1}%07d").add("origLang", BsonValue.string(l))) :+ titleDoc(7, "tt0000007")
+        docs = langs.zipWithIndex.map((l, i) => titleDoc(i + 1, f"tt${i + 1}%07d").add("origLang", BsonValue.string(l))) :+ titleDoc(
+          7,
+          "tt0000007"
+        )
         _ <- titlesDocsFx.insertMany(docs)
         _ <- ensureAutoTitleIndex(titlesDocsFx)
         imdbQuery = new ImdbQueryImpl[IO](peopleFx, peopleTitlesFx, titlesFx, autoTitlesFx, "localhost", mockHttpClient)

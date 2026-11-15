@@ -6,6 +6,7 @@ import mongo4cats.bson.Document
 import mongo4cats.bson.syntax.*
 import mongo4cats.client.MongoClient
 import mongo4cats.database.MongoDatabase
+import com.iscs.ratingbunny.testkit.FreePort
 import mongo4cats.embedded.EmbeddedMongo
 import mongo4cats.models.collection.UnwindOptions
 import mongo4cats.operations.*
@@ -15,7 +16,7 @@ import org.scalatest.wordspec.AsyncWordSpec
 import scala.concurrent.Future
 
 class MongoCollectionAggregateSpec extends AsyncWordSpec with Matchers with EmbeddedMongo:
-  override val mongoPort = 12350
+  override val mongoPort: Int = FreePort()
 
   "A MongoCollection" when:
     "aggregate" should:

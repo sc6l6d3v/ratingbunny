@@ -13,6 +13,7 @@ import mongo4cats.bson.syntax.*
 import mongo4cats.collection.MongoCollection
 import mongo4cats.circe.*
 import mongo4cats.client.MongoClient
+import com.iscs.ratingbunny.testkit.FreePort
 import mongo4cats.embedded.EmbeddedMongo
 import munit.CatsEffectSuite
 import org.http4s.*
@@ -32,7 +33,7 @@ import scala.concurrent.duration.*
 class ImdbRoutesPagingSuite extends CatsEffectSuite with EmbeddedMongo:
   override def munitIOTimeout: Duration = 2.minutes
 
-  override val mongoPort: Int = 12371
+  override val mongoPort: Int = FreePort()
   private val secret          = "paging-secret"
   private val nconst          = "nm0000001"
   private val total           = 60
@@ -164,7 +165,9 @@ class ImdbRoutesPagingSuite extends CatsEffectSuite with EmbeddedMongo:
         .map(_.toList.flatMap(_.getDocument("params").flatMap(_.getDouble("rating"))).sorted)
     // the routes log in a forked fiber, so give it a moment to land
     def awaitBoth(coll: MongoCollection[IO, Document], tries: Int): IO[List[Double]] =
-      ratingsLogged(coll).flatMap(rs => if rs.size >= 2 || tries == 0 then IO.pure(rs) else IO.sleep(100.millis) >> awaitBoth(coll, tries - 1))
+      ratingsLogged(coll).flatMap(rs =>
+        if rs.size >= 2 || tries == 0 then IO.pure(rs) else IO.sleep(100.millis) >> awaitBoth(coll, tries - 1)
+      )
     for
       routes  <- publicRoutes()
       _       <- post(routes, "/title/1/7", body)

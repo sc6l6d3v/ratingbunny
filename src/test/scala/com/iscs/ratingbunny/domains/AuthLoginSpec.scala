@@ -8,6 +8,7 @@ import mongo4cats.circe.*
 import mongo4cats.client.MongoClient
 import mongo4cats.collection.MongoCollection
 import mongo4cats.database.MongoDatabase
+import com.iscs.ratingbunny.testkit.FreePort
 import mongo4cats.embedded.EmbeddedMongo
 import mongo4cats.bson.{Document, ObjectId}
 import mongo4cats.bson.syntax.*
@@ -19,7 +20,7 @@ import scala.concurrent.duration.*
 
 class AuthLoginSpec extends CatsEffectSuite with EmbeddedMongo:
 
-  override val mongoPort: Int           = 12356
+  override val mongoPort: Int           = FreePort()
   override def munitIOTimeout: Duration = 2.minutes
   private val hasher                    = TestHasher.make[IO]
   private val stubToken: TokenIssuer[IO] =
