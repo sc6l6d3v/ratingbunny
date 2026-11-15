@@ -10,6 +10,7 @@ import mongo4cats.bson.Document
 import mongo4cats.bson.syntax.*
 import mongo4cats.client.MongoClient
 import mongo4cats.collection.MongoCollection
+import com.iscs.ratingbunny.testkit.FreePort
 import mongo4cats.embedded.EmbeddedMongo
 import munit.CatsEffectSuite
 import org.http4s.*
@@ -22,7 +23,7 @@ import scala.concurrent.duration.*
 
 class HistoryRoutesSuite extends CatsEffectSuite with EmbeddedMongo:
 
-  override val mongoPort: Int           = 12373
+  override val mongoPort: Int           = FreePort()
   override def munitIOTimeout: Duration = 2.minutes
 
   private val secret = "test-secret"
@@ -98,8 +99,8 @@ class HistoryRoutesSuite extends CatsEffectSuite with EmbeddedMongo:
       for
         _ <- coll.insertMany(
           List(
-            entry("a" * 64, t0, "alpha").add("hits" := 2),
-            entry("b" * 64, t0.plusSeconds(60), "bravo").add("hits" := 2.0),
+            entry("a" * 64, t0, "alpha").add("hits"                    := 2),
+            entry("b" * 64, t0.plusSeconds(60), "bravo").add("hits"    := 2.0),
             entry("c" * 64, t0.plusSeconds(120), "charlie").add("hits" := 1L),
             Document("userId" := uid, "sig" := "d" * 64, "createdAt" := t0.plusSeconds(180), "hits" := 9)
           )
@@ -107,15 +108,15 @@ class HistoryRoutesSuite extends CatsEffectSuite with EmbeddedMongo:
         popular <- get(app, uri"/history/popular").flatMap(_.as[Json])
         latest  <- get(app, uri"/history/latest").flatMap(_.as[Json])
       yield
-        def sigs(j: Json)  = j.asArray.get.toList.flatMap(_.hcursor.get[String]("sig").toOption)
-        def hits(j: Json)  = j.asArray.get.toList.flatMap(_.hcursor.get[Long]("hits").toOption)
+        def sigs(j: Json) = j.asArray.get.toList.flatMap(_.hcursor.get[String]("sig").toOption)
+        def hits(j: Json) = j.asArray.get.toList.flatMap(_.hcursor.get[Long]("hits").toOption)
         assertEquals(sigs(popular), List("b" * 64, "a" * 64, "c" * 64))
         assertEquals(hits(popular), List(2L, 2L, 1L))
         assertEquals(sigs(latest), List("c" * 64, "b" * 64, "a" * 64))
 
   test("POST /history/byparams finds the entry for an equivalent spelling"):
     val logged = ReqParams(query = Some("Tenet"), genre = Some(List("Drama", "Comedy")), sortType = Some("rating"))
-    val asked  = Json.obj(
+    val asked = Json.obj(
       "query"    -> Json.fromString("  TENET"),
       "genre"    -> Json.arr(Json.fromString("Comedy"), Json.fromString("Drama")),
       "sortType" -> Json.fromString("year")

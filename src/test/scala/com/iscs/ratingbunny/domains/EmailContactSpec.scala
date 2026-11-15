@@ -7,6 +7,7 @@ import mongo4cats.bson.Document
 import mongo4cats.client.MongoClient
 import mongo4cats.collection.MongoCollection
 import mongo4cats.database.MongoDatabase
+import com.iscs.ratingbunny.testkit.FreePort
 import mongo4cats.embedded.EmbeddedMongo
 import org.mongodb.scala.model.*
 import org.scalatest.matchers.should.Matchers
@@ -16,7 +17,7 @@ import scala.concurrent.Future
 
 class EmailContactSpec extends AsyncWordSpec with Matchers with EmbeddedMongo:
 
-  override val mongoPort: Int = 12348
+  override val mongoPort: Int = FreePort()
   private val noopPublish: EmailJob => IO[Unit] = _ => IO.unit
 
   "embedded MongoDB" when:

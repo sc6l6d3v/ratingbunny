@@ -3,6 +3,7 @@ package com.iscs.ratingbunny.domains
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import mongo4cats.client.MongoClient
+import com.iscs.ratingbunny.testkit.FreePort
 import mongo4cats.embedded.EmbeddedMongo
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AsyncWordSpec
@@ -11,7 +12,7 @@ import scala.concurrent.Future
 
 class ConnectionPoolTest extends AsyncWordSpec with Matchers with EmbeddedMongo:
 
-  override val mongoPort: Int = 12348
+  override val mongoPort: Int = FreePort()
 
   "embedded MongoDB" when:
     "invoking getCPStats" should:

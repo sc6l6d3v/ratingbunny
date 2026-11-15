@@ -13,6 +13,7 @@ import mongo4cats.circe.*
 import mongo4cats.client.MongoClient
 import mongo4cats.collection.MongoCollection
 import mongo4cats.database.MongoDatabase
+import com.iscs.ratingbunny.testkit.FreePort
 import mongo4cats.embedded.EmbeddedMongo
 import mongo4cats.models.collection.IndexOptions
 import mongo4cats.operations.Index
@@ -24,7 +25,7 @@ import scala.concurrent.duration.*
 
 class AuthCheckSpec extends CatsEffectSuite with EmbeddedMongo with QuerySetup:
 
-  override val mongoPort: Int           = 12355
+  override val mongoPort: Int = FreePort()
   override def munitIOTimeout: Duration = 2.minutes
   private val hasher           = TestHasher.make[IO]
   private val stubPublishJob: EmailJob => IO[Unit] = _ => IO.unit
