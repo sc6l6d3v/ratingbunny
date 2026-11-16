@@ -36,13 +36,15 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
   private val L                         = Logger[this.type]
   override def munitIOTimeout: Duration = 2.minutes
 
-  override val mongoPort: Int           = FreePort()
-  val mockHttpClient                    = Option.empty[Client[IO]]
-  private val peopleCollection          = "people"
-  private val peopleTitlesCollection    = "people_titles"
-  private val titlesCollection          = "titles"
-  private val autoTitleIndexName        = "auto_movie_genre_prefix_origLang"
-  private val autoTitleNoGenreIndexName = "auto_titleLC_type_origLang"
+  override val mongoPort: Int               = FreePort()
+  val mockHttpClient                        = Option.empty[Client[IO]]
+  private val peopleCollection              = "people"
+  private val peopleTitlesCollection        = "people_titles"
+  private val titlesCollection              = "titles"
+  private val autoTitleIndexName            = "auto_movie_genre_prefix_origLang"
+  private val autoTitleNoGenreIndexName     = "auto_titleLC_type_origLang"
+  private val autoTitleLangIndexName        = "auto_lang_genre_prefix"
+  private val autoTitleLangNoGenreIndexName = "auto_lang_titleLC_type"
 
   test("getByTitle should return results for valid title"):
     withEmbeddedMongoClient: mongoclient =>
@@ -242,9 +244,22 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
         titlePrefix  = "Gone with the"
         resultStream = imdbQuery.getAutosuggestTitle(titlePrefix, None, params)
         results <- resultStream.compile.toList
+        // the language-led hints must also run against the indexes the ETL creates
+        ja      <- imdbQuery.getAutosuggestTitle(titlePrefix, Some("ja"), params).compile.toList
+        jaDrama <- imdbQuery.getAutosuggestTitle(titlePrefix, Some("ja"), params.copy(genre = Some(List("Drama")))).compile.toList
       yield
         assert(results.nonEmpty)
         assert(results.forall(_.primaryTitle.startsWith("Gone with the")))
+        assert(ja.forall(_.primaryTitle.startsWith("Gone with the")))
+        assert(jaDrama.isEmpty || jaDrama.forall(_.primaryTitle.startsWith("Gone with the")))
+        val hintFor = (lang: Option[String], genre: Option[List[String]]) => imdbQuery.genAutotitleFilter(titlePrefix, lang, params.copy(genre = genre)).hint
+        assertEquals(hintFor(None, None), Some(autoTitleNoGenreIndexName))
+        assertEquals(hintFor(None, Some(List("Drama"))), Some(autoTitleIndexName))
+        assertEquals(hintFor(Some("ja"), None), Some(autoTitleLangNoGenreIndexName))
+        assertEquals(hintFor(Some("zh"), Some(List("Drama"))), Some(autoTitleLangIndexName))
+        // a code the filter ignores leaves the request language-free, so the plain hints apply
+        assertEquals(hintFor(Some("korean"), None), Some(autoTitleNoGenreIndexName))
+        assertEquals(hintFor(Some("ja"), Some(List("undefined"))), Some(autoTitleLangNoGenreIndexName))
 
   test("getAutosuggestName should return suggestions based on name prefix"):
     withEmbeddedMongoClient: mongoclient =>
@@ -319,6 +334,24 @@ class ImdbQuerySpec extends CatsEffectSuite with EmbeddedMongo:
                 .ascending("titleType")
                 .ascending("origLang"),
               new JIndexOptions().name(autoTitleNoGenreIndexName)
+            )
+            .void
+      _ <-
+        if existing(autoTitleLangIndexName) then IO.unit
+        else
+          collection
+            .createIndex(
+              Index.ascending("origLang").ascending("titleType").ascending("genres").ascending("primaryTitleLC"),
+              new JIndexOptions().name(autoTitleLangIndexName).partialFilterExpression(Filters.eq("isAdult", Int.box(0)))
+            )
+            .void
+      _ <-
+        if existing(autoTitleLangNoGenreIndexName) then IO.unit
+        else
+          collection
+            .createIndex(
+              Index.ascending("origLang").ascending("primaryTitleLC").ascending("titleType"),
+              new JIndexOptions().name(autoTitleLangNoGenreIndexName)
             )
             .void
     yield ()
